@@ -7,6 +7,7 @@ commit or push. Work only on the task in `docs/tasks/` you were given.
 ## Non-negotiable rules
 
 - `make check integration` must pass before you finish. Run it yourself and fix failures.
+  The reviewer runs `make ci` (every gate, locally) before merging; there is no hosted CI.
 - Run `make contracts` after any change to `src/adaptive_llm/contracts.py` and keep the
   generated files in `contracts/` in sync.
 - Do not add dependencies unless the task brief allows it; justify any addition in your final

@@ -1,4 +1,4 @@
-.PHONY: dev check integration contracts sbom migrate retention-sweep dispatch-once dead-letters redeliver rotate-key backup restore drills dataset-build evaluate
+.PHONY: ci dev check integration contracts sbom migrate retention-sweep dispatch-once dead-letters redeliver rotate-key backup restore drills dataset-build evaluate
 
 DATA_DIR ?= .local
 ENVIRONMENT ?= local
@@ -22,6 +22,12 @@ rollback:
 
 models:
 	$(TRAINING) models $(TRAINING_ARGS)
+
+ci: check integration sbom
+	uv run --locked pytest tests/security tests/load -s
+	uv run --locked pytest tests/drills -m drill -s
+	uv run --locked pytest -m smoke -s
+	@echo "local ci: all gates passed"
 
 dev:
 	uv run --locked uvicorn adaptive_llm.app:app --host 127.0.0.1 --port 8000 --reload --no-access-log
