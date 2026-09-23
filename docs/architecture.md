@@ -7,7 +7,7 @@ The application currently exposes only health and API documentation.
 ```mermaid
 flowchart LR
     C[Client] --> G[Gateway / authenticated tenant]
-    G --> P[Purpose policy and redaction]
+    G --> P[Purpose policy and processing-path redaction]
     P --> T[Task classification]
     T --> R[Tenant-scoped RAG]
     R --> M[Foundation-only router initially]
@@ -15,7 +15,7 @@ flowchart LR
     A --> V[Output validation]
     V --> C
     P -. authorised observations .-> E[Asynchronous events]
-    V -. metadata and permitted references .-> E
+    V -. persistence-path redaction, metadata and permitted references .-> E
     E --> D[Governed dataset factory]
     D --> J[Offline training and evaluation]
     J --> Q[Registry / approval / shadow / canary]

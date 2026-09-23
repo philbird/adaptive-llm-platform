@@ -64,7 +64,10 @@ Task classification ─► RAG retrieval ─► route decision
 
 Targets must be configurable per task/domain. Initial suggested targets are:
 
-- Reduce median inference cost for eligible traffic by at least 30% versus foundation-only routing.
+- Reduce total inference cost per successful outcome for eligible traffic by at least 30% versus
+  foundation-only routing, where cost includes retrieval, all attempts, fallbacks and retries
+  (see section 23, "Apparent savings hide fallback cost"). Report p50 and p95 cost per request
+  alongside, but the gate is the total.
 - Keep task success or rubric score within 2 percentage points of the approved foundation-model baseline.
 - Keep safety-policy violations no worse than the baseline, with zero tolerance for critical regressions.
 - Keep router false-specialist decisions below 2% on the held-out routing set.
