@@ -1,7 +1,10 @@
 """Authenticated encryption with tenant, interaction and field binding."""
 
+import json
 import secrets
+from collections.abc import Mapping
 from datetime import datetime
+from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -10,11 +13,28 @@ from adaptive_llm.contracts import uid
 from adaptive_llm.storage import EncryptedPayload, StorageError
 
 
+def load_keyring(path: Path) -> tuple[dict[str, bytes], str]:
+    """Read operator-provisioned keys; no file contents escape in validation errors."""
+    try:
+        config = json.loads(path.read_text())
+        keys = {version: bytes.fromhex(value) for version, value in config["keys"].items()}
+        current = config["current_version"]
+        if not isinstance(current, str):
+            raise ValueError
+        PayloadCipher(keys, current)
+        return keys, current
+    except Exception:
+        raise StorageError("invalid_payload_keyring") from None
+
+
 class PayloadCipher:
-    def __init__(self, key: bytes, key_version: str = "local-1") -> None:
-        if len(key) != 32:
+    def __init__(self, key: bytes | Mapping[str, bytes], key_version: str = "local-1") -> None:
+        keys = {key_version: key} if isinstance(key, bytes) else dict(key)
+        if not keys or any(not version or len(value) != 32 for version, value in keys.items()):
             raise ValueError("invalid_payload_key")
-        self._cipher = AESGCM(key)
+        if key_version not in keys:
+            raise ValueError("unknown_current_key_version")
+        self._ciphers = {version: AESGCM(value) for version, value in keys.items()}
         self.key_version = key_version
 
     @staticmethod
@@ -38,7 +58,7 @@ class PayloadCipher:
             interaction_id=interaction_id,
             field=field,
             nonce=nonce,
-            ciphertext=self._cipher.encrypt(
+            ciphertext=self._ciphers[self.key_version].encrypt(
                 nonce, content, self._aad(tenant_id, interaction_id, field)
             ),
             key_version=self.key_version,
@@ -48,10 +68,10 @@ class PayloadCipher:
     def decrypt(
         self, payload: EncryptedPayload, tenant_id: str, interaction_id: str, field: str
     ) -> bytes:
-        if payload.key_version != self.key_version:
+        if payload.key_version not in self._ciphers:
             raise StorageError("unknown_payload_key_version")
         try:
-            return self._cipher.decrypt(
+            return self._ciphers[payload.key_version].decrypt(
                 payload.nonce, payload.ciphertext, self._aad(tenant_id, interaction_id, field)
             )
         except InvalidTag:

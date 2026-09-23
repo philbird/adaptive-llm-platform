@@ -9,6 +9,10 @@ from adaptive_llm.gateway.identity import Identity, Keyring, LocalAuthenticator
 from adaptive_llm.providers import ProviderRequest
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "drill: measured local resilience and recovery drills")
+
+
 @pytest.fixture(autouse=True)
 def isolated_default_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Each app gets a fresh database unless a test explicitly shares data_dir (restart tests).

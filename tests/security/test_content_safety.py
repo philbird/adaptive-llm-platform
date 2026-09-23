@@ -60,6 +60,7 @@ def test_redaction_precedes_retrieval_and_generation_and_telemetry_is_content_fr
     body["metadata"] = {"tenant_id": "synthetic-b", "environment": "production"}
     with TestClient(app) as client:
         response = client.post("/v1/inference", json=body, headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
     assert response.status_code == 200
     assert len(query_seen) == len(request_seen) == 1
     assert query_seen[0] == request_seen[0].messages[-1].content
@@ -110,6 +111,7 @@ def test_provider_exceptions_never_reach_traces_events_or_http(
         create_app(Settings(provider=BrokenProvider(), events=sink, tracer=tracer))
     ) as client:
         result = client.post("/v1/inference", json=inference_request.model_dump(), headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
     assert result.status_code == 502
     assert result.json() == {"error": {"code": "provider_failed"}}
     # Inspect attributes, not the context manager's Python exception arguments: those
@@ -133,13 +135,17 @@ def test_sink_failure_and_full_queue_never_fail_serving(
     app = create_app(Settings(events=BrokenSink()))
     with TestClient(app) as client:
         result = client.post("/v1/inference", json=inference_request.model_dump(), headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
     assert result.status_code == 200
-    assert app.state.inference.emission_failures == 5
+    assert app.state.metrics.get("outbox_retried") >= 1
+    assert app.state.metrics.get("outbox_pending") == 5
     sink = InMemoryEventSink(capacity=1)
     with TestClient(create_app(Settings(events=sink))) as client:
         result = client.post("/v1/inference", json=inference_request.model_dump(), headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
     assert result.status_code == 200
-    assert sink.dropped_events == 4
+    assert sink.dropped_events >= 1
+    assert len(sink.events) == 1
 
 
 @pytest.mark.parametrize("field", ["tenant_id", "subject_id", "environment", "test_only_failure"])

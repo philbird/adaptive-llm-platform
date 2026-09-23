@@ -96,6 +96,7 @@ def test_graph_and_encrypted_replay_survive_restart(
     app = create_app(settings)
     with TestClient(app) as client:
         first = client.post("/v1/inference", json=inference_request.model_dump(), headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
         assert first.status_code == 200
         iid = first.json()["interaction_id"]
         metadata = app.state.metadata
@@ -128,6 +129,7 @@ def test_graph_and_encrypted_replay_survive_restart(
     restarted = create_app(replace(settings, events=InMemoryEventSink(), migrate_on_startup=False))
     with TestClient(restarted) as client:
         replay = client.post("/v1/inference", json=inference_request.model_dump(), headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
         assert replay.json() == {**first.json(), "replayed": True}
         changed = {**inference_request.model_dump(), "max_output_tokens": 30}
         assert client.post("/v1/inference", json=changed, headers=HEADERS).status_code == 409
@@ -223,6 +225,7 @@ def test_failed_attempts_are_persisted_without_replay(
         response = client.post(
             "/v1/inference", json=inference_request.model_dump(), headers=HEADERS
         )
+        client.app.state.dispatcher.dispatch_once()
         assert response.status_code in (502, 504)
         completed = app.state.events.events[-1].data
         persisted = app.state.metadata.get("synthetic-a", Interaction, completed.interaction_id)

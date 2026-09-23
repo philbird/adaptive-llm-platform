@@ -1,12 +1,15 @@
 """Redact, encrypt and atomically persist the contracts from one interaction."""
 
 import json
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 from adaptive_llm.contracts import (
     DeletionRequest,
+    Event,
+    EventData,
+    EventType,
     GenerationAttempt,
     InferenceRequest,
     InferenceResponse,
@@ -16,8 +19,12 @@ from adaptive_llm.contracts import (
     RouteDecision,
     Started,
     now,
+    uid,
 )
+from adaptive_llm.events import EventSink
+from adaptive_llm.events.outbox import OutboxStore, publish_metrics
 from adaptive_llm.gateway.identity import Keyring
+from adaptive_llm.metrics import Metrics
 from adaptive_llm.policy.persistence import PersistenceRedactor
 from adaptive_llm.storage import EncryptedPayload, MetadataStore, PayloadStore, ReplayRecord
 from adaptive_llm.storage.crypto import PayloadCipher
@@ -55,11 +62,19 @@ class Persistence:
         redactor: PersistenceRedactor,
         keyring: Keyring,
         *,
+        outbox: OutboxStore,
+        metrics: Metrics,
+        fallback_sink: EventSink,
+        outbox_pending_limit: int = 100_000,
         replay_ttl_seconds: int = 86_400,
         replay_capacity: int = 10_000,
         retention_seconds: int | None = None,
         clock: Callable[[], datetime] = now,
     ) -> None:
+        self.outbox = outbox
+        self.metrics = metrics
+        self.fallback_sink = fallback_sink
+        self.outbox_pending_limit = outbox_pending_limit
         self.metadata = metadata
         self.payloads = payloads
         self.cipher = cipher
@@ -119,6 +134,70 @@ class Persistence:
         fingerprint: str,
         reserved_at: datetime,
     ) -> tuple[Interaction, ReplayRecord | None]:
+        interaction = graph.interaction.model_copy(
+            update={
+                "error_code": "persistence_redaction_failed"
+                if content.failed
+                else graph.interaction.error_code,
+                "policy": graph.interaction.policy.model_copy(
+                    update={
+                        "persistence_redaction_version": self.redactor.version,
+                        "persistence_redaction_counts": content.counts,
+                    }
+                ),
+            }
+        )
+        graph = replace(graph, interaction=interaction)
+        events = [
+            Event(
+                event_type=kind,
+                tenant_id=interaction.tenant_id,
+                trace_id=interaction.trace_id,
+                data=record,
+                occurred_at=interaction.started_at if kind == "interaction.started.v1" else now(),
+            )
+            for kind, record in self._graph_records(graph)
+        ]
+        try:
+            return self._save(graph, response, content, fingerprint, reserved_at, events)
+        except Exception:
+            self.record_failure()
+            self._emit_degraded(events)
+            return interaction, None
+
+    @staticmethod
+    def _graph_records(graph: InteractionGraph) -> list[tuple[EventType, EventData]]:
+        records: list[tuple[EventType, EventData]] = [("interaction.started.v1", graph.started)]
+        if graph.retrieval is not None:
+            records.append(("retrieval.completed.v1", graph.retrieval))
+        if graph.route is not None:
+            records.append(("route.decided.v1", graph.route))
+        records.extend(
+            ("generation.failed.v1" if attempt.error_code else "generation.completed.v1", attempt)
+            for attempt in graph.attempts
+        )
+        records.append(("interaction.completed.v1", graph.interaction))
+        return records
+
+    def _emit_degraded(self, events: Sequence[Event]) -> None:
+        # Called in the persistence worker, after rollback, with content-free envelopes only.
+        # This is a non-durable attempt, not an acknowledgement of persistence or delivery.
+        for event in events:
+            self.metrics.increment("degraded_emissions")
+            try:
+                self.fallback_sink.emit(event)
+            except Exception:
+                pass
+
+    def _save(
+        self,
+        graph: InteractionGraph,
+        response: InferenceResponse | None,
+        content: PersistenceContent,
+        fingerprint: str,
+        reserved_at: datetime,
+        events: list[Event],
+    ) -> tuple[Interaction, ReplayRecord | None]:
         interaction = graph.interaction
         tenant, iid = interaction.tenant_id, interaction.interaction_id
         expires = self.clock() + timedelta(
@@ -135,11 +214,7 @@ class Persistence:
             blobs.append(blob)
             return blob.reference
 
-        if content.failed:
-            interaction = interaction.model_copy(
-                update={"error_code": "persistence_redaction_failed"}
-            )
-        else:
+        if not content.failed:
             assert content.messages_json is not None and content.query is not None
             logging = interaction.policy.content_logging_allowed
             interaction = interaction.model_copy(
@@ -180,37 +255,45 @@ class Persistence:
                     reserved_at=reserved_at,
                     expires_at=replay_expires,
                 )
-        interaction = interaction.model_copy(
-            update={
-                "policy": interaction.policy.model_copy(
-                    update={
-                        "persistence_redaction_version": self.redactor.version,
-                        "persistence_redaction_counts": content.counts,
-                    }
-                )
-            }
+        records = self._graph_records(
+            replace(graph, interaction=interaction, retrieval=retrieval, attempts=tuple(attempts))
         )
-        try:
-            with self.metadata.transaction():
-                self.metadata.put(tenant, interaction, expires)
-                self.metadata.put(tenant, graph.started, expires)
-                if retrieval is not None:
-                    self.metadata.put(tenant, retrieval, expires)
-                if graph.route is not None:
-                    self.metadata.put(tenant, graph.route, expires)
-                for attempt in attempts:
-                    self.metadata.put(tenant, attempt, expires)
-                for blob in blobs:
-                    self.payloads.put(blob)
-                if replay is not None:
-                    self.metadata.delete_replay(
-                        tenant, interaction.application_id, interaction.request_id
-                    )
-                    self.metadata.put_replay(replay, self.replay_capacity)
-        except Exception:
-            self.failures += 1
-            return interaction, None
+        events[:] = [
+            event.model_copy(update={"data": record})
+            for event, (_, record) in zip(events, records, strict=True)
+        ]
+        with self.metadata.transaction():
+            self.metadata.put(tenant, interaction, expires)
+            self.metadata.put(tenant, graph.started, expires)
+            if retrieval is not None:
+                self.metadata.put(tenant, retrieval, expires)
+            if graph.route is not None:
+                self.metadata.put(tenant, graph.route, expires)
+            for attempt in attempts:
+                self.metadata.put(tenant, attempt, expires)
+            for blob in blobs:
+                self.payloads.put(blob)
+            if replay is not None:
+                self.metadata.delete_replay(
+                    tenant, interaction.application_id, interaction.request_id
+                )
+                self.metadata.put_replay(replay, self.replay_capacity)
+            dropped = self.outbox.enqueue(events, self.outbox_pending_limit)
+        self.metrics.increment("dropped_events", dropped)
+        self.refresh_metrics()
         return interaction, replay
+
+    def refresh_metrics(self) -> None:
+        # Publish after commit even if the consumer is slow or dispatch is disabled.
+        # A failed gauge read cannot undo a successful interaction or privacy transaction.
+        try:
+            publish_metrics(self.outbox, self.metrics, now())
+        except Exception:
+            self.metrics.increment("dispatcher_failures")
+
+    def record_failure(self) -> None:
+        self.failures += 1
+        self.metrics.increment("persistence_failures")
 
     def replay(self, record: ReplayRecord) -> InferenceResponse | None:
         blob = self.payloads.get(record.tenant_id, record.response_ref, self.clock())
@@ -222,40 +305,84 @@ class Persistence:
     def delete(
         self, tenant_id: str, interaction_id: str, actor: str | None
     ) -> tuple[Interaction, DeletionRequest] | None:
-        with self.metadata.transaction():
-            return self._delete(tenant_id, interaction_id, actor)
-
-    def _delete(
-        self, tenant_id: str, interaction_id: str, actor: str | None
-    ) -> tuple[Interaction, DeletionRequest] | None:
-        interaction = self.metadata.get(tenant_id, Interaction, interaction_id)
-        if interaction is None:
-            return None
-        deletion = self.metadata.get_tombstone(tenant_id, interaction_id) or DeletionRequest(
+        deletion = DeletionRequest(
             scope="interaction",
             target_id=interaction_id,
             actor_id_pseudonymous=actor,
             requested_at=self.clock(),
         )
+        events = [self._deletion_event(tenant_id, uid(), deletion)]
+        try:
+            with self.metadata.transaction():
+                interaction = self.metadata.get(tenant_id, Interaction, interaction_id)
+                if interaction is None:
+                    return None
+                deletion = self.metadata.get_tombstone(tenant_id, interaction_id) or deletion
+                events[:] = [self._deletion_event(tenant_id, interaction.trace_id, deletion)]
+                self._delete(tenant_id, interaction, deletion)
+                self.outbox.enqueue(events, self.outbox_pending_limit)
+        except Exception:
+            self.record_failure()
+            self._emit_degraded(events)
+            raise
+        self.refresh_metrics()
+        return interaction, deletion
+
+    def _delete(self, tenant_id: str, interaction: Interaction, deletion: DeletionRequest) -> None:
+        interaction_id = interaction.interaction_id
         self.metadata.tombstone(tenant_id, interaction_id, deletion)
         self.metadata.clear_refs(tenant_id, interaction_id, "deleted")
         self.payloads.delete_interaction(tenant_id, interaction_id)
-        return interaction, deletion
 
     def delete_subject(
         self, tenant_id: str, pseudonym: str, actor: str | None
     ) -> tuple[DeletionRequest, list[tuple[Interaction, DeletionRequest]]]:
-        with self.metadata.transaction():
-            deletion = self.metadata.get_subject_tombstone(tenant_id, pseudonym) or DeletionRequest(
-                scope="subject",
-                target_id=pseudonym,
-                actor_id_pseudonymous=actor,
-                requested_at=self.clock(),
-            )
-            self.metadata.tombstone_subject(tenant_id, deletion)
-            deleted = []
-            for interaction in self.metadata.for_subject(tenant_id, pseudonym):
-                result = self._delete(tenant_id, interaction.interaction_id, actor)
-                if result is not None:
-                    deleted.append(result)
+        deletion = DeletionRequest(
+            scope="subject",
+            target_id=pseudonym,
+            actor_id_pseudonymous=actor,
+            requested_at=self.clock(),
+        )
+        subject_trace_id = uid()
+        events = [self._deletion_event(tenant_id, subject_trace_id, deletion)]
+        try:
+            with self.metadata.transaction():
+                deletion = self.metadata.get_subject_tombstone(tenant_id, pseudonym) or deletion
+                events[:] = [self._deletion_event(tenant_id, subject_trace_id, deletion)]
+                deleted = []
+                for interaction in self.metadata.for_subject(tenant_id, pseudonym):
+                    interaction_deletion = self.metadata.get_tombstone(
+                        tenant_id, interaction.interaction_id
+                    ) or DeletionRequest(
+                        scope="interaction",
+                        target_id=interaction.interaction_id,
+                        actor_id_pseudonymous=actor,
+                        requested_at=self.clock(),
+                    )
+                    deleted.append((interaction, interaction_deletion))
+                    events.insert(
+                        -1,
+                        self._deletion_event(tenant_id, interaction.trace_id, interaction_deletion),
+                    )
+                # Keep the subject summary after its interaction events in due-time order.
+                events[-1] = self._deletion_event(tenant_id, subject_trace_id, deletion)
+                self.metadata.tombstone_subject(tenant_id, deletion)
+                for interaction, interaction_deletion in deleted:
+                    self._delete(tenant_id, interaction, interaction_deletion)
+                self.outbox.enqueue(events, self.outbox_pending_limit)
+        except Exception:
+            self.record_failure()
+            self._emit_degraded(events)
+            raise
+        self.refresh_metrics()
         return deletion, deleted
+
+    @staticmethod
+    def _deletion_event(tenant_id: str, trace_id: str, deletion: DeletionRequest) -> Event:
+        return Event(
+            event_id=deletion.deletion_request_id,
+            event_type="privacy.deletion.requested.v1",
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+            data=deletion,
+        )

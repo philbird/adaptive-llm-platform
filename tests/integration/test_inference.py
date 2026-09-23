@@ -44,8 +44,9 @@ def test_end_to_end_correlated_events_and_cost(
         response = client.post(
             "/v1/inference", json=inference_request.model_dump(), headers=HEADERS
         )
+        client.app.state.dispatcher.dispatch_once()
     assert response.status_code == 200
-    assert app.state.inference.emission_failures == 0
+    assert app.state.metrics.get("dispatcher_failures") == 0
     assert sink.dropped_events == 0
     result = InferenceResponse.model_validate(response.json())
     assert result.citations[0].chunk_id == "refund-window"
@@ -65,6 +66,8 @@ def test_end_to_end_correlated_events_and_cost(
     assert isinstance(route, RouteDecision)
     assert isinstance(generation, GenerationAttempt)
     assert isinstance(interaction, Interaction)
+    assert events[0].occurred_at == interaction.started_at
+    assert events[0].occurred_at < interaction.completed_at
     assert interaction.retrieval_run_id == retrieval.retrieval_run_id
     assert interaction.route_decision_id == route.route_decision_id
     assert interaction.generation_attempt_ids == [generation.attempt_id]
@@ -105,6 +108,7 @@ def test_identity_rejections(
         result = client.post(
             "/v1/inference", json=body, headers={"Authorization": f"Bearer {key}"} if key else {}
         )
+        client.app.state.dispatcher.dispatch_once()
     assert result.status_code == status
     assert not sink.events
 
@@ -125,7 +129,9 @@ def test_replay_conflict_and_tenant_scope(inference_request: InferenceRequest) -
         original = client.post(
             "/v1/inference", json=inference_request.model_dump(), headers=HEADERS
         )
+        client.app.state.dispatcher.dispatch_once()
         replay = client.post("/v1/inference", json=inference_request.model_dump(), headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
         assert replay.json() == {**original.json(), "replayed": True}
         assert len(sink.events) == 5
         conflict = client.post(
@@ -133,6 +139,7 @@ def test_replay_conflict_and_tenant_scope(inference_request: InferenceRequest) -
             json={**inference_request.model_dump(), "max_output_tokens": 64},
             headers=HEADERS,
         )
+        client.app.state.dispatcher.dispatch_once()
         assert conflict.status_code == 409
         assert conflict.json() == {"error": {"code": "request_id_conflict"}}
         other = client.post(
@@ -140,6 +147,7 @@ def test_replay_conflict_and_tenant_scope(inference_request: InferenceRequest) -
             json=inference_request.model_dump(),
             headers={"Authorization": "Bearer synthetic-key-b"},
         )
+        client.app.state.dispatcher.dispatch_once()
         assert other.status_code == 200
         assert not other.json()["replayed"]
         assert other.json()["interaction_id"] != original.json()["interaction_id"]
@@ -181,7 +189,9 @@ def test_provider_failure_events(
         create_app(Settings(provider=FakeProvider(test_only_failure=failure), events=sink))
     ) as client:
         result = client.post("/v1/inference", json=inference_request.model_dump(), headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
         retry = client.post("/v1/inference", json=inference_request.model_dump(), headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
     assert result.status_code == retry.status_code == status
     assert len(sink.events) == 10
     for events in (sink.events[:5], sink.events[5:]):
@@ -206,6 +216,7 @@ def test_validation_failure_is_content_free(inference_request: InferenceRequest)
     sink = InMemoryEventSink()
     with TestClient(create_app(Settings(provider=EmptyProvider(), events=sink))) as client:
         result = client.post("/v1/inference", json=inference_request.model_dump(), headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
     assert result.status_code == 502
     assert result.json() == {"error": {"code": "validation_failed"}}
     assert sink.events[3].event_type == "generation.failed.v1"
@@ -237,6 +248,7 @@ def test_json_no_rag_and_length(inference_request: InferenceRequest) -> None:
                 "response_format": {"type": "json_object"},
             },
         )
+        client.app.state.dispatcher.dispatch_once()
         assert result.status_code == 200
         assert result.json()["citations"] == []
         events = sink.events_for_trace(result.json()["trace_id"])
@@ -256,6 +268,7 @@ def test_json_no_rag_and_length(inference_request: InferenceRequest) -> None:
                 "max_output_tokens": 1,
             },
         )
+        client.app.state.dispatcher.dispatch_once()
         assert short.status_code == 200
         assert short.json()["finish_reason"] == "length"
         assert short.json()["usage"]["output_tokens"] == 1
@@ -286,6 +299,7 @@ def test_policy_constraints_prevent_provider_call(
         create_app(Settings(policy=RestrictedPolicy(), provider=MustNotGenerate(), events=sink))
     ) as client:
         result = client.post("/v1/inference", json=body, headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
     status, code = {
         "processing": (403, "processing_forbidden"),
         "residency": (403, "residency_unavailable"),
@@ -348,6 +362,7 @@ def test_deadline_bounds_provider(inference_request: InferenceRequest) -> None:
     body["routing"]["deadline_ms"] = 50
     with TestClient(create_app(Settings(provider=SlowProvider(), events=sink))) as client:
         result = client.post("/v1/inference", json=body, headers=HEADERS)
+        client.app.state.dispatcher.dispatch_once()
     assert result.status_code == 504
     assert sink.events[3].data.finish_reason == "deadline_exceeded"
     assert sink.events[-1].data.status == "failed"

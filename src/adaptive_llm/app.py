@@ -3,7 +3,8 @@
 import asyncio
 import hashlib
 import hmac
-from collections.abc import AsyncIterator
+import os
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,9 +22,9 @@ from adaptive_llm.contracts import (
     InferenceRequest,
     InferenceResponse,
     SubjectDeletionInput,
-    uid,
 )
 from adaptive_llm.events import EventSink, InMemoryEventSink
+from adaptive_llm.events.outbox import Dispatcher, OutboxBackoff, OutboxStore
 from adaptive_llm.gateway.identity import (
     Authenticator,
     GatewayError,
@@ -33,13 +34,15 @@ from adaptive_llm.gateway.identity import (
     LocalAuthenticator,
 )
 from adaptive_llm.gateway.service import InferenceService
+from adaptive_llm.metrics import InProcessMetrics, Metrics, RequestMetrics
 from adaptive_llm.policy import LocalPolicyEngine, PolicyEngine, ProcessingRedactor
 from adaptive_llm.policy.persistence import LocalPersistenceRedactor, PersistenceRedactor
 from adaptive_llm.providers import FakeProvider, Provider
 from adaptive_llm.rag import LocalRetriever, Retriever
 from adaptive_llm.routing import FoundationRouter, Router
 from adaptive_llm.storage import MetadataStore, PayloadStore
-from adaptive_llm.storage.crypto import PayloadCipher
+from adaptive_llm.storage.crypto import PayloadCipher, load_keyring
+from adaptive_llm.storage.outbox import SQLiteOutboxStore
 from adaptive_llm.storage.persistence import Persistence
 from adaptive_llm.storage.sqlite import SQLiteDatabase, SQLiteMetadataStore, SQLitePayloadStore
 from adaptive_llm.validation import LocalValidator, Validator
@@ -59,6 +62,19 @@ class Settings:
     routing_path: Path = ROOT / "configs/routing/local.json"
     documents_path: Path = ROOT / "tests/fixtures/documents.json"
     event_capacity: int = 4096
+    outbox_backoff: OutboxBackoff = field(default_factory=OutboxBackoff)
+    outbox_pending_limit: int = 100_000
+    outbox_dispatch_enabled: bool = True
+    outbox_store: OutboxStore | None = None
+    metrics: Metrics | None = None
+    payload_keys: Mapping[str, bytes] | None = field(default=None, repr=False)
+    payload_key_version: str = "local-1"
+    payload_keyring_path: Path | None = field(
+        default_factory=lambda: (
+            Path(os.environ["PAYLOAD_KEYRING"]) if os.environ.get("PAYLOAD_KEYRING") else None
+        ),
+        repr=False,
+    )
     replay_capacity: int = 10_000
     data_dir: Path = field(default_factory=lambda: _default_data_dir())
     environment: Environment = "local"
@@ -81,6 +97,12 @@ class Settings:
     tracer: Tracer | None = None
 
     def __post_init__(self) -> None:
+        if self.payload_keyring_path is not None:
+            keys, current = load_keyring(self.payload_keyring_path)
+            object.__setattr__(self, "payload_keys", keys)
+            object.__setattr__(self, "payload_key_version", current)
+        if self.outbox_pending_limit < 1:
+            raise ValueError("invalid_outbox_pending_limit")
         if self.replay_capacity < 1:
             raise ValueError("invalid_replay_capacity")
         if self.replay_ttl_seconds < 1 or (
@@ -92,6 +114,9 @@ class Settings:
         if self.secret is None:
             config = IdentityConfig.model_validate_json(self.identity_path.read_text())
             object.__setattr__(self, "secret", config.local_secret.encode("utf-8"))
+        if self.payload_keys is not None:
+            PayloadCipher(self.payload_keys, self.payload_key_version)
+            return
         if self.payload_key is None:
             if self.environment != "local":
                 raise ValueError("payload_key_required")
@@ -108,8 +133,10 @@ class Settings:
 
 class Health(BaseModel):
     status: Literal["ok"] = "ok"
-    stage: Literal["slice-1a"] = "slice-1a"
+    stage: Literal["milestone-1-local"] = "milestone-1-local"
     inference_enabled: bool
+    outbox_pending: int = 0
+    dead_letters: int = 0
 
 
 def _start_inference(application: FastAPI, settings: Settings) -> None:
@@ -134,13 +161,26 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
         )
         application.state.database = database
         metadata, payloads = SQLiteMetadataStore(database), SQLitePayloadStore(database)
-    assert settings.payload_key is not None
+    outbox = settings.outbox_store
+    if outbox is None:
+        if not isinstance(metadata, SQLiteMetadataStore):
+            raise ValueError("outbox_store_required")
+        outbox = SQLiteOutboxStore(metadata.database)
+    metrics: Metrics = application.state.metrics
+    key_material = (
+        settings.payload_keys if settings.payload_keys is not None else settings.payload_key
+    )
+    assert key_material is not None
     persistence = Persistence(
         metadata,
         payloads,
-        PayloadCipher(settings.payload_key),
+        PayloadCipher(key_material, settings.payload_key_version),
         settings.persistence_redactor or LocalPersistenceRedactor(),
         keyring,
+        outbox=outbox,
+        metrics=metrics,
+        fallback_sink=events,
+        outbox_pending_limit=settings.outbox_pending_limit,
         replay_ttl_seconds=settings.replay_ttl_seconds,
         replay_capacity=settings.replay_capacity,
         retention_seconds=settings.retention_seconds,
@@ -160,12 +200,16 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
         else FoundationRouter(settings.routing_path),
         provider=settings.provider if settings.provider is not None else FakeProvider(),
         validator=settings.validator if settings.validator is not None else LocalValidator(),
-        events=events,
         tracer=settings.tracer
         if settings.tracer is not None
         else trace.get_tracer("adaptive_llm.gateway", "1.0"),
         persistence=persistence,
     )
+    application.state.outbox = outbox
+    application.state.dispatcher = Dispatcher(
+        outbox, events, metrics, backoff=settings.outbox_backoff, tracer=settings.tracer
+    )
+    application.state.dispatcher.refresh_metrics()
     application.state.events = events
     application.state.inference = service
     application.state.metadata = metadata
@@ -180,13 +224,19 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     settings: Settings = application.state.settings
     application.state.ready = False
+    dispatcher_task: asyncio.Task[None] | None = None
     try:
         if settings.inference_enabled:
             _start_inference(application, settings)
+            if settings.outbox_dispatch_enabled:
+                dispatcher_task = asyncio.create_task(application.state.dispatcher.run())
         application.state.ready = True
         yield
     finally:
         application.state.ready = False
+        if dispatcher_task is not None:
+            application.state.dispatcher.stop()
+            await dispatcher_task
         if hasattr(application.state, "database"):
             application.state.database.close()
 
@@ -201,6 +251,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     application.state.settings = settings
+    application.state.metrics = (
+        settings.metrics if settings.metrics is not None else InProcessMetrics()
+    )
+
+    application.add_middleware(RequestMetrics, metrics=application.state.metrics)
 
     @application.exception_handler(GatewayError)
     async def gateway_error(request: Request, error: GatewayError) -> JSONResponse:
@@ -217,7 +272,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/healthz", response_model=Health, tags=["operations"])
     async def health() -> Health:
-        return Health(inference_enabled=settings.inference_enabled)
+        # Cached gauges keep health responsive while a storage transaction is busy.
+        metrics: Metrics = application.state.metrics
+        return Health(
+            inference_enabled=settings.inference_enabled,
+            outbox_pending=int(metrics.get("outbox_pending")),
+            dead_letters=int(metrics.get("outbox_dead")),
+        )
 
     if settings.inference_enabled:
 
@@ -244,7 +305,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             interaction_id: str, identity: Annotated[Identity, Depends(authenticate)]
         ) -> Response:
             persistence: Persistence = application.state.persistence
-            service: InferenceService = application.state.inference
             deleted = await asyncio.to_thread(
                 persistence.delete,
                 identity.tenant_id,
@@ -253,8 +313,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             if deleted is None:
                 raise GatewayError(404, "interaction_not_found")
-            interaction, deletion = deleted
-            service._emit("privacy.deletion.requested.v1", deletion, identity, interaction.trace_id)
             return Response(status_code=204)
 
         @application.post("/v1/privacy/subjects/deletion-requests")
@@ -262,23 +320,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             body: SubjectDeletionInput, identity: Annotated[Identity, Depends(authenticate)]
         ) -> dict[str, int]:
             persistence: Persistence = application.state.persistence
-            service: InferenceService = application.state.inference
             keyring: Keyring = application.state.keyring
             pseudonym = keyring.pseudonym(identity.tenant_id, body.subject)
-            deletion, deleted = await asyncio.to_thread(
+            _, deleted = await asyncio.to_thread(
                 persistence.delete_subject,
                 identity.tenant_id,
                 pseudonym,
                 identity.subject_id_pseudonymous,
             )
-            for interaction, interaction_deletion in deleted:
-                service._emit(
-                    "privacy.deletion.requested.v1",
-                    interaction_deletion,
-                    identity,
-                    interaction.trace_id,
-                )
-            service._emit("privacy.deletion.requested.v1", deletion, identity, uid())
             return {"deleted": len(deleted)}
 
     return application

@@ -1,3 +1,5 @@
+import pytest
+
 from adaptive_llm.contracts import Event, Started, uid
 from adaptive_llm.events import InMemoryEventSink
 
@@ -17,7 +19,8 @@ def test_bounded_idempotent_queue_and_trace_readback() -> None:
     assert sink.events_for_trace(event.trace_id) == [event]
     assert sink.events_for_trace("other") == []
     assert sink.dropped_events == 0
-    sink.emit(event.model_copy(update={"event_id": uid()}))
+    with pytest.raises(RuntimeError, match="^event_sink_full$"):
+        sink.emit(event.model_copy(update={"event_id": uid()}))
     assert sink.dropped_events == 1
     sink.emit(event)
     assert sink.dropped_events == 1
