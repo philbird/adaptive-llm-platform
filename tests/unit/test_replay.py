@@ -145,6 +145,9 @@ async def test_cancellation_releases_reservation_and_can_retry(
     assert not service._replays
     result = await service.infer(inference_request, identity)
     assert not result.replayed
+    async with asyncio.timeout(2):
+        while len(sink.events) < 10:  # noqa: ASYNC110 - observe asynchronous delivery
+            await asyncio.sleep(0.01)
     assert len(sink.events) == 10
     assert sink.events[3].data.finish_reason == "cancelled"
     assert sink.events[0].data.interaction_id != result.interaction_id

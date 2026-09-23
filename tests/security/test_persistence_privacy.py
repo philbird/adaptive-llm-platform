@@ -54,6 +54,7 @@ def test_no_plaintext_in_database_and_only_redacted_encrypted_payloads(
     app = create_app(Settings(data_dir=tmp_path, policy=LoggingPolicy(), provider=PiiProvider()))
     with TestClient(app) as client:
         result = client.post("/v1/inference", headers=HEADERS, json=body)
+        client.app.state.dispatcher.dispatch_once()
         assert result.status_code == 200
         assert "response@example.test" in result.json()["content"]
         iid = result.json()["interaction_id"]
@@ -97,6 +98,7 @@ def test_no_plaintext_in_database_and_only_redacted_encrypted_payloads(
             json.dumps(body["messages"])
         )
         replay = client.post("/v1/inference", headers=HEADERS, json=body)
+        client.app.state.dispatcher.dispatch_once()
         assert replay.json()["replayed"]
         assert "response@example.test" not in replay.json()["content"]
         assert "[REDACTED]" in replay.json()["content"]
@@ -124,6 +126,7 @@ def test_store_read_delete_isolation_and_tombstones(
         response = client.post(
             "/v1/inference", headers=HEADERS, json=inference_request.model_dump()
         )
+        client.app.state.dispatcher.dispatch_once()
         iid = response.json()["interaction_id"]
         meta, payloads = app.state.metadata, app.state.payloads
         interaction = meta.get("synthetic-a", Interaction, iid)
@@ -174,6 +177,7 @@ def test_store_read_delete_isolation_and_tombstones(
             meta.get_replay("synthetic-a", "support-assistant", inference_request.request_id, now())
             is None
         )
+        app.state.dispatcher.dispatch_once()
         assert app.state.events.events[-1].event_type == "privacy.deletion.requested.v1"
         assert app.state.events.events[-1].trace_id == interaction.trace_id
         for write in (
@@ -185,6 +189,7 @@ def test_store_read_delete_isolation_and_tombstones(
                     write()
         assert client.delete(path, headers=HEADERS).status_code == 204
         retry = client.post("/v1/inference", headers=HEADERS, json=inference_request.model_dump())
+        client.app.state.dispatcher.dispatch_once()
         assert retry.status_code == 200
         assert retry.json()["interaction_id"] != iid
 
@@ -208,11 +213,13 @@ def test_subject_deletion_is_pseudonymous_and_tenant_scoped(
             headers={**HEADERS, "X-Subject": "synthetic-another"},
             json={**inference_request.model_dump(), "request_id": "other-subject"},
         )
+        client.app.state.dispatcher.dispatch_once()
         result = client.post(
             "/v1/privacy/subjects/deletion-requests",
             headers=HEADERS,
             json={"subject": "synthetic-raw-subject"},
         )
+        client.app.state.dispatcher.dispatch_once()
         assert result.status_code == 200
         assert result.json() == {"deleted": 2}
         for iid in ids:
@@ -277,6 +284,7 @@ def test_subject_tombstone_without_existing_interactions_survives_restart(
             headers=HEADERS,
             json={"subject": "synthetic-raw-subject"},
         )
+        client.app.state.dispatcher.dispatch_once()
         assert result.json() == {"deleted": 0}
         assert len(app.state.events.events) == 1
         assert app.state.events.events[0].data.scope == "subject"
@@ -285,6 +293,7 @@ def test_subject_tombstone_without_existing_interactions_survives_restart(
         response = client.post(
             "/v1/inference", headers=HEADERS, json=inference_request.model_dump()
         )
+        client.app.state.dispatcher.dispatch_once()
         assert response.status_code == 200
         assert (
             restarted.state.metadata.get(
@@ -351,6 +360,7 @@ def test_redaction_failure_still_serves_but_writes_no_payloads_or_replay(
     app = create_app(Settings(policy=LoggingPolicy(), persistence_redactor=BrokenRedactor()))
     with TestClient(app) as client:
         result = client.post("/v1/inference", headers=HEADERS, json=inference_request.model_dump())
+        client.app.state.dispatcher.dispatch_once()
         assert result.status_code == 200
         assert result.json()["content"]
         meta = app.state.metadata

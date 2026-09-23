@@ -7,11 +7,12 @@ from adaptive_llm.contracts import Event
 
 
 class EventSink(Protocol):
+    # Return only after accepting the event. Raise on rejection; deduplicate by event_id.
     def emit(self, event: Event) -> None: ...
 
 
 class InMemoryEventSink:
-    """Drop new events when full; accepted event ids remain idempotent for this lifetime."""
+    """Bounded local consumer; reject overflow so the durable dispatcher can retry."""
 
     def __init__(self, capacity: int = 4096) -> None:
         if capacity < 1:
@@ -27,7 +28,7 @@ class InMemoryEventSink:
                 return
             if len(self._events) >= self._capacity:
                 self._dropped += 1
-                return
+                raise RuntimeError("event_sink_full")
             self._events[event.event_id] = event.model_copy(deep=True)
 
     @property

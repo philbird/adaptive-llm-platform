@@ -1,3 +1,4 @@
+import asyncio
 import math
 from time import perf_counter
 
@@ -28,6 +29,7 @@ async def test_200_requests_have_under_50ms_p95_overhead(
             )
             total_ms = (perf_counter() - started) * 1000
             assert response.status_code == 200
+            await asyncio.to_thread(app.state.dispatcher.dispatch_once)
             events = sink.events_for_trace(response.json()["trace_id"])
             attempt = events[3].data
             assert isinstance(attempt, GenerationAttempt)

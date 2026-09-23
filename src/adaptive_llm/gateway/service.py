@@ -10,9 +10,6 @@ from opentelemetry.trace import Tracer
 
 from adaptive_llm.contracts import (
     Chunk,
-    Event,
-    EventData,
-    EventType,
     GenerationAttempt,
     InferenceRequest,
     InferenceResponse,
@@ -27,7 +24,6 @@ from adaptive_llm.contracts import (
     now,
     uid,
 )
-from adaptive_llm.events import EventSink
 from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
 from adaptive_llm.policy import PolicyEngine, ProcessingRedactor
 from adaptive_llm.providers import TOKENIZER, Provider, ProviderRequest, token_count
@@ -50,7 +46,6 @@ class InferenceService:
         router: Router,
         provider: Provider,
         validator: Validator,
-        events: EventSink,
         tracer: Tracer,
         persistence: Persistence,
     ) -> None:
@@ -64,35 +59,10 @@ class InferenceService:
         self._router = router
         self._provider = provider
         self._validator = validator
-        self._events = events
         self._tracer = tracer
         self.persistence = persistence
         self._replays: dict[tuple[str, str, str], str] = {}
         self._replay_lock = Lock()
-        self.emission_failures = 0
-
-    def _emit(
-        self, event_type: EventType, data: EventData, identity: Identity, trace_id: str
-    ) -> None:
-        # Neither exporter exceptions nor sink exceptions may escape into serving.
-        # OTel must not automatically record arbitrary exception messages.
-        try:
-            with self._tracer.start_as_current_span(
-                "event_emission",
-                attributes={"trace_id": trace_id, "schema_version": "1.0"},
-                record_exception=False,
-                set_status_on_exception=False,
-            ):
-                self._events.emit(
-                    Event(
-                        event_type=event_type,
-                        tenant_id=identity.tenant_id,
-                        trace_id=trace_id,
-                        data=data,
-                    )
-                )
-        except Exception:
-            self.emission_failures += 1
 
     async def infer(self, request: InferenceRequest, identity: Identity) -> InferenceResponse:
         if request.application_id not in identity.application_ids:
@@ -116,6 +86,7 @@ class InferenceService:
         try:
             replayed = await asyncio.to_thread(self._find_replay, key, fingerprint)
             if replayed is not None:
+                self.persistence.metrics.increment("replay_hits")
                 return replayed
             with self._tracer.start_as_current_span(
                 "inference",
@@ -168,12 +139,6 @@ class InferenceService:
             application_id=request.application_id,
             policy_version=policy.policy_version,
         )
-        self._emit(
-            "interaction.started.v1",
-            started_record,
-            identity,
-            trace_id,
-        )
         content = self.persistence.prepare_input(request, policy)
         retrieval_id: str | None = None
         route_id: str | None = None
@@ -204,7 +169,6 @@ class InferenceService:
                 retrieval_id = retrieval.run.retrieval_run_id
                 retrieval_run = retrieval.run.model_copy(update={"query_hash": content.query_hash})
                 supplied_chunks = retrieval.supplied_chunks
-                self._emit("retrieval.completed.v1", retrieval_run, identity, trace_id)
             provider_request = ProviderRequest(
                 messages=tuple(request.messages),
                 context=supplied_chunks,
@@ -223,7 +187,6 @@ class InferenceService:
                 span.set_attribute("router_version", selection.decision.router_version)
             route_id = selection.decision.route_decision_id
             route = selection.decision
-            self._emit("route.decided.v1", selection.decision, identity, trace_id)
             if selection.decision.selected_model_deployment_id is None:
                 reasons = {
                     reason
@@ -306,13 +269,7 @@ class InferenceService:
                     cancelled_during_save = True
                     interaction, replay = await saving
             except Exception:
-                self.persistence.failures += 1
-            self._emit(
-                "interaction.completed.v1",
-                interaction,
-                identity,
-                trace_id,
-            )
+                self.persistence.record_failure()
             if cancelled_during_save:
                 raise asyncio.CancelledError
         assert response is not None
@@ -339,6 +296,7 @@ class InferenceService:
         policy: PolicyDecision,
         content: PersistenceContent,
     ) -> InferenceResponse:
+        self.persistence.metrics.increment("fallback_free_attempts")
         deployment = selection.deployment
         attributes = {
             "interaction_id": interaction_id,
@@ -433,9 +391,3 @@ class InferenceService:
                 }
             )
             attempts.append(attempt)
-            self._emit(
-                "generation.completed.v1" if error_code is None else "generation.failed.v1",
-                attempt,
-                identity,
-                trace_id,
-            )

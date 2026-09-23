@@ -1,9 +1,9 @@
 # Local development and persistence
 
-Run `make dev`, then `curl http://127.0.0.1:8000/healthz`. The existing health contract remains:
+Run `make dev`, then `curl http://127.0.0.1:8000/healthz`. With a drained outbox, health reports:
 
 ```json
-{"status":"ok","stage":"slice-1a","inference_enabled":true}
+{"status":"ok","stage":"milestone-1-local","inference_enabled":true,"outbox_pending":0,"dead_letters":0}
 ```
 
 `Settings(inference_enabled=False)` still omits inference and reports false. Enabled local
@@ -63,7 +63,9 @@ uv run --locked pytest tests/security tests/load -s
 `make contracts` refreshes checked-in schemas and OpenAPI. Tests use isolated temporary data
 directories, sharing one only for explicit restart tests. No test writes request data to `.local`.
 `application.state.persistence.failures` reports failed writes; event failures and drops retain
-their existing counters. No durable telemetry retry is included yet.
+their own counters. The durable outbox retries delivery; storage failures attempt direct,
+non-durable emission and increment `degraded_emissions`. See the
+[telemetry outage runbook](telemetry-outage.md) for recovery and limitations.
 
 Stop with Ctrl-C. The database and completed replay entries survive; in-memory events and
 in-flight reservations do not. Use one gateway process for local in-flight exclusion. Subject

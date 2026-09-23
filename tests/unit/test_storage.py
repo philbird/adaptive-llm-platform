@@ -29,8 +29,8 @@ def test_migrations_fresh_repeat_and_failed_batch_rollback(tmp_path: Path) -> No
     assert connection.execute("SELECT * FROM schema_migrations").fetchall() == versions
     migrations = tmp_path / "migrations"
     migrations.mkdir()
-    (migrations / "0003_good.sql").write_text("CREATE TABLE rolled_back (tenant_id TEXT);\n")
-    (migrations / "0004_bad.sql").write_text(
+    (migrations / "9998_good.sql").write_text("CREATE TABLE rolled_back (tenant_id TEXT);\n")
+    (migrations / "9999_bad.sql").write_text(
         "CREATE TABLE also_rolled_back (tenant_id TEXT);\nBAD SQL;\n"
     )
     with pytest.raises(StorageError, match="^migration_failed$"):

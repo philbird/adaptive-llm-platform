@@ -41,13 +41,23 @@
       },
       "Health": {
         "properties": {
+          "dead_letters": {
+            "default": 0,
+            "title": "Dead Letters",
+            "type": "integer"
+          },
           "inference_enabled": {
             "title": "Inference Enabled",
             "type": "boolean"
           },
+          "outbox_pending": {
+            "default": 0,
+            "title": "Outbox Pending",
+            "type": "integer"
+          },
           "stage": {
-            "const": "slice-1a",
-            "default": "slice-1a",
+            "const": "milestone-1-local",
+            "default": "milestone-1-local",
             "title": "Stage",
             "type": "string"
           },

@@ -28,7 +28,13 @@ def test_lifespan_health_and_mounted_inference() -> None:
         assert application.state.ready
         result = client.get("/healthz")
         assert result.status_code == 200
-        assert result.json() == {"status": "ok", "stage": "slice-1a", "inference_enabled": True}
+        assert result.json() == {
+            "status": "ok",
+            "stage": "milestone-1-local",
+            "inference_enabled": True,
+            "outbox_pending": 0,
+            "dead_letters": 0,
+        }
         assert client.post("/v1/inference", json={}).status_code == 401
     assert application.state.ready is False
 

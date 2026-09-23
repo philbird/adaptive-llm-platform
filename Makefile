@@ -1,8 +1,10 @@
-.PHONY: dev check integration contracts sbom migrate retention-sweep
+.PHONY: dev check integration contracts sbom migrate retention-sweep dispatch-once dead-letters redeliver rotate-key backup restore drills
 
 DATA_DIR ?= .local
 ENVIRONMENT ?= local
 TENANT ?= synthetic-a
+KEYRING ?= $(PAYLOAD_KEYRING)
+STORAGE = uv run --locked python -m adaptive_llm.storage
 
 dev:
 	uv run --locked uvicorn adaptive_llm.app:app --host 127.0.0.1 --port 8000 --reload --no-access-log
@@ -12,6 +14,27 @@ migrate:
 
 retention-sweep:
 	uv run --locked python -m adaptive_llm.storage retention-sweep --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)" --tenant "$(TENANT)"
+
+dispatch-once:
+	$(STORAGE) dispatch-once --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)"
+
+dead-letters:
+	$(STORAGE) dead-letters --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)" --tenant "$(TENANT)"
+
+redeliver:
+	$(STORAGE) redeliver --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)" --event-id "$(EVENT_ID)"
+
+rotate-key:
+	$(STORAGE) rotate-key --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)" --tenant "$(TENANT)" --new-key-version "$(NEW_KEY_VERSION)" --keyring "$(KEYRING)"
+
+backup:
+	$(STORAGE) backup --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)" --out "$(OUT)"
+
+restore:
+	$(STORAGE) restore --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)" --out "$(OUT)" $(if $(filter 1,$(FORCE)),--force,)
+
+drills:
+	uv run --locked pytest tests/drills -m drill -s
 
 check:
 	uv run --locked ruff format --check .

@@ -1,14 +1,16 @@
-# Slices 1a–1b: one interaction, from serving to persistence
+# Slices 1a–1c: one interaction, from serving to durable event delivery
 
 This walkthrough uses only the synthetic keys, policies, prices and documents checked into
 the repository. All serving components run in the application process, with one SQLite file
 at `.local/local.sqlite3` by default. Database opening and migrations happen during application
 lifespan startup; importing the module or constructing an app creates no files. There is no
 external provider call or exporter. The
-health stage label remains `slice-1a` for compatibility; persistence is now enabled.
+health stage label is `milestone-1-local`; persistence and the outbox are enabled.
 
 Start the local gateway with `make dev`. `/healthz` reports
-`{"status":"ok","stage":"slice-1a","inference_enabled":true}`. Setting
+`{"status":"ok","stage":"milestone-1-local","inference_enabled":true,"outbox_pending":0,"dead_letters":0}`
+when the outbox is drained. Backlog and dead letters do not change readiness. The gauges are
+refreshed after commits and dispatcher batches; health reads them without waiting for SQLite. Setting
 `Settings(inference_enabled=False)` omits the inference route and reports false.
 
 Submit this synthetic request:
@@ -52,10 +54,12 @@ curl http://127.0.0.1:8000/v1/inference \
    messages and metadata. Metadata keys retain their validated identifiers. Metadata remains
    untrusted for identity and policy and is not included in events or model context.
    Card candidates must pass a Luhn checksum; this is a local heuristic. A separately versioned
-   persistence pass prepares hashes before each relevant event, as described below. Retrieval and generation continue
+   persistence pass prepares hashes before constructing the corresponding event, as described below. Retrieval and generation continue
    to receive the processing-path output, including business identifiers.
 3. **Start and retrieve.** New UUIDv7 interaction and trace ids correlate all records.
-   `interaction.started.v1` is emitted after policy. A placeholder labels RAG requests
+   `interaction.started.v1` is prepared after policy and written with the graph at commit. Its
+   `occurred_at` and initial `next_attempt_at` use `Interaction.started_at`; other events keep
+   their completion-time envelope timestamps. A placeholder labels RAG requests
    `question_answering` and other requests `general`, with classifier version
    `placeholder-rag-flag-1`, confidence `0.5` and reason code `rag_flag_only`. This only describes
    the RAG flag; task classification is deferred to a later slice. `LocalRetriever` uses the last
@@ -70,7 +74,7 @@ curl http://127.0.0.1:8000/v1/inference \
    fake whitespace tokens. Every candidate records its retrieved rank, supplied flag, context
    position (zero-based or null), token count and SHA-256 content hash. The query hash is
    HMAC-SHA256 of the persistence-redacted query with the derived query key. The gateway prepares
-   this hash before emitting the retrieval record; the stored record retains the identical hash.
+   this hash before committing the retrieval record; the stored record retains the identical hash.
    Neither query nor chunk content appears in the event.
    Disabled RAG skips the retriever and retrieval span entirely, emits no retrieval event and
    leaves `Interaction.retrieval_run_id` null. The provider receives empty context. Direct calls
@@ -117,10 +121,12 @@ curl http://127.0.0.1:8000/v1/inference \
    Serving still returns the generated response.
 8. **Encrypt and persist.** One transaction writes the `Started`, `Interaction`, `RetrievalRun`,
    `RouteDecision` and `GenerationAttempt` contracts, with the same correlation ids as the events.
-   Stages not reached are omitted. Failed attempts are recorded but never replayed. Message,
+   The same transaction inserts the corresponding envelopes into migration `0003_outbox.sql`
+   with UUIDv7 event ids, tenant/trace/interaction keys and `state="pending"`. Outbox failure
+   rolls back metadata, blobs and replay together. Stages not reached are omitted. Failed attempts are recorded but never replayed. Message,
    query and output payload refs require `content_logging_allowed`; all three remain null for
    this walkthrough's default policy. The walkthrough database contains five metadata records,
-   an encrypted replay response and its scoped replay entry. There are no plaintext messages,
+   five outbox envelopes, an encrypted replay response and its scoped replay entry. There are no plaintext messages,
    query, output, raw subject, credentials or retrieved chunks. Persistence counts are empty
    for this request because its secrets were already removed by the processing pass.
    SQLite rows include tenant, expiry and lifecycle state. Replay is stored for its operational
@@ -134,7 +140,8 @@ curl http://127.0.0.1:8000/v1/inference \
    the response. Encryption and the transaction run through `asyncio.to_thread`; the response
    waits for the write while other requests can use the event loop. Replay reads and privacy
    transactions also run off the event loop; the SQLite `RLock` protects shared transactions.
-   No retry or emergency content buffer exists in this slice.
+   Persistence itself is not retried and has no emergency content buffer. Event delivery retries
+   separately after the transaction commits, as described below.
 
 The event order with RAG enabled is:
 
@@ -150,16 +157,58 @@ All five envelopes share one `trace_id`; all five payloads share one `interactio
 With RAG disabled there are four events: `interaction.started.v1`, `route.decided.v1`,
 `generation.completed.v1` (or `generation.failed.v1`), and `interaction.completed.v1`.
 These four also share the trace/interaction ids, with a null retrieval run link on completion.
-Events remain in memory in the same order. Completion additionally carries persistence redaction
-counts and logging refs when allowed. Retrieval/generation event payloads and their persisted
-records are identical except for refs filled at commit time.
-`application.state.events.events_for_trace(trace_id)` reads them back in tests. No HTTP event
-reader is exposed. The default capacity is 4096 accepted events. The collector ignores duplicate
-accepted `event_id`s and drops new arrivals when full, incrementing `dropped_events`. Dropped
-arrivals may be retried; there is no consumer or durable queue in this slice. Sink exceptions
-increment `application.state.inference.emission_failures`. Neither dropping nor emission failure
-changes the inference response. The happy-path integration test also requires zero
-`emission_failures` and zero `dropped_events`, so silent contract/emission failures fail the test.
+The normal persistence path commits envelopes atomically with the interaction graph and
+leaves delivery to the dispatcher. Envelopes are prepared before storage writes and updated
+with final refs before the transaction. A storage failure increments `persistence_failures`
+and emits those same envelopes directly to the configured sink from the persistence worker
+as a best-effort fallback. `degraded_emissions` counts each attempted fallback emission,
+including attempts rejected by the sink; exceptions are swallowed and the remaining envelopes
+are attempted. These events are not durable, are not retried, and may be duplicated after
+recovery; consumers deduplicate `event_id`. A failed transaction produces no durable events.
+Completion carries persistence redaction counts and logging refs when allowed. Retrieval/generation event payloads equal their stored
+records at commit time. Deletion later clears stored refs; delivered events remain immutable
+historical evidence and refs cannot resolve deleted blobs.
+
+A lifespan task polls the durable outbox every 50 ms, delivering up to 256 due rows per batch
+on a worker thread. Sink calls hold no SQLite lock. Serving waits for the existing persistence
+transaction. Normal delivery is asynchronous; the exceptional storage-failure path attempts
+direct sink emission in the persistence worker before returning. Dispatch validates the
+envelope and its row bindings; malformed rows go directly to `dead` with `invalid_event`. Delivery failures store only
+`sink_unavailable`. `Settings.outbox_backoff` defaults to `OutboxBackoff(base=0.1, cap=30.0,
+max_attempts=8)` with seconds as units and equal jitter in [half the capped delay, capped delay].
+The eighth unsuccessful delivery marks a row dead. A pending predecessor blocks later rows
+of its interaction, even if the predecessor is waiting for a retry. Dead predecessors do not
+block; repaired/redelivered events can therefore arrive out of order.
+
+Delivery is at least once. A crash after sink acceptance but before the delivered update can
+repeat an event. `EventSink` implementations must acknowledge acceptance, raise on rejection,
+and deduplicate by `event_id`. `InMemoryEventSink` deduplicates accepted events and rejects
+capacity overflow for retry (default capacity 4096). It remains process-local; durable envelopes
+stay in SQLite. Tests call `application.state.dispatcher.dispatch_once()` or wait for the
+background task before inspecting `application.state.events.events_for_trace(trace_id)`.
+There is no HTTP event reader. The CLI's default consumer is also in memory; a standalone
+`make dispatch-once` records delivery to that local consumer, not an external transport.
+
+`Settings.outbox_pending_limit=100000` counts all pending rows in the database. At that
+threshold, new started/retrieval/route events are omitted and `dropped_events` increments
+only after commit. Generation, completion and privacy events always enter the outbox, even
+above the limit. Redelivered rows are retained. Content is never used as an outage fallback.
+
+`application.state.metrics` implements the injectable `Metrics` protocol. Counters are
+`requests` for every `/v1/` path by `method` and `status_class` (2xx/3xx/4xx/5xx),
+`fallback_free_attempts`, `outbox_delivered`, `outbox_retried`, `dead_letter`, `dropped_events`, `persistence_failures`, `degraded_emissions`,
+`replay_hits` and `dispatcher_failures`. Gauges are `outbox_pending`, `outbox_dead` and
+`dispatcher_lag_seconds=max(0, now-oldest_pending_next_attempt_at)`. The only supported label
+dimensions are tenant, status class and HTTP method; request counters use method and status class only. Methods are bounded
+to GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, TRACE, CONNECT and OTHER. Unknown methods map
+to OTHER. Paths and request/interaction/trace ids are never labels. Counters reset on restart;
+gauges recover from SQL.
+There is no exporter. A full test run and load correlation checks require zero dropped events.
+
+Use one serving process and one dispatcher per local database. Stop automatic dispatch before
+using CLI dispatch/redelivery against that database. The lifespan waits for its active batch
+before closing SQLite; committed pending rows survive shutdown. Injected metadata/payload
+stores must share the outbox transaction; custom implementations supply `Settings.outbox_store`.
 
 Repeat the identical walkthrough request to receive the original response with `replayed: true`, without
 new events or generation. Change the body while keeping the same tenant/application/request id
@@ -213,8 +262,13 @@ does, and returns a deletion count. Raw subjects never appear in the URL or even
 operation records a subject-scope tombstone and deletes that tenant's existing interactions
 for the pseudonym in one transaction. Each interaction deletion
 atomically records a tombstone, removes all payloads including replay, nulls refs and marks
-metadata `deleted`, then emits `privacy.deletion.requested.v1`. Later writes for the same
-interaction id are refused. Subject deletion also emits one subject-scope deletion event, even
+metadata `deleted`, then commits `privacy.deletion.requested.v1` in that same transaction for
+asynchronous delivery.
+Storage failures emit the prepared deletion-request envelopes through the same non-durable
+fallback and still report the original storage failure; the events do not certify deletion.
+If storage fails before resolving the target interaction, only the known request scope/target
+is emitted with a new trace id. Resolved interaction events retain their original trace ids.
+Later writes for the same interaction id are refused. Subject deletion also commits one subject-scope deletion event, even
 when no interactions existed, and later writes for that tenant/pseudonym raise `subject_deleted`.
 Serving may still succeed, but no graph or replay can be persisted for the deleted subject.
 An interaction-only deletion permits a new interaction id. `make dev` keeps access logging disabled.
@@ -227,10 +281,11 @@ status. Authentication, unsupported streaming (501) and policy denial fail befor
 sequence. A retrieval or routing failure emits only the stages actually reached and a failed
 completion; it does not invent a generation attempt. Test controls are never accepted from HTTP.
 
-OpenTelemetry API spans for policy, retrieval, routing, generation, validation and every event
-emission sit within an inference span. Attributes contain only ids and versions. Automatic
-exception recording is disabled to prevent provider error bodies entering traces. There are no
-metric labels, SDK/exporter dependencies or metrics backend.
+OpenTelemetry API spans for policy, retrieval, routing, generation and validation sit within
+an inference span. Event emission spans run separately in the dispatcher and carry the same
+application trace id attribute. Attributes contain only ids and versions. Automatic exception
+recording is disabled to prevent provider error bodies entering traces. Metrics stay in process
+with bounded labels; there are no SDK/exporter dependencies or external metrics backend.
 
 Run the review checks and additional privacy/load coverage:
 
@@ -238,10 +293,14 @@ Run the review checks and additional privacy/load coverage:
 make contracts
 make check integration
 uv run --locked pytest tests/security tests/load -s
+make drills
 ```
 
 The load test makes 200 distinct authenticated requests through the in-process ASGI application,
 subtracts measured provider-call time from total request time, and requires nearest-rank p95
 overhead below 50 ms. This is a local slice check, not a production throughput claim.
-Durable telemetry, outbox/retry/dead letter, key rotation and backup/restore remain slice 1c.
+The 1,000-interaction flaky-sink load test checks full correlation after draining, including lost
+acknowledgements. See [telemetry outage](telemetry-outage.md), [dead-letter recovery](dead-letter-recovery.md),
+[key rotation](key-rotation.md), [backup/restore](backup-restore.md) and
+[retention/deletion](retention-deletion.md) for commands and measured drill results.
 Streaming, fallback, the feedback endpoint, real providers and exporters remain later work.
