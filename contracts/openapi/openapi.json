@@ -26,6 +26,590 @@
         "title": "Citation",
         "type": "object"
       },
+      "CorrectionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "correction": {
+            "classification": "confidential",
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Correction",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "training_authorised": {
+            "title": "Training Authorised",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "correction",
+          "training_authorised"
+        ],
+        "title": "CorrectionInput",
+        "type": "object"
+      },
+      "DatasetApproval": {
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "const": "pending",
+            "default": "pending",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "DatasetApproval",
+        "type": "object"
+      },
+      "DatasetManifest": {
+        "properties": {
+          "approval": {
+            "$ref": "#/components/schemas/DatasetApproval"
+          },
+          "content_digest": {
+            "title": "Content Digest",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "deletions_applied_through": {
+            "format": "date-time",
+            "title": "Deletions Applied Through",
+            "type": "string"
+          },
+          "eligibility_policy_version": {
+            "title": "Eligibility Policy Version",
+            "type": "string"
+          },
+          "examples": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "train",
+                "validation",
+                "test"
+              ]
+            },
+            "title": "Examples",
+            "type": "object"
+          },
+          "licence_policy_version": {
+            "default": "synthetic-internal-approved-1",
+            "title": "Licence Policy Version",
+            "type": "string"
+          },
+          "purpose": {
+            "enum": [
+              "adapter_training",
+              "distillation",
+              "router_training",
+              "evaluation"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "quality_summary": {
+            "$ref": "#/components/schemas/DatasetQualitySummary"
+          },
+          "redaction_version": {
+            "title": "Redaction Version",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_window": {
+            "$ref": "#/components/schemas/SourceWindow"
+          },
+          "specification": {
+            "$ref": "#/components/schemas/DatasetSpecification"
+          },
+          "split_strategy": {
+            "const": "subject_and_document_family",
+            "title": "Split Strategy",
+            "type": "string"
+          },
+          "tenant_ids": {
+            "items": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            "title": "Tenant Ids",
+            "type": "array"
+          },
+          "transformation_code_revision": {
+            "title": "Transformation Code Revision",
+            "type": "string"
+          },
+          "version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "version",
+          "purpose",
+          "tenant_ids",
+          "source_window",
+          "eligibility_policy_version",
+          "transformation_code_revision",
+          "redaction_version",
+          "examples",
+          "split_strategy",
+          "content_digest",
+          "deletions_applied_through",
+          "quality_summary",
+          "specification"
+        ],
+        "title": "DatasetManifest",
+        "type": "object"
+      },
+      "DatasetQualitySummary": {
+        "properties": {
+          "accepted_rate": {
+            "title": "Accepted Rate",
+            "type": "number"
+          },
+          "considered": {
+            "title": "Considered",
+            "type": "integer"
+          },
+          "duplicate_rate": {
+            "title": "Duplicate Rate",
+            "type": "number"
+          },
+          "exclusions": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Exclusions",
+            "type": "object"
+          },
+          "label_mix": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Label Mix",
+            "type": "object"
+          },
+          "languages": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Languages",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "considered",
+          "accepted_rate",
+          "duplicate_rate",
+          "exclusions",
+          "label_mix",
+          "languages"
+        ],
+        "title": "DatasetQualitySummary",
+        "type": "object"
+      },
+      "DatasetSpecification": {
+        "properties": {
+          "dataset_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "eligibility_policy_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Eligibility Policy Version",
+            "type": "string"
+          },
+          "grouping_keys": {
+            "items": {
+              "enum": [
+                "document_family",
+                "subject_id_pseudonymous"
+              ],
+              "type": "string"
+            },
+            "title": "Grouping Keys",
+            "type": "array"
+          },
+          "minimum_examples": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Minimum Examples",
+            "type": "integer"
+          },
+          "near_duplicate_threshold": {
+            "default": 0.8,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Near Duplicate Threshold",
+            "type": "number"
+          },
+          "purpose": {
+            "default": "adapter_training",
+            "enum": [
+              "adapter_training",
+              "distillation",
+              "router_training",
+              "evaluation"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "seed": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "source_window": {
+            "$ref": "#/components/schemas/SourceWindow"
+          },
+          "split_strategy": {
+            "const": "subject_and_document_family",
+            "default": "subject_and_document_family",
+            "title": "Split Strategy",
+            "type": "string"
+          },
+          "target_preference_order": {
+            "items": {
+              "enum": [
+                "correction",
+                "positive_resolution",
+                "production_output"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Target Preference Order",
+            "type": "array"
+          },
+          "tenant_ids": {
+            "items": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Tenant Ids",
+            "type": "array"
+          },
+          "time_split": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeSplit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "dataset_id",
+          "tenant_ids",
+          "source_window",
+          "eligibility_policy_version"
+        ],
+        "title": "DatasetSpecification",
+        "type": "object"
+      },
+      "Feedback": {
+        "properties": {
+          "actor_id_pseudonymous": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id Pseudonymous"
+          },
+          "comment_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment Ref"
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "correction_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correction Ref"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "const": "persistence_redaction_failed",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "feedback_id": {
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "interaction_id": {
+            "title": "Interaction Id",
+            "type": "string"
+          },
+          "judge_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Version"
+          },
+          "label_type": {
+            "enum": [
+              "thumb",
+              "rubric",
+              "correction",
+              "resolution",
+              "safety"
+            ],
+            "title": "Label Type",
+            "type": "string"
+          },
+          "rubric_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric Version"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "user",
+              "reviewer",
+              "automated",
+              "business_outcome"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "training_authorised": {
+            "default": false,
+            "title": "Training Authorised",
+            "type": "boolean"
+          },
+          "value": {
+            "$ref": "#/components/schemas/FeedbackValue"
+          }
+        },
+        "required": [
+          "interaction_id",
+          "source",
+          "label_type",
+          "value"
+        ],
+        "title": "Feedback",
+        "type": "object"
+      },
+      "FeedbackInput": {
+        "additionalProperties": false,
+        "description": "Body of POST /v1/interactions/{interaction_id}/feedback from an end user or reviewer.",
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "classification": "confidential",
+                "maxLength": 32000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "label_type": {
+            "enum": [
+              "thumb",
+              "rubric",
+              "correction",
+              "resolution",
+              "safety"
+            ],
+            "title": "Label Type",
+            "type": "string"
+          },
+          "rubric_version": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric Version"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "training_authorised": {
+            "default": false,
+            "title": "Training Authorised",
+            "type": "boolean"
+          },
+          "value": {
+            "$ref": "#/components/schemas/FeedbackValue"
+          }
+        },
+        "required": [
+          "label_type",
+          "value"
+        ],
+        "title": "FeedbackInput",
+        "type": "object"
+      },
+      "FeedbackValue": {
+        "properties": {
+          "max_score": {
+            "minimum": 1.0,
+            "title": "Max Score",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "score": {
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "score",
+          "max_score"
+        ],
+        "title": "FeedbackValue",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -363,6 +947,32 @@
         "title": "RoutingOptions",
         "type": "object"
       },
+      "SourceWindow": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "SourceWindow",
+        "type": "object"
+      },
       "SubjectDeletionInput": {
         "additionalProperties": false,
         "properties": {
@@ -384,6 +994,32 @@
           "subject"
         ],
         "title": "SubjectDeletionInput",
+        "type": "object"
+      },
+      "TimeSplit": {
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "train_end": {
+            "format": "date-time",
+            "title": "Train End",
+            "type": "string"
+          },
+          "validation_end": {
+            "format": "date-time",
+            "title": "Validation End",
+            "type": "string"
+          }
+        },
+        "required": [
+          "train_end",
+          "validation_end"
+        ],
+        "title": "TimeSplit",
         "type": "object"
       },
       "Usage": {
@@ -520,6 +1156,158 @@
         ]
       }
     },
+    "/v1/datasets/builds": {
+      "post": {
+        "operationId": "build_dataset_v1_datasets_builds_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetSpecification"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetManifest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Build Dataset"
+      }
+    },
+    "/v1/datasets/{dataset_id}/versions/{version}": {
+      "get": {
+        "operationId": "get_dataset_v1_datasets__dataset_id__versions__version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetManifest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dataset"
+      }
+    },
     "/v1/inference": {
       "post": {
         "operationId": "inference_v1_inference_post",
@@ -593,6 +1381,168 @@
         "tags": [
           "inference"
         ]
+      }
+    },
+    "/v1/interactions/{interaction_id}/correction": {
+      "post": {
+        "operationId": "correction_v1_interactions__interaction_id__correction_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "interaction_id",
+            "required": true,
+            "schema": {
+              "title": "Interaction Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Feedback"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Correction"
+      }
+    },
+    "/v1/interactions/{interaction_id}/feedback": {
+      "post": {
+        "operationId": "feedback_v1_interactions__interaction_id__feedback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "interaction_id",
+            "required": true,
+            "schema": {
+              "title": "Interaction Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Feedback"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Feedback"
       }
     },
     "/v1/privacy/interactions/{interaction_id}": {

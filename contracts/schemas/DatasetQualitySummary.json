@@ -1,0 +1,53 @@
+{
+  "properties": {
+    "accepted_rate": {
+      "title": "Accepted Rate",
+      "type": "number"
+    },
+    "considered": {
+      "title": "Considered",
+      "type": "integer"
+    },
+    "duplicate_rate": {
+      "title": "Duplicate Rate",
+      "type": "number"
+    },
+    "exclusions": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Exclusions",
+      "type": "object"
+    },
+    "label_mix": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Label Mix",
+      "type": "object"
+    },
+    "languages": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Languages",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "considered",
+    "accepted_rate",
+    "duplicate_rate",
+    "exclusions",
+    "label_mix",
+    "languages"
+  ],
+  "title": "DatasetQualitySummary",
+  "type": "object"
+}

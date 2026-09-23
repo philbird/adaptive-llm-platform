@@ -1,0 +1,16 @@
+{
+  "dataset_id": "synthetic-support",
+  "purpose": "adapter_training",
+  "tenant_ids": ["synthetic-a", "synthetic-b"],
+  "source_window": {
+    "start": "2026-01-01T00:00:00Z",
+    "end": "2027-01-01T00:00:00Z"
+  },
+  "eligibility_policy_version": "synthetic-dataset-policy-1",
+  "target_preference_order": ["correction", "positive_resolution", "production_output"],
+  "split_strategy": "subject_and_document_family",
+  "grouping_keys": ["document_family", "subject_id_pseudonymous"],
+  "minimum_examples": 1,
+  "seed": 7,
+  "near_duplicate_threshold": 0.8
+}

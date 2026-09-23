@@ -58,6 +58,9 @@
     "rubric_version": {
       "anyOf": [
         {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
           "type": "string"
         },
         {

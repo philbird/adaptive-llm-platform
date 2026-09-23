@@ -1,0 +1,26 @@
+{
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "train_end": {
+      "format": "date-time",
+      "title": "Train End",
+      "type": "string"
+    },
+    "validation_end": {
+      "format": "date-time",
+      "title": "Validation End",
+      "type": "string"
+    }
+  },
+  "required": [
+    "train_end",
+    "validation_end"
+  ],
+  "title": "TimeSplit",
+  "type": "object"
+}

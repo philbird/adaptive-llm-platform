@@ -33,6 +33,8 @@ class Keyring:
                 "output-content-v1",
                 "query-content-v1",
                 "replay-fingerprint-v1",
+                "dataset-example-v1",
+                "dataset-manifest-v1",
             )
         }
 
@@ -50,6 +52,12 @@ class Keyring:
     def fingerprint(self, value: str) -> str:
         return self._hash("replay-fingerprint-v1", value)
 
+    def dataset_hash(self, value: str) -> str:
+        return self._hash("dataset-example-v1", value)
+
+    def manifest_mac(self, value: str) -> str:
+        return self._hash("dataset-manifest-v1", value)
+
 
 @dataclass(frozen=True)
 class Identity:
@@ -57,6 +65,8 @@ class Identity:
     application_ids: frozenset[str]
     environment: Environment
     subject_id_pseudonymous: str | None
+    key_class: Literal["user", "operator"] = "user"
+    dataset_tenants: frozenset[str] = frozenset()
 
 
 class Authenticator(Protocol):
@@ -68,6 +78,8 @@ class KeyIdentity(BaseModel):
     tenant_id: Identifier
     application_ids: frozenset[Identifier]
     environment: Environment
+    key_class: Literal["user", "operator"] = "user"
+    dataset_tenants: frozenset[Identifier] = frozenset()
 
 
 class IdentityConfig(BaseModel):
@@ -95,4 +107,6 @@ class LocalAuthenticator:
             application_ids=identity.application_ids,
             environment=identity.environment,
             subject_id_pseudonymous=pseudonym,
+            key_class=identity.key_class,
+            dataset_tenants=identity.dataset_tenants,
         )

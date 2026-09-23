@@ -1,17 +1,21 @@
 import shutil
 import sqlite3
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from adaptive_llm.contracts import uid
+from adaptive_llm.contracts import Interaction, uid
 from adaptive_llm.storage import StorageError
 from adaptive_llm.storage.__main__ import main
 from adaptive_llm.storage.crypto import PayloadCipher
 from adaptive_llm.storage.migrations import MIGRATIONS, migrate
-from adaptive_llm.storage.sqlite import SQLiteDatabase
+from adaptive_llm.storage.sqlite import SQLiteDatabase, SQLiteMetadataStore, timestamp
+
+if TYPE_CHECKING:
+    from conftest import DatasetSeed
 
 AT = datetime(2026, 9, 23, tzinfo=UTC)
 
@@ -133,3 +137,75 @@ def test_payload_expiration_and_key_settings(tmp_path: Path) -> None:
     assert local.path != staging.path
     local.close()
     staging.close()
+
+
+def test_started_at_migration_backfill_index_and_window_boundaries(
+    tmp_path: Path,
+    dataset_seed: "DatasetSeed",
+) -> None:
+    legacy = tmp_path / "migration-4"
+    legacy.mkdir()
+    for path in MIGRATIONS.glob("[0-9]*_*.sql"):
+        if int(path.name.split("_")[0]) <= 4:
+            shutil.copyfile(path, legacy / path.name)
+    database = SQLiteDatabase(tmp_path / "legacy-data", migrations=legacy)
+    metadata = SQLiteMetadataStore(database)
+    original = dataset_seed.app.state.metadata.get("synthetic-a", Interaction, dataset_seed.ids[2])
+    instances = [
+        original.model_copy(update={"interaction_id": uid(), "started_at": at, "tenant_id": tenant})
+        for tenant, at in [
+            ("synthetic-a", AT - timedelta(microseconds=1)),
+            ("synthetic-a", AT),
+            ("synthetic-a", AT + timedelta(microseconds=1)),
+            ("synthetic-a", AT + timedelta(seconds=1)),
+            ("synthetic-b", AT),
+        ]
+    ]
+    try:
+        with database.transaction():
+            for item in instances:
+                database.connection.execute(
+                    "INSERT INTO interactions "
+                    "(tenant_id, record_id, interaction_id, data, expires_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        item.tenant_id,
+                        item.interaction_id,
+                        item.interaction_id,
+                        item.model_dump_json(),
+                        timestamp(AT + timedelta(hours=1)),
+                    ),
+                )
+        migrate(database.connection)
+        assert [
+            row[0]
+            for row in database.connection.execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            )
+        ] == [1, 2, 3, 4, 5]
+        assert database.connection.execute(
+            "SELECT started_at FROM interactions WHERE record_id=?", (instances[1].interaction_id,)
+        ).fetchone()[0] == timestamp(AT)
+        assert metadata.in_window("synthetic-a", AT, AT + timedelta(seconds=1)) == instances[1:3]
+        inserted = original.model_copy(
+            update={"interaction_id": uid(), "started_at": AT + timedelta(microseconds=2)}
+        )
+        with metadata.transaction():
+            metadata.put("synthetic-a", inserted, AT + timedelta(hours=1))
+            # An unrelated corrupt row must never be loaded or parsed for this source window.
+            database.connection.execute(
+                "UPDATE interactions SET data=? WHERE record_id=?",
+                ("synthetic invalid record", instances[0].interaction_id),
+            )
+        assert metadata.in_window("synthetic-a", AT, AT + timedelta(seconds=1)) == [
+            *instances[1:3],
+            inserted,
+        ]
+        plan = database.connection.execute(
+            "EXPLAIN QUERY PLAN SELECT data FROM interactions WHERE tenant_id=? "
+            "AND started_at>=? AND started_at<? ORDER BY started_at, record_id",
+            ("synthetic-a", timestamp(AT), timestamp(AT + timedelta(seconds=1))),
+        ).fetchall()
+        assert any("USING INDEX interactions_tenant_started_at" in row[3] for row in plan)
+    finally:
+        database.close()

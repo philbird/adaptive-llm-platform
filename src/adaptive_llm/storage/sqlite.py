@@ -10,6 +10,7 @@ from threading import RLock
 from typing import cast
 
 from adaptive_llm.contracts import (
+    DatasetManifest,
     DeletionRequest,
     Environment,
     Feedback,
@@ -77,10 +78,10 @@ class SQLiteDatabase:
             self.connection.close()
 
     @contextmanager
-    def transaction(self) -> Iterator[None]:
+    def transaction(self, *, read_only: bool = False) -> Iterator[None]:
         with self.lock:
             try:
-                self.connection.execute("BEGIN IMMEDIATE")
+                self.connection.execute("BEGIN" if read_only else "BEGIN IMMEDIATE")
                 yield
                 self.connection.commit()
             except BaseException:
@@ -112,6 +113,11 @@ class SQLiteMetadataStore:
         with self.database.transaction():
             yield
 
+    @contextmanager
+    def read_transaction(self) -> Iterator[None]:
+        with self.database.transaction(read_only=True):
+            yield
+
     def put(self, tenant_id: str, record: StoredRecord, expires_at: datetime) -> None:
         with self.database.lock:
             self.database.writable(tenant_id, record.interaction_id)
@@ -134,8 +140,8 @@ class SQLiteMetadataStore:
                 timestamp(expires_at),
             ]
             if isinstance(record, Interaction):
-                columns += ", subject_id"
-                values.append(record.subject_id_pseudonymous)
+                columns += ", subject_id, started_at"
+                values.extend([record.subject_id_pseudonymous, timestamp(record.started_at)])
             placeholders = ", ".join("?" for _ in values)
             self.database.connection.execute(
                 f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", values
@@ -326,6 +332,49 @@ class SQLiteMetadataStore:
         ).fetchall()
         for row in rows:
             self.delete_replay(tenant_id, row["application_id"], row["request_id"])
+
+    def expires_at(self, tenant_id: str, interaction_id: str) -> datetime | None:
+        with self.database.lock:
+            row = self.database.connection.execute(
+                "SELECT expires_at FROM interactions WHERE tenant_id = ? AND record_id = ?",
+                (tenant_id, interaction_id),
+            ).fetchone()
+        return datetime.fromisoformat(row["expires_at"]) if row else None
+
+    def append_feedback(self, tenant_id: str, interaction: Interaction, feedback_id: str) -> None:
+        self.database.writable(tenant_id, interaction.interaction_id)
+        updated = interaction.model_copy(
+            update={"feedback_ids": [*interaction.feedback_ids, feedback_id]}
+        )
+        self.database.connection.execute(
+            "UPDATE interactions SET data = ? WHERE tenant_id = ? AND record_id = ?",
+            (updated.model_dump_json(), tenant_id, interaction.interaction_id),
+        )
+
+    def in_window(self, tenant_id: str, start: datetime, end: datetime) -> list[Interaction]:
+        with self.database.lock:
+            rows = self.database.connection.execute(
+                "SELECT data FROM interactions WHERE tenant_id = ? "
+                "AND started_at >= ? AND started_at < ? ORDER BY started_at, record_id",
+                (tenant_id, timestamp(start), timestamp(end)),
+            ).fetchall()
+        return [Interaction.model_validate_json(row["data"]) for row in rows]
+
+    def put_manifest(self, manifest: DatasetManifest) -> None:
+        if not self.database.connection.in_transaction:
+            raise StorageError("storage_transaction_required")
+        self.database.connection.execute(
+            "INSERT INTO dataset_manifests VALUES (?, ?, ?)",
+            (manifest.dataset_id, manifest.version, manifest.model_dump_json()),
+        )
+
+    def get_manifest(self, dataset_id: str, version: str) -> DatasetManifest | None:
+        with self.database.lock:
+            row = self.database.connection.execute(
+                "SELECT data FROM dataset_manifests WHERE dataset_id = ? AND version = ?",
+                (dataset_id, version),
+            ).fetchone()
+        return DatasetManifest.model_validate_json(row["data"]) if row else None
 
 
 class SQLitePayloadStore:

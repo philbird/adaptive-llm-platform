@@ -1,0 +1,173 @@
+{
+  "$defs": {
+    "SourceWindow": {
+      "properties": {
+        "end": {
+          "format": "date-time",
+          "title": "End",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "title": "Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "SourceWindow",
+      "type": "object"
+    },
+    "TimeSplit": {
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "train_end": {
+          "format": "date-time",
+          "title": "Train End",
+          "type": "string"
+        },
+        "validation_end": {
+          "format": "date-time",
+          "title": "Validation End",
+          "type": "string"
+        }
+      },
+      "required": [
+        "train_end",
+        "validation_end"
+      ],
+      "title": "TimeSplit",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "dataset_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "eligibility_policy_version": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Eligibility Policy Version",
+      "type": "string"
+    },
+    "grouping_keys": {
+      "items": {
+        "enum": [
+          "document_family",
+          "subject_id_pseudonymous"
+        ],
+        "type": "string"
+      },
+      "title": "Grouping Keys",
+      "type": "array"
+    },
+    "minimum_examples": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Minimum Examples",
+      "type": "integer"
+    },
+    "near_duplicate_threshold": {
+      "default": 0.8,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Near Duplicate Threshold",
+      "type": "number"
+    },
+    "purpose": {
+      "default": "adapter_training",
+      "enum": [
+        "adapter_training",
+        "distillation",
+        "router_training",
+        "evaluation"
+      ],
+      "title": "Purpose",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "seed": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "source_window": {
+      "$ref": "#/$defs/SourceWindow"
+    },
+    "split_strategy": {
+      "const": "subject_and_document_family",
+      "default": "subject_and_document_family",
+      "title": "Split Strategy",
+      "type": "string"
+    },
+    "target_preference_order": {
+      "items": {
+        "enum": [
+          "correction",
+          "positive_resolution",
+          "production_output"
+        ],
+        "type": "string"
+      },
+      "maxItems": 3,
+      "minItems": 1,
+      "title": "Target Preference Order",
+      "type": "array"
+    },
+    "tenant_ids": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "title": "Tenant Ids",
+      "type": "array"
+    },
+    "time_split": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TimeSplit"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "dataset_id",
+    "tenant_ids",
+    "source_window",
+    "eligibility_policy_version"
+  ],
+  "title": "DatasetSpecification",
+  "type": "object"
+}

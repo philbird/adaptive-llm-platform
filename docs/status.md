@@ -1,7 +1,7 @@
 # Status and gap analysis
 
 The engineering specification v1.0 was supplied on 2026-09-23. Milestone 1 slices 1a–1c
-are now implemented and verified locally with synthetic data. Staging and production
+and milestone 2 slice 2a are implemented and verified locally with synthetic data. Staging and production
 acceptance remain separate; no external provider, transport or exporter is configured.
 
 Initial inspection found no existing repository, instructions, CI, deployment configuration,
@@ -17,7 +17,7 @@ Python project uses uv/FastAPI; it provides tooling precedent, not shared infras
 | RAG | Tenant/ACL/residency filtering and exact-version synthetic evidence | Real retrieval service |
 | Telemetry | SQLite outbox, retry/quarantine, idempotent sink, in-process metrics and traces | Real transport, exporter, multi-process dispatch |
 | Evaluation | Fake provider conformance, privacy, load and recovery drills | Golden/held-out evaluation and real-provider baseline |
-| Datasets | Planned boundary | Eligibility, provenance, deduplication, grouped splits, signed manifests |
+| Datasets (milestone 2, slice 2a, delivered 2026-09-23 on branch `slice-2a`) | Authenticated feedback/corrections; current-policy eligibility; exact source provenance; indexed exact/5-gram deduplication and golden decontamination; joint family/subject splits; encrypted shards, pending manifests with local MACs and data cards; operator API/CLI; deletion/reproducibility/concurrency tests | Evaluation and baseline locking (2b), approval API, asymmetric signing, external artifact lifecycle |
 | Training/registry | Planned boundary | Approved datasets, CPU smoke, LoRA, lineage, evaluation and promotion gates |
 | Routing/deployment | Foundation-only routing with residency and integer-micro cost constraints | Shadow, bounded fallback, canary, rollback |
 | Research | Disabled configuration intent | Isolated activation/pruning work after earlier milestones |
@@ -61,7 +61,15 @@ and [telemetry outage](runbooks/telemetry-outage.md), [dead-letter recovery](run
 [key rotation](runbooks/key-rotation.md), [backup/restore](runbooks/backup-restore.md), and
 [retention/deletion](runbooks/retention-deletion.md) runbooks for commands and measured outputs.
 
-Future increments may broaden to milestone 2 datasets/evaluation, milestone 3 LoRA, milestone 4 routing,
+Slice 2a uses migration 0004 for dataset manifests and shares the existing feedback/payload/outbox
+transactions. The default serving policy is unchanged; a separate synthetic demo policy opts
+tenant A into logging/training and denies tenant B training. See the
+[dataset-build runbook](runbooks/dataset-build.md) for commands and limitations. Rebuilds keep
+stable content digests while generating new immutable versions and build-start deletion watermarks.
+All manifests remain pending. Builds compute outside database locks and recheck deletion tombstones
+before publishing one lifecycle event per tenant. Migration 0005 backfills and indexes interaction
+start times for SQL window selection. The recovery drill now verifies migrations 1–5.
+
+Future increments may broaden to milestone 2 evaluation (2b), milestone 3 LoRA, milestone 4 routing,
 milestone 5 distillation, and optional milestone 6 research. Each remains a separate reviewable
 increment. No production acceptance criterion is claimed satisfied at this checkpoint.
-

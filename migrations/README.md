@@ -6,6 +6,10 @@ encrypted payloads. Metadata stores canonical contract JSON plus ids, expiry and
 Payloads store ciphertext, nonce, key version and binding metadata, never plaintext content.
 Composite foreign keys include tenant ids. `0002_subject_tombstones.sql` adds tenant-scoped
 subject tombstones and the index for SQL replay eviction in reservation order.
+`0004_dataset_manifests.sql` stores content-free dataset manifests.
+`0005_interaction_started_at.sql` backfills start times from interaction JSON (normalising UTC
+`Z` to `+00:00` to match storage writes) and indexes `(tenant_id, started_at)`. Dataset source
+windows use an inclusive SQL lower bound and exclusive upper bound, preserving microseconds.
 `schema_migrations` is a database-wide ledger with only `version` and UTC `applied_at`; it is not
 tenant data. The runner transactionally removes the legacy ledger's `tenant_id` column when
 upgrading an existing slice-1b database, preserving its applied versions and timestamps.
