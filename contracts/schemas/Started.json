@@ -1,0 +1,30 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "application_id": {
+      "title": "Application Id",
+      "type": "string"
+    },
+    "interaction_id": {
+      "title": "Interaction Id",
+      "type": "string"
+    },
+    "policy_version": {
+      "title": "Policy Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "interaction_id",
+    "application_id",
+    "policy_version"
+  ],
+  "title": "Started",
+  "type": "object"
+}

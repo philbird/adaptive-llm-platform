@@ -1,0 +1,150 @@
+{
+  "$defs": {
+    "ChunkEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "context_position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Context Position"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "document_version": {
+          "title": "Document Version",
+          "type": "string"
+        },
+        "licence_class": {
+          "title": "Licence Class",
+          "type": "string"
+        },
+        "rank_retrieved": {
+          "title": "Rank Retrieved",
+          "type": "integer"
+        },
+        "retrieval_score": {
+          "title": "Retrieval Score",
+          "type": "number"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "supplied_to_model": {
+          "title": "Supplied To Model",
+          "type": "boolean"
+        },
+        "token_count": {
+          "title": "Token Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "document_id",
+        "document_version",
+        "chunk_id",
+        "rank_retrieved",
+        "retrieval_score",
+        "supplied_to_model",
+        "context_position",
+        "token_count",
+        "content_hash",
+        "licence_class"
+      ],
+      "title": "ChunkEvidence",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/ChunkEvidence"
+      },
+      "title": "Candidates",
+      "type": "array"
+    },
+    "embedding_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedding Model"
+    },
+    "index_id": {
+      "title": "Index Id",
+      "type": "string"
+    },
+    "index_version": {
+      "title": "Index Version",
+      "type": "string"
+    },
+    "interaction_id": {
+      "title": "Interaction Id",
+      "type": "string"
+    },
+    "latency_ms": {
+      "title": "Latency Ms",
+      "type": "number"
+    },
+    "query_hash": {
+      "title": "Query Hash",
+      "type": "string"
+    },
+    "reranker_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reranker Model"
+    },
+    "retrieval_run_id": {
+      "title": "Retrieval Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "interaction_id",
+    "index_id",
+    "index_version",
+    "query_hash",
+    "latency_ms",
+    "candidates"
+  ],
+  "title": "RetrievalRun",
+  "type": "object"
+}

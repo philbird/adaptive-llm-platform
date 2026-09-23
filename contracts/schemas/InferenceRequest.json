@@ -1,0 +1,188 @@
+{
+  "$defs": {
+    "Message": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "classification": "confidential",
+          "maxLength": 32000,
+          "title": "Content",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "title": "Message",
+      "type": "object"
+    },
+    "RagOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "index_id": {
+          "default": "support-kb",
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Index Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "RagOptions",
+      "type": "object"
+    },
+    "ResponseFormat": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "default": "text",
+          "enum": [
+            "text",
+            "json_object"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "ResponseFormat",
+      "type": "object"
+    },
+    "RoutingOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "deadline_ms": {
+          "default": 5000,
+          "maximum": 30000,
+          "minimum": 50,
+          "title": "Deadline Ms",
+          "type": "integer"
+        },
+        "max_cost_micros": {
+          "default": 20000,
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Max Cost Micros",
+          "type": "integer"
+        },
+        "mode": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "foundation"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "RoutingOptions",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "application_id": {
+      "default": "support-assistant",
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Application Id",
+      "type": "string"
+    },
+    "locale": {
+      "default": "en-GB",
+      "enum": [
+        "en-GB",
+        "en-US"
+      ],
+      "title": "Locale",
+      "type": "string"
+    },
+    "max_output_tokens": {
+      "default": 512,
+      "maximum": 2048,
+      "minimum": 1,
+      "title": "Max Output Tokens",
+      "type": "integer"
+    },
+    "messages": {
+      "items": {
+        "$ref": "#/$defs/Message"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Messages",
+      "type": "array"
+    },
+    "rag": {
+      "$ref": "#/$defs/RagOptions"
+    },
+    "request_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "response_format": {
+      "$ref": "#/$defs/ResponseFormat"
+    },
+    "routing": {
+      "$ref": "#/$defs/RoutingOptions"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "stream": {
+      "default": false,
+      "title": "Stream",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "request_id",
+    "messages"
+  ],
+  "title": "InferenceRequest",
+  "type": "object"
+}

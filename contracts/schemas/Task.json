@@ -1,0 +1,55 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "classifier_version": {
+      "default": "rules-1",
+      "title": "Classifier Version",
+      "type": "string"
+    },
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "language": {
+      "default": "en",
+      "title": "Language",
+      "type": "string"
+    },
+    "reason_codes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reason Codes",
+      "type": "array"
+    },
+    "risk_tier": {
+      "default": "medium",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "Risk Tier",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "label",
+    "confidence",
+    "reason_codes"
+  ],
+  "title": "Task",
+  "type": "object"
+}

@@ -1,0 +1,278 @@
+{
+  "$defs": {
+    "PolicyDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "content_logging_allowed": {
+          "default": false,
+          "title": "Content Logging Allowed",
+          "type": "boolean"
+        },
+        "evaluation_allowed": {
+          "default": false,
+          "title": "Evaluation Allowed",
+          "type": "boolean"
+        },
+        "human_review_allowed": {
+          "default": false,
+          "title": "Human Review Allowed",
+          "type": "boolean"
+        },
+        "policy_version": {
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "processing_allowed": {
+          "default": true,
+          "title": "Processing Allowed",
+          "type": "boolean"
+        },
+        "redaction_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Redaction Counts",
+          "type": "object"
+        },
+        "redaction_version": {
+          "default": "regex-local-1",
+          "title": "Redaction Version",
+          "type": "string"
+        },
+        "residency": {
+          "default": "local",
+          "title": "Residency",
+          "type": "string"
+        },
+        "retention_seconds": {
+          "minimum": 1,
+          "title": "Retention Seconds",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "training_allowed": {
+          "default": false,
+          "title": "Training Allowed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "policy_version",
+        "retention_seconds"
+      ],
+      "title": "PolicyDecision",
+      "type": "object"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "properties": {
+        "classifier_version": {
+          "default": "rules-1",
+          "title": "Classifier Version",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "language": {
+          "default": "en",
+          "title": "Language",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "risk_tier": {
+          "default": "medium",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "confidence",
+        "reason_codes"
+      ],
+      "title": "Task",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "application_id": {
+      "title": "Application Id",
+      "type": "string"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "title": "Completed At",
+      "type": "string"
+    },
+    "environment": {
+      "const": "local",
+      "default": "local",
+      "title": "Environment",
+      "type": "string"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "final_attempt_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Final Attempt Id"
+    },
+    "generation_attempt_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Generation Attempt Ids",
+      "type": "array"
+    },
+    "input_hash": {
+      "title": "Input Hash",
+      "type": "string"
+    },
+    "input_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Input Ref"
+    },
+    "interaction_id": {
+      "title": "Interaction Id",
+      "type": "string"
+    },
+    "policy": {
+      "$ref": "#/$defs/PolicyDecision"
+    },
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "retrieval_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Retrieval Run Id"
+    },
+    "route_decision_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Route Decision Id"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "subject_id_pseudonymous": {
+      "title": "Subject Id Pseudonymous",
+      "type": "string"
+    },
+    "task": {
+      "$ref": "#/$defs/Task"
+    },
+    "tenant_id": {
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "title": "Trace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "interaction_id",
+    "trace_id",
+    "request_id",
+    "tenant_id",
+    "subject_id_pseudonymous",
+    "application_id",
+    "started_at",
+    "completed_at",
+    "task",
+    "policy",
+    "input_hash",
+    "retrieval_run_id",
+    "route_decision_id",
+    "generation_attempt_ids",
+    "final_attempt_id",
+    "status"
+  ],
+  "title": "Interaction",
+  "type": "object"
+}

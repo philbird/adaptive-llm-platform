@@ -1,0 +1,62 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "eligible": {
+      "title": "Eligible",
+      "type": "boolean"
+    },
+    "estimated_cost_micros": {
+      "title": "Estimated Cost Micros",
+      "type": "integer"
+    },
+    "model_deployment_id": {
+      "title": "Model Deployment Id",
+      "type": "string"
+    },
+    "ood_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ood Score"
+    },
+    "predicted_quality": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Predicted Quality"
+    },
+    "reason_codes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reason Codes",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "model_deployment_id",
+    "eligible",
+    "estimated_cost_micros",
+    "reason_codes"
+  ],
+  "title": "Candidate",
+  "type": "object"
+}

@@ -1,0 +1,67 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "cached_input_tokens": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cached Input Tokens"
+    },
+    "input_tokens": {
+      "minimum": 0,
+      "title": "Input Tokens",
+      "type": "integer"
+    },
+    "output_tokens": {
+      "minimum": 0,
+      "title": "Output Tokens",
+      "type": "integer"
+    },
+    "reasoning_tokens": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reasoning Tokens"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "provider_reported",
+        "locally_estimated"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "tokenizer": {
+      "title": "Tokenizer",
+      "type": "string"
+    }
+  },
+  "required": [
+    "input_tokens",
+    "output_tokens",
+    "source",
+    "tokenizer"
+  ],
+  "title": "Usage",
+  "type": "object"
+}

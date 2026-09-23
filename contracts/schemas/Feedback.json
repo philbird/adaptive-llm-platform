@@ -1,0 +1,58 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "actor_id": {
+      "title": "Actor Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "feedback_id": {
+      "title": "Feedback Id",
+      "type": "string"
+    },
+    "interaction_id": {
+      "title": "Interaction Id",
+      "type": "string"
+    },
+    "label_type": {
+      "const": "rubric",
+      "default": "rubric",
+      "title": "Label Type",
+      "type": "string"
+    },
+    "rubric_version": {
+      "default": "user-satisfaction-1",
+      "title": "Rubric Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "score": {
+      "maximum": 5,
+      "minimum": 1,
+      "title": "Score",
+      "type": "integer"
+    },
+    "source": {
+      "const": "user",
+      "default": "user",
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "interaction_id",
+    "actor_id",
+    "score"
+  ],
+  "title": "Feedback",
+  "type": "object"
+}

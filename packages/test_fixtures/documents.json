@@ -1,0 +1,25 @@
+[
+  {
+    "schema_version": "1.0",
+    "tenant_id": "synthetic-a",
+    "allowed_applications": ["support-assistant"],
+    "document_id": "synthetic-refund-policy",
+    "document_version": "synthetic-1",
+    "document_family": "refund-policy",
+    "chunk_id": "refund-window",
+    "content": "SYNTHETIC DEMO ONLY: Example Shop accepts unused items within 30 days with a receipt.",
+    "licence_class": "synthetic"
+  },
+  {
+    "schema_version": "1.0",
+    "tenant_id": "synthetic-b",
+    "allowed_applications": ["support-assistant"],
+    "document_id": "synthetic-other-tenant-policy",
+    "document_version": "synthetic-1",
+    "document_family": "other-refund-policy",
+    "chunk_id": "other-refund-window",
+    "content": "SYNTHETIC DEMO ONLY: Other Shop uses a 14-day return window. This source belongs only to tenant B.",
+    "licence_class": "synthetic"
+  }
+]
+

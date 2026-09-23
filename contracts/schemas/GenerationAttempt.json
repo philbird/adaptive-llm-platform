@@ -1,0 +1,285 @@
+{
+  "$defs": {
+    "Usage": {
+      "additionalProperties": false,
+      "properties": {
+        "cached_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Input Tokens"
+        },
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "reasoning_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Tokens"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "provider_reported",
+            "locally_estimated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "tokenizer": {
+          "title": "Tokenizer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "source",
+        "tokenizer"
+      ],
+      "title": "Usage",
+      "type": "object"
+    },
+    "Validation": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/ValidationCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "validator_version": {
+          "default": "baseline-validator-1",
+          "title": "Validator Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "passed",
+        "checks"
+      ],
+      "title": "Validation",
+      "type": "object"
+    },
+    "ValidationCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "passed"
+      ],
+      "title": "ValidationCheck",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "adapter_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Adapter Id"
+    },
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "attempt_number": {
+      "default": 1,
+      "title": "Attempt Number",
+      "type": "integer"
+    },
+    "deployment_id": {
+      "title": "Deployment Id",
+      "type": "string"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "estimated_cost_micros": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Cost Micros"
+    },
+    "finish_reason": {
+      "enum": [
+        "stop",
+        "length",
+        "error"
+      ],
+      "title": "Finish Reason",
+      "type": "string"
+    },
+    "first_token_latency_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "First Token Latency Ms"
+    },
+    "interaction_id": {
+      "title": "Interaction Id",
+      "type": "string"
+    },
+    "model_id": {
+      "title": "Model Id",
+      "type": "string"
+    },
+    "model_provider": {
+      "title": "Model Provider",
+      "type": "string"
+    },
+    "model_version": {
+      "title": "Model Version",
+      "type": "string"
+    },
+    "output_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Hash"
+    },
+    "output_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Ref"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "total_latency_ms": {
+      "title": "Total Latency Ms",
+      "type": "number"
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Usage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "validation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Validation"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "interaction_id",
+    "model_provider",
+    "model_id",
+    "model_version",
+    "deployment_id",
+    "total_latency_ms",
+    "finish_reason"
+  ],
+  "title": "GenerationAttempt",
+  "type": "object"
+}

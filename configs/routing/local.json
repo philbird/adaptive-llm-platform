@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "status": "design_example_not_loaded",
+  "foundation_provider": "deterministic_fake",
+  "specialist_routing_enabled": false,
+  "shadow_enabled": false,
+  "canary_enabled": false,
+  "pruning_research_enabled": false,
+  "content_logging_enabled": false,
+  "training_enabled": false,
+  "max_attempts": 1
+}
+

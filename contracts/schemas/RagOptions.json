@@ -1,0 +1,26 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "index_id": {
+      "default": "support-kb",
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Index Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "title": "RagOptions",
+  "type": "object"
+}

@@ -1,0 +1,68 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "content_logging_allowed": {
+      "default": false,
+      "title": "Content Logging Allowed",
+      "type": "boolean"
+    },
+    "evaluation_allowed": {
+      "default": false,
+      "title": "Evaluation Allowed",
+      "type": "boolean"
+    },
+    "human_review_allowed": {
+      "default": false,
+      "title": "Human Review Allowed",
+      "type": "boolean"
+    },
+    "policy_version": {
+      "title": "Policy Version",
+      "type": "string"
+    },
+    "processing_allowed": {
+      "default": true,
+      "title": "Processing Allowed",
+      "type": "boolean"
+    },
+    "redaction_counts": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Redaction Counts",
+      "type": "object"
+    },
+    "redaction_version": {
+      "default": "regex-local-1",
+      "title": "Redaction Version",
+      "type": "string"
+    },
+    "residency": {
+      "default": "local",
+      "title": "Residency",
+      "type": "string"
+    },
+    "retention_seconds": {
+      "minimum": 1,
+      "title": "Retention Seconds",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "training_allowed": {
+      "default": false,
+      "title": "Training Allowed",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "policy_version",
+    "retention_seconds"
+  ],
+  "title": "PolicyDecision",
+  "type": "object"
+}

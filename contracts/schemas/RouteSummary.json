@@ -1,0 +1,18 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "fallback_used": {
+      "default": false,
+      "title": "Fallback Used",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "title": "RouteSummary",
+  "type": "object"
+}

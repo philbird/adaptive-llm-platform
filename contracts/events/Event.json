@@ -1,0 +1,999 @@
+{
+  "$defs": {
+    "Candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "eligible": {
+          "title": "Eligible",
+          "type": "boolean"
+        },
+        "estimated_cost_micros": {
+          "title": "Estimated Cost Micros",
+          "type": "integer"
+        },
+        "model_deployment_id": {
+          "title": "Model Deployment Id",
+          "type": "string"
+        },
+        "ood_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ood Score"
+        },
+        "predicted_quality": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Predicted Quality"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model_deployment_id",
+        "eligible",
+        "estimated_cost_micros",
+        "reason_codes"
+      ],
+      "title": "Candidate",
+      "type": "object"
+    },
+    "ChunkEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "context_position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Context Position"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "document_version": {
+          "title": "Document Version",
+          "type": "string"
+        },
+        "licence_class": {
+          "title": "Licence Class",
+          "type": "string"
+        },
+        "rank_retrieved": {
+          "title": "Rank Retrieved",
+          "type": "integer"
+        },
+        "retrieval_score": {
+          "title": "Retrieval Score",
+          "type": "number"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "supplied_to_model": {
+          "title": "Supplied To Model",
+          "type": "boolean"
+        },
+        "token_count": {
+          "title": "Token Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "document_id",
+        "document_version",
+        "chunk_id",
+        "rank_retrieved",
+        "retrieval_score",
+        "supplied_to_model",
+        "context_position",
+        "token_count",
+        "content_hash",
+        "licence_class"
+      ],
+      "title": "ChunkEvidence",
+      "type": "object"
+    },
+    "Feedback": {
+      "additionalProperties": false,
+      "properties": {
+        "actor_id": {
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "feedback_id": {
+          "title": "Feedback Id",
+          "type": "string"
+        },
+        "interaction_id": {
+          "title": "Interaction Id",
+          "type": "string"
+        },
+        "label_type": {
+          "const": "rubric",
+          "default": "rubric",
+          "title": "Label Type",
+          "type": "string"
+        },
+        "rubric_version": {
+          "default": "user-satisfaction-1",
+          "title": "Rubric Version",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Score",
+          "type": "integer"
+        },
+        "source": {
+          "const": "user",
+          "default": "user",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interaction_id",
+        "actor_id",
+        "score"
+      ],
+      "title": "Feedback",
+      "type": "object"
+    },
+    "GenerationAttempt": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adapter Id"
+        },
+        "attempt_id": {
+          "title": "Attempt Id",
+          "type": "string"
+        },
+        "attempt_number": {
+          "default": 1,
+          "title": "Attempt Number",
+          "type": "integer"
+        },
+        "deployment_id": {
+          "title": "Deployment Id",
+          "type": "string"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "estimated_cost_micros": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Cost Micros"
+        },
+        "finish_reason": {
+          "enum": [
+            "stop",
+            "length",
+            "error"
+          ],
+          "title": "Finish Reason",
+          "type": "string"
+        },
+        "first_token_latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Token Latency Ms"
+        },
+        "interaction_id": {
+          "title": "Interaction Id",
+          "type": "string"
+        },
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        },
+        "model_provider": {
+          "title": "Model Provider",
+          "type": "string"
+        },
+        "model_version": {
+          "title": "Model Version",
+          "type": "string"
+        },
+        "output_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Hash"
+        },
+        "output_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Ref"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "total_latency_ms": {
+          "title": "Total Latency Ms",
+          "type": "number"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "validation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Validation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "interaction_id",
+        "model_provider",
+        "model_id",
+        "model_version",
+        "deployment_id",
+        "total_latency_ms",
+        "finish_reason"
+      ],
+      "title": "GenerationAttempt",
+      "type": "object"
+    },
+    "Interaction": {
+      "additionalProperties": false,
+      "properties": {
+        "application_id": {
+          "title": "Application Id",
+          "type": "string"
+        },
+        "completed_at": {
+          "format": "date-time",
+          "title": "Completed At",
+          "type": "string"
+        },
+        "environment": {
+          "const": "local",
+          "default": "local",
+          "title": "Environment",
+          "type": "string"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "final_attempt_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Final Attempt Id"
+        },
+        "generation_attempt_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Generation Attempt Ids",
+          "type": "array"
+        },
+        "input_hash": {
+          "title": "Input Hash",
+          "type": "string"
+        },
+        "input_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Ref"
+        },
+        "interaction_id": {
+          "title": "Interaction Id",
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/PolicyDecision"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "retrieval_run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Retrieval Run Id"
+        },
+        "route_decision_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Route Decision Id"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "subject_id_pseudonymous": {
+          "title": "Subject Id Pseudonymous",
+          "type": "string"
+        },
+        "task": {
+          "$ref": "#/$defs/Task"
+        },
+        "tenant_id": {
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "trace_id": {
+          "title": "Trace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interaction_id",
+        "trace_id",
+        "request_id",
+        "tenant_id",
+        "subject_id_pseudonymous",
+        "application_id",
+        "started_at",
+        "completed_at",
+        "task",
+        "policy",
+        "input_hash",
+        "retrieval_run_id",
+        "route_decision_id",
+        "generation_attempt_ids",
+        "final_attempt_id",
+        "status"
+      ],
+      "title": "Interaction",
+      "type": "object"
+    },
+    "PolicyDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "content_logging_allowed": {
+          "default": false,
+          "title": "Content Logging Allowed",
+          "type": "boolean"
+        },
+        "evaluation_allowed": {
+          "default": false,
+          "title": "Evaluation Allowed",
+          "type": "boolean"
+        },
+        "human_review_allowed": {
+          "default": false,
+          "title": "Human Review Allowed",
+          "type": "boolean"
+        },
+        "policy_version": {
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "processing_allowed": {
+          "default": true,
+          "title": "Processing Allowed",
+          "type": "boolean"
+        },
+        "redaction_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Redaction Counts",
+          "type": "object"
+        },
+        "redaction_version": {
+          "default": "regex-local-1",
+          "title": "Redaction Version",
+          "type": "string"
+        },
+        "residency": {
+          "default": "local",
+          "title": "Residency",
+          "type": "string"
+        },
+        "retention_seconds": {
+          "minimum": 1,
+          "title": "Retention Seconds",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "training_allowed": {
+          "default": false,
+          "title": "Training Allowed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "policy_version",
+        "retention_seconds"
+      ],
+      "title": "PolicyDecision",
+      "type": "object"
+    },
+    "RetrievalRun": {
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/ChunkEvidence"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "embedding_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Embedding Model"
+        },
+        "index_id": {
+          "title": "Index Id",
+          "type": "string"
+        },
+        "index_version": {
+          "title": "Index Version",
+          "type": "string"
+        },
+        "interaction_id": {
+          "title": "Interaction Id",
+          "type": "string"
+        },
+        "latency_ms": {
+          "title": "Latency Ms",
+          "type": "number"
+        },
+        "query_hash": {
+          "title": "Query Hash",
+          "type": "string"
+        },
+        "reranker_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reranker Model"
+        },
+        "retrieval_run_id": {
+          "title": "Retrieval Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interaction_id",
+        "index_id",
+        "index_version",
+        "query_hash",
+        "latency_ms",
+        "candidates"
+      ],
+      "title": "RetrievalRun",
+      "type": "object"
+    },
+    "RouteDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/Candidate"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "decision_latency_ms": {
+          "title": "Decision Latency Ms",
+          "type": "number"
+        },
+        "fallback_deployment_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Deployment Ids",
+          "type": "array"
+        },
+        "interaction_id": {
+          "title": "Interaction Id",
+          "type": "string"
+        },
+        "policy_constraints": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Policy Constraints",
+          "type": "array"
+        },
+        "route_decision_id": {
+          "title": "Route Decision Id",
+          "type": "string"
+        },
+        "router_version": {
+          "default": "foundation-only-1",
+          "title": "Router Version",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "selected_model_deployment_id": {
+          "title": "Selected Model Deployment Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interaction_id",
+        "candidates",
+        "selected_model_deployment_id",
+        "decision_latency_ms",
+        "policy_constraints"
+      ],
+      "title": "RouteDecision",
+      "type": "object"
+    },
+    "Started": {
+      "additionalProperties": false,
+      "properties": {
+        "application_id": {
+          "title": "Application Id",
+          "type": "string"
+        },
+        "interaction_id": {
+          "title": "Interaction Id",
+          "type": "string"
+        },
+        "policy_version": {
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "interaction_id",
+        "application_id",
+        "policy_version"
+      ],
+      "title": "Started",
+      "type": "object"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "properties": {
+        "classifier_version": {
+          "default": "rules-1",
+          "title": "Classifier Version",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "language": {
+          "default": "en",
+          "title": "Language",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "risk_tier": {
+          "default": "medium",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "confidence",
+        "reason_codes"
+      ],
+      "title": "Task",
+      "type": "object"
+    },
+    "Usage": {
+      "additionalProperties": false,
+      "properties": {
+        "cached_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Input Tokens"
+        },
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "reasoning_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Tokens"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "provider_reported",
+            "locally_estimated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "tokenizer": {
+          "title": "Tokenizer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "source",
+        "tokenizer"
+      ],
+      "title": "Usage",
+      "type": "object"
+    },
+    "Validation": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/ValidationCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "validator_version": {
+          "default": "baseline-validator-1",
+          "title": "Validator Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "passed",
+        "checks"
+      ],
+      "title": "Validation",
+      "type": "object"
+    },
+    "ValidationCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "passed"
+      ],
+      "title": "ValidationCheck",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Started"
+        },
+        {
+          "$ref": "#/$defs/RetrievalRun"
+        },
+        {
+          "$ref": "#/$defs/RouteDecision"
+        },
+        {
+          "$ref": "#/$defs/GenerationAttempt"
+        },
+        {
+          "$ref": "#/$defs/Interaction"
+        },
+        {
+          "$ref": "#/$defs/Feedback"
+        }
+      ],
+      "title": "Data"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "enum": [
+        "interaction.started.v1",
+        "retrieval.completed.v1",
+        "route.decided.v1",
+        "generation.completed.v1",
+        "generation.failed.v1",
+        "interaction.completed.v1",
+        "feedback.recorded.v1"
+      ],
+      "title": "Event Type",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "producer": {
+      "const": "gateway",
+      "default": "gateway",
+      "title": "Producer",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tenant_id": {
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "title": "Trace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_type",
+    "tenant_id",
+    "trace_id",
+    "data"
+  ],
+  "title": "Event",
+  "type": "object"
+}

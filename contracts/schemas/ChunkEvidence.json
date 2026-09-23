@@ -1,0 +1,72 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "chunk_id": {
+      "title": "Chunk Id",
+      "type": "string"
+    },
+    "content_hash": {
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "context_position": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Context Position"
+    },
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "document_version": {
+      "title": "Document Version",
+      "type": "string"
+    },
+    "licence_class": {
+      "title": "Licence Class",
+      "type": "string"
+    },
+    "rank_retrieved": {
+      "title": "Rank Retrieved",
+      "type": "integer"
+    },
+    "retrieval_score": {
+      "title": "Retrieval Score",
+      "type": "number"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "supplied_to_model": {
+      "title": "Supplied To Model",
+      "type": "boolean"
+    },
+    "token_count": {
+      "title": "Token Count",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "document_id",
+    "document_version",
+    "chunk_id",
+    "rank_retrieved",
+    "retrieval_score",
+    "supplied_to_model",
+    "context_position",
+    "token_count",
+    "content_hash",
+    "licence_class"
+  ],
+  "title": "ChunkEvidence",
+  "type": "object"
+}

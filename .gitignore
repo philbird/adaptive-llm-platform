@@ -1,0 +1,13 @@
+.venv/
+.env
+.local/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+reports/
+sbom.json
+.DS_Store
+

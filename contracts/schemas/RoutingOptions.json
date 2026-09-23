@@ -1,0 +1,36 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "deadline_ms": {
+      "default": 5000,
+      "maximum": 30000,
+      "minimum": 50,
+      "title": "Deadline Ms",
+      "type": "integer"
+    },
+    "max_cost_micros": {
+      "default": 20000,
+      "maximum": 1000000,
+      "minimum": 0,
+      "title": "Max Cost Micros",
+      "type": "integer"
+    },
+    "mode": {
+      "default": "auto",
+      "enum": [
+        "auto",
+        "foundation"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "title": "RoutingOptions",
+  "type": "object"
+}

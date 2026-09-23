@@ -1,0 +1,25 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "chunk_id": {
+      "title": "Chunk Id",
+      "type": "string"
+    },
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "document_id",
+    "chunk_id"
+  ],
+  "title": "Citation",
+  "type": "object"
+}

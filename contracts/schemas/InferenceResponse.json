@@ -1,0 +1,178 @@
+{
+  "$defs": {
+    "Citation": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id",
+        "chunk_id"
+      ],
+      "title": "Citation",
+      "type": "object"
+    },
+    "RouteSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "fallback_used": {
+          "default": false,
+          "title": "Fallback Used",
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "RouteSummary",
+      "type": "object"
+    },
+    "Usage": {
+      "additionalProperties": false,
+      "properties": {
+        "cached_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Input Tokens"
+        },
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "reasoning_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Tokens"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "provider_reported",
+            "locally_estimated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "tokenizer": {
+          "title": "Tokenizer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "source",
+        "tokenizer"
+      ],
+      "title": "Usage",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "citations": {
+      "items": {
+        "$ref": "#/$defs/Citation"
+      },
+      "title": "Citations",
+      "type": "array"
+    },
+    "content": {
+      "classification": "confidential",
+      "maxLength": 32000,
+      "title": "Content",
+      "type": "string"
+    },
+    "estimated_cost_micros": {
+      "title": "Estimated Cost Micros",
+      "type": "integer"
+    },
+    "finish_reason": {
+      "enum": [
+        "stop",
+        "length"
+      ],
+      "title": "Finish Reason",
+      "type": "string"
+    },
+    "interaction_id": {
+      "title": "Interaction Id",
+      "type": "string"
+    },
+    "model_deployment_id": {
+      "title": "Model Deployment Id",
+      "type": "string"
+    },
+    "route": {
+      "$ref": "#/$defs/RouteSummary"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "trace_id": {
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "usage": {
+      "$ref": "#/$defs/Usage"
+    }
+  },
+  "required": [
+    "interaction_id",
+    "trace_id",
+    "model_deployment_id",
+    "content",
+    "citations",
+    "usage",
+    "estimated_cost_micros",
+    "finish_reason"
+  ],
+  "title": "InferenceResponse",
+  "type": "object"
+}

@@ -1,0 +1,60 @@
+{
+  "$defs": {
+    "ValidationCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "passed"
+      ],
+      "title": "ValidationCheck",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/ValidationCheck"
+      },
+      "title": "Checks",
+      "type": "array"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "validator_version": {
+      "default": "baseline-validator-1",
+      "title": "Validator Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "passed",
+    "checks"
+  ],
+  "title": "Validation",
+  "type": "object"
+}

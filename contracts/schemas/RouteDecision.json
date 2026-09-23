@@ -1,0 +1,126 @@
+{
+  "$defs": {
+    "Candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "eligible": {
+          "title": "Eligible",
+          "type": "boolean"
+        },
+        "estimated_cost_micros": {
+          "title": "Estimated Cost Micros",
+          "type": "integer"
+        },
+        "model_deployment_id": {
+          "title": "Model Deployment Id",
+          "type": "string"
+        },
+        "ood_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ood Score"
+        },
+        "predicted_quality": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Predicted Quality"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model_deployment_id",
+        "eligible",
+        "estimated_cost_micros",
+        "reason_codes"
+      ],
+      "title": "Candidate",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/Candidate"
+      },
+      "title": "Candidates",
+      "type": "array"
+    },
+    "decision_latency_ms": {
+      "title": "Decision Latency Ms",
+      "type": "number"
+    },
+    "fallback_deployment_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Fallback Deployment Ids",
+      "type": "array"
+    },
+    "interaction_id": {
+      "title": "Interaction Id",
+      "type": "string"
+    },
+    "policy_constraints": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Policy Constraints",
+      "type": "array"
+    },
+    "route_decision_id": {
+      "title": "Route Decision Id",
+      "type": "string"
+    },
+    "router_version": {
+      "default": "foundation-only-1",
+      "title": "Router Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "selected_model_deployment_id": {
+      "title": "Selected Model Deployment Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "interaction_id",
+    "candidates",
+    "selected_model_deployment_id",
+    "decision_latency_ms",
+    "policy_constraints"
+  ],
+  "title": "RouteDecision",
+  "type": "object"
+}

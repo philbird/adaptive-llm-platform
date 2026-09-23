@@ -1,0 +1,31 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "content": {
+      "classification": "confidential",
+      "maxLength": 32000,
+      "title": "Content",
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "user",
+        "assistant"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "role",
+    "content"
+  ],
+  "title": "Message",
+  "type": "object"
+}
