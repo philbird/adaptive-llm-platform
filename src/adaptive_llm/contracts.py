@@ -14,7 +14,7 @@ from secrets import randbits
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def uid() -> str:
@@ -190,8 +190,13 @@ class FeedbackInput(Contract):
     label_type: Literal["thumb", "rubric", "correction", "resolution", "safety"]
     value: FeedbackValue
     comment: Content | None = None
-    rubric_version: str | None = None
+    rubric_version: Identifier | None = None
     training_authorised: bool = False
+
+
+class CorrectionInput(Contract):
+    correction: Content = Field(min_length=1)
+    training_authorised: bool = Field(strict=True)
 
 
 class SubjectDeletionInput(Contract):
@@ -392,6 +397,9 @@ class Feedback(Record):
     label_type: Literal["thumb", "rubric", "correction", "resolution", "safety"]
     value: FeedbackValue
     comment_ref: Reference | None = None
+    correction_ref: Reference | None = None
+    content_hash: str | None = None
+    error_code: Literal["persistence_redaction_failed"] | None = None
     rubric_version: str | None = None
     judge_version: str | None = None
     actor_id_pseudonymous: str | None = None
@@ -422,6 +430,117 @@ class DatasetBuilt(Record):
     manifest_digest: str
     deletions_applied_through: datetime
     approval_status: Literal["pending", "approved", "rejected"] = "pending"
+
+
+DatasetPurpose = Literal["adapter_training", "distillation", "router_training", "evaluation"]
+TargetSource = Literal["correction", "positive_resolution", "production_output"]
+Split = Literal["train", "validation", "test"]
+GroupingKey = Literal["document_family", "subject_id_pseudonymous"]
+
+
+def _target_preferences() -> list[TargetSource]:
+    return ["correction", "positive_resolution", "production_output"]
+
+
+def _grouping_keys() -> list[GroupingKey]:
+    return ["document_family", "subject_id_pseudonymous"]
+
+
+class SourceWindow(Record):
+    start: AwareDatetime
+    end: AwareDatetime
+
+    @field_validator("start", "end")
+    @classmethod
+    def utc(cls, value: datetime) -> datetime:
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def ordered(self) -> SourceWindow:
+        if self.start >= self.end:
+            raise ValueError("invalid_source_window")
+        return self
+
+
+class TimeSplit(Record):
+    train_end: AwareDatetime
+    validation_end: AwareDatetime
+
+    @field_validator("train_end", "validation_end")
+    @classmethod
+    def utc(cls, value: datetime) -> datetime:
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def ordered(self) -> TimeSplit:
+        if self.train_end >= self.validation_end:
+            raise ValueError("invalid_time_split")
+        return self
+
+
+class DatasetSpecification(Record):
+    dataset_id: Identifier
+    purpose: DatasetPurpose = "adapter_training"
+    tenant_ids: list[Identifier] = Field(min_length=1, max_length=100)
+    source_window: SourceWindow
+    eligibility_policy_version: Identifier
+    target_preference_order: list[TargetSource] = Field(
+        default_factory=_target_preferences,
+        min_length=1,
+        max_length=3,
+    )
+    split_strategy: Literal["subject_and_document_family"] = "subject_and_document_family"
+    grouping_keys: list[GroupingKey] = Field(default_factory=_grouping_keys)
+    time_split: TimeSplit | None = None
+    minimum_examples: int = Field(default=1, ge=1)
+    seed: int = Field(default=0, ge=0)
+    near_duplicate_threshold: float = Field(default=0.8, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def valid_specification(self) -> DatasetSpecification:
+        if self.dataset_id in {".", ".."} or any(t in {".", ".."} for t in self.tenant_ids):
+            raise ValueError("invalid_dataset_identifier")
+        if len(set(self.tenant_ids)) != len(self.tenant_ids):
+            raise ValueError("duplicate_tenants")
+        if len(set(self.target_preference_order)) != len(self.target_preference_order):
+            raise ValueError("duplicate_target_preferences")
+        if sorted(self.grouping_keys) != ["document_family", "subject_id_pseudonymous"]:
+            raise ValueError("joint_grouping_required")
+        return self
+
+
+class DatasetQualitySummary(Record):
+    considered: int
+    accepted_rate: float
+    duplicate_rate: float
+    exclusions: dict[str, int]
+    label_mix: dict[str, int]
+    languages: dict[str, int]
+
+
+class DatasetApproval(Record):
+    status: Literal["pending"] = "pending"
+    actor: str | None = None
+
+
+class DatasetManifest(Record):
+    dataset_id: Identifier
+    version: Identifier
+    purpose: DatasetPurpose
+    tenant_ids: list[Identifier]
+    created_at: AwareDatetime = Field(default_factory=now)
+    source_window: SourceWindow
+    eligibility_policy_version: str
+    transformation_code_revision: str
+    redaction_version: str
+    licence_policy_version: str = "synthetic-internal-approved-1"
+    examples: dict[Split, int]
+    split_strategy: Literal["subject_and_document_family"]
+    content_digest: str
+    deletions_applied_through: AwareDatetime
+    quality_summary: DatasetQualitySummary
+    approval: DatasetApproval = Field(default_factory=DatasetApproval)
+    specification: DatasetSpecification
 
 
 class TrainingCompleted(Record):

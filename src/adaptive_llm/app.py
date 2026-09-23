@@ -18,13 +18,21 @@ from opentelemetry.trace import Tracer
 from pydantic import BaseModel
 
 from adaptive_llm.contracts import (
+    CorrectionInput,
+    DatasetManifest,
+    DatasetSpecification,
     Environment,
+    Feedback,
+    FeedbackInput,
     InferenceRequest,
     InferenceResponse,
     SubjectDeletionInput,
 )
+from adaptive_llm.datasets.builder import DatasetBuilder, LocalDatasetBuilder, code_revision
+from adaptive_llm.datasets.sources import LocalSourceResolver, SourceResolver
 from adaptive_llm.events import EventSink, InMemoryEventSink
 from adaptive_llm.events.outbox import Dispatcher, OutboxBackoff, OutboxStore
+from adaptive_llm.gateway.feedback import FeedbackService
 from adaptive_llm.gateway.identity import (
     Authenticator,
     GatewayError,
@@ -40,7 +48,7 @@ from adaptive_llm.policy.persistence import LocalPersistenceRedactor, Persistenc
 from adaptive_llm.providers import FakeProvider, Provider
 from adaptive_llm.rag import LocalRetriever, Retriever
 from adaptive_llm.routing import FoundationRouter, Router
-from adaptive_llm.storage import MetadataStore, PayloadStore
+from adaptive_llm.storage import MetadataStore, PayloadStore, StorageError
 from adaptive_llm.storage.crypto import PayloadCipher, load_keyring
 from adaptive_llm.storage.outbox import SQLiteOutboxStore
 from adaptive_llm.storage.persistence import Persistence
@@ -61,6 +69,9 @@ class Settings:
     policy_path: Path = ROOT / "configs/policy/local.json"
     routing_path: Path = ROOT / "configs/routing/local.json"
     documents_path: Path = ROOT / "tests/fixtures/documents.json"
+    golden_dir: Path = ROOT / "tests/fixtures/golden"
+    dataset_builder: DatasetBuilder | None = None
+    dataset_sources: SourceResolver | None = None
     event_capacity: int = 4096
     outbox_backoff: OutboxBackoff = field(default_factory=OutboxBackoff)
     outbox_pending_limit: int = 100_000
@@ -185,12 +196,13 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
         replay_capacity=settings.replay_capacity,
         retention_seconds=settings.retention_seconds,
     )
+    policy = (
+        settings.policy if settings.policy is not None else LocalPolicyEngine(settings.policy_path)
+    )
     service = InferenceService(
         keyring=keyring,
         replay_capacity=settings.replay_capacity,
-        policy=settings.policy
-        if settings.policy is not None
-        else LocalPolicyEngine(settings.policy_path),
+        policy=policy,
         redactor=settings.redactor if settings.redactor is not None else ProcessingRedactor(),
         retriever=settings.retriever
         if settings.retriever is not None
@@ -215,6 +227,15 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
     application.state.metadata = metadata
     application.state.payloads = payloads
     application.state.persistence = persistence
+    application.state.feedback = FeedbackService(persistence, policy)
+    application.state.datasets = settings.dataset_builder or LocalDatasetBuilder(
+        persistence,
+        policy,
+        settings.dataset_sources or LocalSourceResolver(settings.documents_path),
+        settings.data_dir,
+        settings.golden_dir,
+        revision=code_revision(),
+    )
 
     application.state.authenticator = authenticator
     application.state.keyring = keyring
@@ -299,6 +320,64 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ) -> InferenceResponse:
             service: InferenceService = application.state.inference
             return await service.infer(body, identity)
+
+        @application.post("/v1/interactions/{interaction_id}/feedback", response_model=Feedback)
+        async def feedback(
+            interaction_id: str,
+            body: FeedbackInput,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> Feedback:
+            service: FeedbackService = application.state.feedback
+            try:
+                return await asyncio.to_thread(service.record, identity, interaction_id, body)
+            except GatewayError:
+                raise
+            except Exception:
+                raise GatewayError(503, "feedback_persistence_failed") from None
+
+        @application.post("/v1/interactions/{interaction_id}/correction", response_model=Feedback)
+        async def correction(
+            interaction_id: str,
+            body: CorrectionInput,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> Feedback:
+            service: FeedbackService = application.state.feedback
+            try:
+                return await asyncio.to_thread(service.record, identity, interaction_id, body)
+            except GatewayError:
+                raise
+            except Exception:
+                raise GatewayError(503, "feedback_persistence_failed") from None
+
+        @application.post("/v1/datasets/builds", response_model=DatasetManifest)
+        async def build_dataset(
+            body: DatasetSpecification,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> DatasetManifest:
+            builder: DatasetBuilder = application.state.datasets
+            # The HTTP boundary enforces the key class even for injected builders.
+            LocalDatasetBuilder._authorize(identity, body.tenant_ids)
+            try:
+                return await asyncio.to_thread(builder.build, body, identity)
+            except GatewayError:
+                raise
+            except Exception:
+                raise GatewayError(503, "dataset_build_failed") from None
+
+        @application.get(
+            "/v1/datasets/{dataset_id}/versions/{version}", response_model=DatasetManifest
+        )
+        async def get_dataset(
+            dataset_id: str,
+            version: str,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> DatasetManifest:
+            LocalDatasetBuilder._authorize(identity, [])
+            builder: DatasetBuilder = application.state.datasets
+            try:
+                return await asyncio.to_thread(builder.get, dataset_id, version, identity)
+            except StorageError:
+                raise GatewayError(503, "dataset_read_failed") from None
 
         @application.delete("/v1/privacy/interactions/{interaction_id}", status_code=204)
         async def delete_one(

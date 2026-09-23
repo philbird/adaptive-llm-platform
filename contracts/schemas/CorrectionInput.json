@@ -1,0 +1,28 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "correction": {
+      "classification": "confidential",
+      "maxLength": 32000,
+      "minLength": 1,
+      "title": "Correction",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "training_authorised": {
+      "title": "Training Authorised",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "correction",
+    "training_authorised"
+  ],
+  "title": "CorrectionInput",
+  "type": "object"
+}

@@ -1,0 +1,30 @@
+{
+  "properties": {
+    "actor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Actor"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "const": "pending",
+      "default": "pending",
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "title": "DatasetApproval",
+  "type": "object"
+}

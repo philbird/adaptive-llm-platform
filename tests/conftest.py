@@ -1,12 +1,135 @@
 import json
+import random
+from collections.abc import Iterator
+from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from adaptive_llm.app import Settings
-from adaptive_llm.contracts import Chunk, InferenceRequest, Message, uid
+from adaptive_llm.app import Settings, create_app
+from adaptive_llm.contracts import (
+    Chunk,
+    DatasetSpecification,
+    InferenceRequest,
+    Message,
+    PolicyDecision,
+    SourceWindow,
+    now,
+    uid,
+)
 from adaptive_llm.gateway.identity import Identity, Keyring, LocalAuthenticator
 from adaptive_llm.providers import ProviderRequest
+
+
+class DatasetPolicy:
+    """Synthetic mutable policy for revocation tests; stored decisions are deliberately stale."""
+
+    def __init__(self) -> None:
+        self.training = {"synthetic-a": True, "synthetic-b": False}
+        self.logging = True
+
+    def decide(self, identity: Identity, application_id: str) -> PolicyDecision:
+        return PolicyDecision(
+            policy_version="synthetic-dataset-policy-1",
+            retention_seconds=3600,
+            training_allowed=self.training[identity.tenant_id],
+            content_logging_allowed=self.logging,
+        )
+
+
+@dataclass
+class DatasetSeed:
+    app: FastAPI
+    client: TestClient
+    specification: DatasetSpecification
+    policy: DatasetPolicy
+    ids: list[str]
+    subjects: list[str]
+    directory: Path
+
+
+@pytest.fixture
+def dataset_seed(tmp_path: Path) -> Iterator[DatasetSeed]:
+    policy = DatasetPolicy()
+    app = create_app(Settings(data_dir=tmp_path, policy=policy, outbox_dispatch_enabled=False))
+    ids: list[str] = []
+    subjects: list[str] = []
+    rng = random.Random(23)
+    start = now() - timedelta(seconds=1)
+    with TestClient(app) as client:
+        for index in range(60):
+            tenant = "a" if index < 40 else "b"
+            subject = f"synthetic-dataset-subject-{index // 2}"
+            subjects.append(subject)
+            headers = {"Authorization": f"Bearer synthetic-key-{tenant}", "X-Subject": subject}
+            vocabulary = " ".join(
+                "".join(rng.choices("abcdefghijklmnopqrstuvwxyz", k=9)) for _ in range(24)
+            )
+            response = client.post(
+                "/v1/inference",
+                headers=headers,
+                json={
+                    "request_id": f"synthetic-dataset-{index}",
+                    "application_id": "support-assistant",
+                    "messages": [
+                        {"role": "user", "content": f"SYNTHETIC {vocabulary} unused receipt"}
+                    ],
+                    "rag": {"enabled": index >= 30, "index_id": "synthetic-kb"},
+                },
+            )
+            assert response.status_code == 200
+            iid = response.json()["interaction_id"]
+            ids.append(iid)
+            if index % 6 in {0, 1}:
+                assert (
+                    client.post(
+                        f"/v1/interactions/{iid}/feedback",
+                        headers=headers,
+                        json={"label_type": "thumb", "value": {"score": 0, "max_score": 1}},
+                    ).status_code
+                    == 200
+                )
+            if index % 6 == 1:
+                assert (
+                    client.post(
+                        f"/v1/interactions/{iid}/correction",
+                        headers=headers,
+                        json={
+                            "correction": f"SYNTHETIC approved correction {vocabulary}",
+                            "training_authorised": True,
+                        },
+                    ).status_code
+                    == 200
+                )
+            if index % 6 == 2:
+                assert (
+                    client.post(
+                        f"/v1/interactions/{iid}/feedback",
+                        headers=headers,
+                        json={"label_type": "resolution", "value": {"score": 1, "max_score": 1}},
+                    ).status_code
+                    == 200
+                )
+        assert (
+            client.post(
+                "/v1/privacy/subjects/deletion-requests",
+                headers={"Authorization": "Bearer synthetic-key-a"},
+                json={"subject": subjects[38]},
+            ).json()["deleted"]
+            == 2
+        )
+        spec = DatasetSpecification(
+            dataset_id="synthetic-training",
+            tenant_ids=["synthetic-a", "synthetic-b"],
+            source_window=SourceWindow(start=start, end=now() + timedelta(seconds=1)),
+            eligibility_policy_version="synthetic-dataset-policy-1",
+            minimum_examples=5,
+            seed=7,
+        )
+        yield DatasetSeed(app, client, spec, policy, ids, subjects, tmp_path)
 
 
 def pytest_configure(config: pytest.Config) -> None:

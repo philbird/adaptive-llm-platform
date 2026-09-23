@@ -1,0 +1,26 @@
+{
+  "properties": {
+    "end": {
+      "format": "date-time",
+      "title": "End",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "start": {
+      "format": "date-time",
+      "title": "Start",
+      "type": "string"
+    }
+  },
+  "required": [
+    "start",
+    "end"
+  ],
+  "title": "SourceWindow",
+  "type": "object"
+}

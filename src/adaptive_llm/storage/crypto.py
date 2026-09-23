@@ -50,6 +50,8 @@ class PayloadCipher:
         interaction_id: str,
         field: str,
         expires_at: datetime,
+        *,
+        aad_field: str | None = None,
     ) -> EncryptedPayload:
         nonce = secrets.token_bytes(12)
         return EncryptedPayload(
@@ -59,20 +61,30 @@ class PayloadCipher:
             field=field,
             nonce=nonce,
             ciphertext=self._ciphers[self.key_version].encrypt(
-                nonce, content, self._aad(tenant_id, interaction_id, field)
+                nonce, content, self._aad(tenant_id, interaction_id, aad_field or field)
             ),
             key_version=self.key_version,
             expires_at=expires_at,
         )
 
     def decrypt(
-        self, payload: EncryptedPayload, tenant_id: str, interaction_id: str, field: str
+        self,
+        payload: EncryptedPayload,
+        tenant_id: str,
+        interaction_id: str,
+        field: str,
+        *,
+        aad_field: str | None = None,
     ) -> bytes:
         if payload.key_version not in self._ciphers:
             raise StorageError("unknown_payload_key_version")
+        if payload.field != field:
+            raise StorageError("payload_authentication_failed")
         try:
             return self._ciphers[payload.key_version].decrypt(
-                payload.nonce, payload.ciphertext, self._aad(tenant_id, interaction_id, field)
+                payload.nonce,
+                payload.ciphertext,
+                self._aad(tenant_id, interaction_id, aad_field or field),
             )
         except InvalidTag:
             raise StorageError("payload_authentication_failed") from None

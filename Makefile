@@ -1,4 +1,4 @@
-.PHONY: dev check integration contracts sbom migrate retention-sweep dispatch-once dead-letters redeliver rotate-key backup restore drills
+.PHONY: dev check integration contracts sbom migrate retention-sweep dispatch-once dead-letters redeliver rotate-key backup restore drills dataset-build
 
 DATA_DIR ?= .local
 ENVIRONMENT ?= local
@@ -8,6 +8,9 @@ STORAGE = uv run --locked python -m adaptive_llm.storage
 
 dev:
 	uv run --locked uvicorn adaptive_llm.app:app --host 127.0.0.1 --port 8000 --reload --no-access-log
+
+dataset-build:
+	uv run --locked python -m adaptive_llm.datasets --spec "$(SPEC)" --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)" $(if $(POLICY),--policy "$(POLICY)",)
 
 migrate:
 	uv run --locked python -m adaptive_llm.storage migrate --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)"

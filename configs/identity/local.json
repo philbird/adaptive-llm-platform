@@ -1,6 +1,13 @@
 {
   "local_secret": "SYNTHETIC-LOCAL-ONLY-hmac-secret-v1",
   "keys": {
+    "synthetic-operator-key": {
+      "tenant_id": "synthetic-a",
+      "application_ids": ["support-assistant"],
+      "environment": "local",
+      "key_class": "operator",
+      "dataset_tenants": ["synthetic-a", "synthetic-b"]
+    },
     "synthetic-key-a": {
       "tenant_id": "synthetic-a",
       "application_ids": ["support-assistant"],
