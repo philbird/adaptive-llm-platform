@@ -1,11 +1,38 @@
 {
   "properties": {
+    "artifact_digest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Artifact Digest"
+    },
     "dataset_refs": {
       "items": {
         "type": "string"
       },
       "title": "Dataset Refs",
       "type": "array"
+    },
+    "failure_code": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Failure Code"
     },
     "job_id": {
       "title": "Job Id",

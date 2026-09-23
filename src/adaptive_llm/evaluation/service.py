@@ -14,6 +14,7 @@ from adaptive_llm.contracts import (
     EvaluationSpecification,
     ItemScore,
     PairedComparison,
+    PromotionRequest,
     SuiteName,
     SuiteResult,
     now,
@@ -33,6 +34,8 @@ from adaptive_llm.evaluation.suites.retrieval import RetrievalSuite
 from adaptive_llm.evaluation.suites.safety import SafetySuite
 from adaptive_llm.gateway.identity import GatewayError, Identity
 from adaptive_llm.providers import Provider
+from adaptive_llm.providers.specialist import SpecialistProvider
+from adaptive_llm.registry import ModelRegistry
 from adaptive_llm.routing import Deployment, FoundationRouter
 from adaptive_llm.storage.persistence import Persistence
 from adaptive_llm.validation import Validator
@@ -45,10 +48,15 @@ PILOT_SD = stdev(PILOT_DELTAS)
 class EvaluationDeployment:
     manifest: Deployment
     provider: Provider
+    registered_version: str | None = None
+    artifact_digest: str | None = None
 
     @property
     def version(self) -> str:
-        return hashlib.sha256(self.manifest.model_dump_json().encode()).hexdigest()
+        return (
+            self.registered_version
+            or hashlib.sha256(self.manifest.model_dump_json().encode()).hexdigest()
+        )
 
 
 class Evaluator(Protocol):
@@ -70,12 +78,15 @@ class LocalEvaluator:
         validator: Validator,
         revision: str,
         judge: Judge | None = None,
+        registry: ModelRegistry | None = None,
+        data_dir: Path | None = None,
     ) -> None:
         self.persistence, self.reader, self.store = persistence, reader, store
         self.deployments, self.foundation_id = dict(deployments), foundation_id
         self.fixture_dir, self.routing_path = fixture_dir, routing_path
         self.validator, self.revision = validator, revision
         self.judge = judge or DeterministicJudge()
+        self.registry, self.data_dir = registry, data_dir
         self.suites: dict[SuiteName, Suite] = {
             "golden": GoldenSuite(self.judge),
             "held_out": HeldOutSuite(),
@@ -90,10 +101,39 @@ class LocalEvaluator:
             raise GatewayError(404, "evaluation_not_found")
         return report
 
-    def _runner(self, deployment_id: str, identity: Identity, persistence: Persistence) -> Runner:
+    def _deployment(self, deployment_id: str, identity: Identity) -> EvaluationDeployment:
         deployment = self.deployments.get(deployment_id)
-        if deployment is None:
+        if deployment is not None:
+            return deployment
+        if self.registry is None or self.data_dir is None:
             raise GatewayError(422, "unknown_evaluation_deployment")
+        try:
+            model = self.registry.get(deployment_id, identity)
+        except GatewayError as error:
+            if error.status_code == 404:
+                raise GatewayError(422, "unknown_evaluation_deployment") from None
+            raise
+        if model.state in {"candidate", "deprecated", "revoked"}:
+            raise GatewayError(409, "model_not_evaluating")
+        provider = SpecialistProvider(
+            model, self.data_dir / model.storage_location, self.persistence.keyring
+        )
+        foundation = self.deployments[self.foundation_id].manifest
+        return EvaluationDeployment(
+            foundation.model_copy(
+                update={
+                    "model_deployment_id": model.version,
+                    "model_version": provider.model_version,
+                    "model_id": model.base_model_id,
+                }
+            ),
+            provider,
+            model.version,
+            model.artifact_digest,
+        )
+
+    def _runner(self, deployment_id: str, identity: Identity, persistence: Persistence) -> Runner:
+        deployment = self._deployment(deployment_id, identity)
         router = FoundationRouter(self.routing_path)
         router.deployment = deployment.manifest
         return PipelineRunner(
@@ -146,11 +186,35 @@ class LocalEvaluator:
         validate_versions(self.judge, spec.judge_version, spec.rubric_version)
         start = now()
         manifest, held_out = self.reader.read(spec, identity)
-        if spec.candidate_deployment_id not in self.deployments or (
-            spec.baseline_deployment_id is not None
-            and spec.baseline_deployment_id not in self.deployments
-        ):
-            raise GatewayError(422, "unknown_evaluation_deployment")
+        if spec.candidate_deployment_id not in self.deployments and self.registry is not None:
+            try:
+                model = self.registry.get(spec.candidate_deployment_id, identity)
+            except GatewayError as error:
+                if error.status_code == 404:
+                    raise GatewayError(422, "unknown_evaluation_deployment") from None
+                raise
+            if not any(
+                d.dataset_id == spec.dataset_id
+                and d.version == spec.dataset_version
+                and d.content_digest == manifest.content_digest
+                for d in model.datasets
+            ):
+                raise GatewayError(409, "model_dataset_mismatch")
+            if model.state == "candidate":
+                self.registry.promote(
+                    PromotionRequest(
+                        model_version=model.version,
+                        target_state="evaluating",
+                        reason="evaluation_requested",
+                    ),
+                    identity,
+                )
+        candidate_deployment = self._deployment(spec.candidate_deployment_id, identity)
+        baseline_deployment = (
+            self._deployment(spec.baseline_deployment_id, identity)
+            if spec.baseline_deployment_id
+            else None
+        )
         locking = spec.candidate_deployment_id == spec.baseline_deployment_id == self.foundation_id
         locked = (
             self.store.baseline(spec.baseline_deployment_id, spec.dataset_version, identity)
@@ -178,12 +242,8 @@ class LocalEvaluator:
             "held_out": held_out,
             "performance": golden,
         }
-        candidate_version = self.deployments[spec.candidate_deployment_id].version
-        baseline_version = (
-            self.deployments[spec.baseline_deployment_id].version
-            if spec.baseline_deployment_id
-            else None
-        )
+        candidate_version = candidate_deployment.version
+        baseline_version = baseline_deployment.version if baseline_deployment else None
         if locked and not locking:
             pinned = locked.specification
             if (
@@ -223,6 +283,8 @@ class LocalEvaluator:
         report = EvaluationReport(
             specification=spec,
             candidate_manifest_version=candidate_version,
+            candidate_model_version=candidate_deployment.manifest.model_version,
+            candidate_artifact_digest=candidate_deployment.artifact_digest,
             baseline_manifest_version=baseline_version,
             baseline_report_id=locked.specification.evaluation_id if locked else None,
             dataset_content_digest=manifest.content_digest,

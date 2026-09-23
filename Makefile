@@ -5,6 +5,23 @@ ENVIRONMENT ?= local
 TENANT ?= synthetic-a
 KEYRING ?= $(PAYLOAD_KEYRING)
 STORAGE = uv run --locked python -m adaptive_llm.storage
+TRAINING = uv run --locked python -m adaptive_llm.training
+TRAINING_ARGS = --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)"
+# Pass notes via environment to avoid expanding user text as shell code.
+export NOTE
+.PHONY: train promote rollback models
+
+train:
+	$(TRAINING) train $(TRAINING_ARGS) --spec "$(SPEC)" $(if $(POLICY),--policy "$(POLICY)",)
+
+promote:
+	$(TRAINING) promote $(TRAINING_ARGS) --model "$(MODEL)" --to "$(TO)" --note "$$NOTE" $(if $(EVALUATION_ID),--evaluation-id "$(EVALUATION_ID)",)
+
+rollback:
+	$(TRAINING) rollback $(TRAINING_ARGS) --deployment "$(DEPLOYMENT)" --note "$$NOTE"
+
+models:
+	$(TRAINING) models $(TRAINING_ARGS)
 
 dev:
 	uv run --locked uvicorn adaptive_llm.app:app --host 127.0.0.1 --port 8000 --reload --no-access-log

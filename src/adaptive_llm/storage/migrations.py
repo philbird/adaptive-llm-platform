@@ -7,6 +7,7 @@ from pathlib import Path
 from adaptive_llm.storage import StorageError
 
 MIGRATIONS = Path(__file__).resolve().parents[3] / "migrations"
+CONTROL_MIGRATIONS = MIGRATIONS / "control"
 
 
 def migrate(connection: sqlite3.Connection, directory: Path = MIGRATIONS) -> None:

@@ -28,8 +28,14 @@ from adaptive_llm.contracts import (
     FeedbackInput,
     InferenceRequest,
     InferenceResponse,
+    ModelManifest,
+    OperatorNote,
+    PromotionRequest,
     SubjectDeletionInput,
+    TrainingJob,
+    TrainingJobSpecification,
 )
+from adaptive_llm.datasets.artifacts import DatasetApprovals
 from adaptive_llm.datasets.builder import DatasetBuilder, LocalDatasetBuilder, code_revision
 from adaptive_llm.datasets.sources import LocalSourceResolver, SourceResolver
 from adaptive_llm.evaluation.data import LocalDatasetReader
@@ -52,12 +58,22 @@ from adaptive_llm.policy import LocalPolicyEngine, PolicyEngine, ProcessingRedac
 from adaptive_llm.policy.persistence import LocalPersistenceRedactor, PersistenceRedactor
 from adaptive_llm.providers import FakeProvider, Provider
 from adaptive_llm.rag import LocalRetriever, Retriever
+from adaptive_llm.registry import ModelRegistry
+from adaptive_llm.registry.sqlite import SQLiteModelRegistry
 from adaptive_llm.routing import FoundationRouter, Router
 from adaptive_llm.storage import MetadataStore, PayloadStore, StorageError
 from adaptive_llm.storage.crypto import PayloadCipher, load_keyring
 from adaptive_llm.storage.outbox import SQLiteOutboxStore
 from adaptive_llm.storage.persistence import Persistence
-from adaptive_llm.storage.sqlite import SQLiteDatabase, SQLiteMetadataStore, SQLitePayloadStore
+from adaptive_llm.storage.sqlite import (
+    SQLiteDatabase,
+    SQLiteMetadataStore,
+    SQLitePayloadStore,
+    control_database,
+)
+from adaptive_llm.training import Trainer
+from adaptive_llm.training.fake import FakeTrainer
+from adaptive_llm.training.service import TrainingOrchestrator
 from adaptive_llm.validation import LocalValidator, Validator
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -77,6 +93,8 @@ class Settings:
     golden_dir: Path = ROOT / "tests/fixtures/golden"
     dataset_builder: DatasetBuilder | None = None
     dataset_sources: SourceResolver | None = None
+    trainer: Trainer | None = None
+    registry: ModelRegistry | None = None
     evaluator: Evaluator | None = None
     evaluation_store: EvaluationStore | None = None
     evaluation_deployments: Mapping[str, EvaluationDeployment] | None = None
@@ -246,37 +264,59 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
         settings.golden_dir,
         revision=revision,
     )
+    application.state.dataset_approvals = DatasetApprovals(
+        application.state.datasets, persistence, settings.data_dir
+    )
+    evaluation_database = control_database(
+        settings.data_dir,
+        settings.environment,
+        migrate_on_startup=settings.migrate_on_startup,
+    )
+    application.state.evaluation_database = evaluation_database
+    evaluation_outbox = SQLiteOutboxStore(evaluation_database)
+    evaluation_events = settings.evaluation_events or InMemoryEventSink(settings.event_capacity)
+    application.state.evaluation_outbox = evaluation_outbox
+    application.state.evaluation_events = evaluation_events
+    application.state.evaluation_dispatcher = Dispatcher(
+        evaluation_outbox,
+        evaluation_events,
+        InProcessMetrics(),
+        backoff=settings.outbox_backoff,
+        tracer=settings.tracer,
+    )
+    evaluation_store = settings.evaluation_store or SQLiteEvaluationStore(
+        evaluation_database,
+        evaluation_outbox,
+        keyring,
+        settings.data_dir,
+        settings.outbox_pending_limit,
+    )
+    registry = settings.registry or SQLiteModelRegistry(
+        evaluation_database,
+        evaluation_outbox,
+        keyring,
+        evaluation_store,
+        settings.data_dir,
+        settings.outbox_pending_limit,
+    )
+    application.state.registry = registry
+    if isinstance(evaluation_store, SQLiteEvaluationStore) and isinstance(
+        registry, SQLiteModelRegistry
+    ):
+        evaluation_store.on_publish = registry.record_evaluation
+    application.state.training = TrainingOrchestrator(
+        registry,
+        application.state.datasets,
+        policy,
+        settings.trainer or FakeTrainer(settings.data_dir, persistence.cipher, keyring),
+        settings.data_dir,
+        persistence.cipher,
+        keyring,
+        revision,
+    )
     if settings.evaluator is not None:
         application.state.evaluations = settings.evaluator
     else:
-        evaluation_store = settings.evaluation_store
-        if evaluation_store is None:
-            evaluation_database = SQLiteDatabase(
-                settings.data_dir / "evaluations" / "control",
-                settings.environment,
-                migrate_on_startup=settings.migrate_on_startup,
-            )
-            application.state.evaluation_database = evaluation_database
-            evaluation_outbox = SQLiteOutboxStore(evaluation_database)
-            evaluation_events = settings.evaluation_events or InMemoryEventSink(
-                settings.event_capacity
-            )
-            application.state.evaluation_outbox = evaluation_outbox
-            application.state.evaluation_events = evaluation_events
-            application.state.evaluation_dispatcher = Dispatcher(
-                evaluation_outbox,
-                evaluation_events,
-                InProcessMetrics(),
-                backoff=settings.outbox_backoff,
-                tracer=settings.tracer,
-            )
-            evaluation_store = SQLiteEvaluationStore(
-                evaluation_database,
-                evaluation_outbox,
-                keyring,
-                settings.data_dir,
-                settings.outbox_pending_limit,
-            )
         foundation = FoundationRouter(settings.routing_path).deployment
         deployments = settings.evaluation_deployments or {
             foundation.model_deployment_id: EvaluationDeployment(foundation, FakeProvider())
@@ -293,6 +333,8 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
             settings.routing_path,
             settings.validator if settings.validator is not None else LocalValidator(),
             revision,
+            registry=registry,
+            data_dir=settings.data_dir,
         )
 
     application.state.authenticator = authenticator
@@ -446,6 +488,88 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return await asyncio.to_thread(builder.get, dataset_id, version, identity)
             except StorageError:
                 raise GatewayError(503, "dataset_read_failed") from None
+
+        @application.post(
+            "/v1/datasets/{dataset_id}/versions/{version}/approval", response_model=DatasetManifest
+        )
+        async def approve_dataset(
+            dataset_id: str,
+            version: str,
+            body: OperatorNote,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> DatasetManifest:
+            service: DatasetApprovals = application.state.dataset_approvals
+            LocalDatasetBuilder._authorize(identity, [])
+            try:
+                return await asyncio.to_thread(
+                    service.approve, dataset_id, version, identity, body.reason
+                )
+            except GatewayError:
+                raise
+            except Exception:
+                raise GatewayError(503, "dataset_approval_failed") from None
+
+        @application.post("/v1/training/jobs", response_model=TrainingJob)
+        async def train(
+            body: TrainingJobSpecification, identity: Annotated[Identity, Depends(authenticate)]
+        ) -> TrainingJob:
+            LocalDatasetBuilder._authorize(identity, [])
+            service: TrainingOrchestrator = application.state.training
+            try:
+                return await asyncio.to_thread(service.run, body, identity)
+            except GatewayError:
+                raise
+            except Exception:
+                raise GatewayError(503, "training_failed") from None
+
+        @application.get("/v1/training/jobs/{job_id}", response_model=TrainingJob)
+        async def training_job(
+            job_id: str, identity: Annotated[Identity, Depends(authenticate)]
+        ) -> TrainingJob:
+            LocalDatasetBuilder._authorize(identity, [])
+            registry: ModelRegistry = application.state.registry
+            result = await asyncio.to_thread(registry.job, job_id, identity)
+            if result is None:
+                raise GatewayError(404, "training_job_not_found")
+            return result
+
+        @application.post(
+            "/v1/models/{model_version}/promotion-requests", response_model=ModelManifest
+        )
+        async def promote(
+            model_version: str,
+            body: PromotionRequest,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> ModelManifest:
+            LocalDatasetBuilder._authorize(identity, [])
+            if model_version != body.model_version:
+                raise GatewayError(422, "model_version_mismatch")
+            registry: ModelRegistry = application.state.registry
+            try:
+                return await asyncio.to_thread(registry.promote, body, identity)
+            except GatewayError:
+                raise
+            except Exception:
+                raise GatewayError(503, "promotion_failed") from None
+
+        @application.post(
+            "/v1/deployments/{deployment_id}/rollback", response_model=list[ModelManifest]
+        )
+        async def rollback(
+            deployment_id: str,
+            body: OperatorNote,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> list[ModelManifest]:
+            LocalDatasetBuilder._authorize(identity, [])
+            registry: ModelRegistry = application.state.registry
+            try:
+                return await asyncio.to_thread(
+                    registry.rollback, deployment_id, identity, body.reason
+                )
+            except GatewayError:
+                raise
+            except Exception:
+                raise GatewayError(503, "rollback_failed") from None
 
         @application.post("/v1/evaluations", response_model=EvaluationReport)
         async def evaluate(

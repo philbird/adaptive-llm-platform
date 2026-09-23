@@ -1,10 +1,12 @@
-# Training milestones (not implemented)
+# Training lifecycle
 
-Milestone 3: LoRA first, against approved immutable datasets and a locked evaluated baseline.
-Track base/tokenizer revisions, code/container/config hashes, seeds, hardware, checkpoints,
-signatures and full registry lineage. Include CPU-safe smoke and separately marked GPU tests.
+Slice 3a lives in `src/adaptive_llm/training/` and `src/adaptive_llm/registry/`. It implements
+operator dataset approval, current-policy checks, deterministic fake CPU training, authenticated
+checkpoints/artifacts, resume, complete lineage, candidate evaluation, gated promotions and
+transactional rollback. The CPU smoke test exercises train → evaluate → approve → shadow.
+See the [training runbook](../../docs/runbooks/training-and-promotion.md).
 
-Milestone 4: counterfactual router evaluation, then shadow, canary and bounded fallback.
-Milestone 5: filtered teacher targets and smaller-model distillation through the same gates.
-Never update weights synchronously from requests or promote solely on cost/latency savings.
-
+Slice 3b adds real LoRA through the `Trainer` boundary, using PyTorch/PEFT in an optional
+dependency group with accelerator tests. Slice 3a has no new dependencies and creates no
+tensors. Milestone 4 adds actual specialist/shadow/canary routing; milestone 5 adds distillation.
+Registry production state alone does not enable specialist serving.

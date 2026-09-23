@@ -1,9 +1,5 @@
 """Authenticated immutable held-out shards and explicitly synthetic suite fixtures."""
 
-import base64
-import hashlib
-import hmac
-import json
 from pathlib import Path
 from typing import Protocol
 
@@ -16,15 +12,13 @@ from adaptive_llm.contracts import (
     Message,
     RagOptions,
     ResponseFormat,
-    now,
     uid,
 )
+from adaptive_llm.datasets.artifacts import read_shards
 from adaptive_llm.datasets.builder import DatasetBuilder
-from adaptive_llm.datasets.curation import SPLITS
 from adaptive_llm.evaluation.runner import Case
 from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
 from adaptive_llm.rag import IndexedChunk
-from adaptive_llm.storage import EncryptedPayload
 from adaptive_llm.storage.crypto import PayloadCipher
 
 
@@ -74,59 +68,9 @@ class LocalDatasetReader:
         self, spec: EvaluationSpecification, identity: Identity
     ) -> tuple[DatasetManifest, list[Case]]:
         manifest = self.builder.get(spec.dataset_id, spec.dataset_version, identity)
-        directory = self.data_dir / "datasets" / manifest.dataset_id / manifest.version
+        rows = read_shards(manifest, self.data_dir, self.cipher, self.keyring)
         try:
-            encoded = (directory / "manifest.json").read_text()
-            if (
-                not hmac.compare_digest(
-                    (directory / "manifest.mac").read_text(), self.keyring.manifest_mac(encoded)
-                )
-                or DatasetManifest.model_validate_json(encoded) != manifest
-            ):
-                raise ValueError
-            hashes: list[str] = []
-            cases: list[Case] = []
-            counts = dict.fromkeys(SPLITS, 0)
-            for tenant in sorted(manifest.tenant_ids):
-                for split in SPLITS:
-                    envelope = json.loads((directory / f"{tenant}.{split}.jsonl.enc").read_text())
-                    if (envelope["tenant_id"], envelope["split"], envelope["field"]) != (
-                        tenant,
-                        split,
-                        "dataset",
-                    ):
-                        raise ValueError
-                    binding = f"{manifest.dataset_id}/{manifest.version}"
-                    blob = EncryptedPayload(
-                        reference=uid(),
-                        tenant_id=tenant,
-                        interaction_id=binding,
-                        field="dataset",
-                        nonce=base64.b64decode(envelope["nonce"], validate=True),
-                        ciphertext=base64.b64decode(envelope["ciphertext"], validate=True),
-                        key_version=envelope["key_version"],
-                        expires_at=now(),
-                    )
-                    plaintext = self.cipher.decrypt(
-                        blob, tenant, binding, "dataset", aad_field=split
-                    )
-                    digest = hashlib.sha256(plaintext).hexdigest()
-                    if digest != envelope["plaintext_hash"]:
-                        raise ValueError
-                    hashes.append(digest)
-                    lines = plaintext.splitlines()
-                    counts[split] += len(lines)
-                    if split == "test":
-                        for line in lines:
-                            row = HeldOutRow.model_validate_json(line)
-                            if row.tenant_id != tenant or row.split != "test":
-                                raise ValueError
-                            cases.append(self._case(row, spec))
-            if (
-                counts != manifest.examples
-                or hashlib.sha256("".join(hashes).encode()).hexdigest() != manifest.content_digest
-            ):
-                raise ValueError
+            cases = [self._case(HeldOutRow.model_validate_json(row), spec) for row in rows["test"]]
             if len({case.item_id for case in cases}) != len(cases):
                 raise ValueError
             return manifest, cases

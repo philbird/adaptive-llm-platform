@@ -1,0 +1,42 @@
+{
+  "properties": {
+    "content_digest": {
+      "title": "Content Digest",
+      "type": "string"
+    },
+    "dataset_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "version": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Version",
+      "type": "string"
+    },
+    "weight": {
+      "default": 1,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Weight",
+      "type": "number"
+    }
+  },
+  "required": [
+    "dataset_id",
+    "version",
+    "content_digest"
+  ],
+  "title": "DatasetLineage",
+  "type": "object"
+}

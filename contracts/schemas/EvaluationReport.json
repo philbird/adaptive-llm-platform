@@ -484,12 +484,36 @@
       "title": "Baseline Suite Results",
       "type": "array"
     },
+    "candidate_artifact_digest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Candidate Artifact Digest"
+    },
     "candidate_manifest_version": {
       "maxLength": 100,
       "minLength": 1,
       "pattern": "^[\\w.-]+$",
       "title": "Candidate Manifest Version",
       "type": "string"
+    },
+    "candidate_model_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Candidate Model Version"
     },
     "code_revision": {
       "title": "Code Revision",

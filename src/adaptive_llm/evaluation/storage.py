@@ -3,6 +3,7 @@
 import hmac
 import json
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -43,6 +44,7 @@ class SQLiteEvaluationStore:
     ) -> None:
         self.database, self.outbox, self.keyring = database, outbox, keyring
         self.data_dir, self.pending_limit = data_dir, pending_limit
+        self.on_publish: Callable[[EvaluationReport, Identity], None] | None = None
 
     def get(self, evaluation_id: str, identity: Identity) -> EvaluationReport | None:
         LocalDatasetBuilder._authorize(identity, [])
@@ -165,6 +167,8 @@ class SQLiteEvaluationStore:
                         ),
                     )
                 self.outbox.enqueue(events, self.pending_limit)
+                if self.on_publish is not None:
+                    self.on_publish(report, identity)
                 staging.rename(destination)
                 published = True
         except BaseException:

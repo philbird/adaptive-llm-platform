@@ -1,0 +1,64 @@
+{
+  "properties": {
+    "alpha": {
+      "default": 16,
+      "exclusiveMinimum": 0,
+      "title": "Alpha",
+      "type": "number"
+    },
+    "dropout": {
+      "default": 0,
+      "exclusiveMaximum": 1,
+      "minimum": 0,
+      "title": "Dropout",
+      "type": "number"
+    },
+    "gradient_accumulation": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Gradient Accumulation",
+      "type": "integer"
+    },
+    "learning_rate": {
+      "default": 0.0002,
+      "exclusiveMinimum": 0,
+      "title": "Learning Rate",
+      "type": "number"
+    },
+    "precision": {
+      "default": "fp32",
+      "enum": [
+        "fp32",
+        "fp16",
+        "bf16"
+      ],
+      "title": "Precision",
+      "type": "string"
+    },
+    "rank": {
+      "default": 8,
+      "minimum": 1,
+      "title": "Rank",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "target_modules": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Target Modules",
+      "type": "array"
+    }
+  },
+  "title": "AdapterConfig",
+  "type": "object"
+}

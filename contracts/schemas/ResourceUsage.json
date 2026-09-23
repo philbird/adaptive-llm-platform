@@ -1,0 +1,56 @@
+{
+  "properties": {
+    "artifact_bytes": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Artifact Bytes",
+      "type": "integer"
+    },
+    "cpu_seconds": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cpu Seconds"
+    },
+    "examples": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Examples",
+      "type": "integer"
+    },
+    "peak_memory_bytes": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Peak Memory Bytes"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "steps": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Steps",
+      "type": "integer"
+    }
+  },
+  "title": "ResourceUsage",
+  "type": "object"
+}

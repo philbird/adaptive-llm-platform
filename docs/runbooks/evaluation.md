@@ -2,7 +2,8 @@
 
 Only the deterministic fake foundation is registered by default:
 `fake-foundation-local-1`. The operator API and CLI use the same evaluator, suites,
-storage and gate. No training, approval, registry transition or production promotion occurs.
+storage and gate. Slice 3a also resolves registered model versions as candidates; the
+[training runbook](training-and-promotion.md) describes approval and promotion.
 
 ## Reproduce a baseline
 
@@ -159,7 +160,8 @@ left behind. Evaluation never writes tenant operational tables, payloads, replay
 the tenant outbox. The dataset builder's `evaluation_interaction` exclusion remains as defence
 in depth for older or misclassified rows.
 
-Held-out data is the immutable test split only. The reader verifies the stored manifest,
+Held-out data is the immutable test split only. The reader verifies the stored manifest's
+immutable fields and any signed store-only approval,
 its detached MAC, every shard's tenant/split binding, AES-GCM authentication and SHA-256,
 the overall content digest and split counts. Source snapshots are decoded in memory from
 the builder's redacted source boundaries and provenance; the evaluation application gets
@@ -195,9 +197,9 @@ The MAC is HMAC-SHA256 over the exact UTF-8 report bytes using the separately de
 `evaluation-report-v1` key. The database stores the same report and MAC. Reads verify
 both copies; tampering returns a fixed content-free error.
 
-Migration 0006 adds `evaluation_reports` and `baselines`. The evaluation control database is
-`<data_dir>/evaluations/control/<environment>.sqlite3`, separate from tenant operational storage.
-Its outbox, dispatcher, event sink and metrics are also separate; only completion events enter
+Control migration `migrations/control/0006_evaluations.sql` adds `evaluation_reports` and `baselines`. The evaluation control database is
+`<data_dir>/control/<environment>.sqlite3`, separate from tenant operational storage.
+Its outbox, dispatcher, event sink and metrics are also separate; evaluation completion and model lifecycle events enter
 this stream, never individual case events. Publication atomically records
 the report, updates a qualifying baseline, and enqueues one `evaluation.completed.v1`
 per dataset tenant, including tenants with empty shards. Events share a trace id, have
@@ -211,7 +213,10 @@ A passing `candidate == baseline == fake-foundation-local-1` evaluation locks
 per-item scores; they must match the baseline manifest, dataset digest, fixture digest,
 suite list, rubric/judge versions, seed and segment definitions. The deployment manifest
 version is SHA-256 over the local deployment configuration, including model and price versions.
-A changed baseline during evaluation fails publication with 409.
+A changed baseline during evaluation fails publication with 409. Registered candidates are
+verified before loading, enter `evaluating`, and retain this state even after a passing report.
+Reports contain their registry version and artifact digest; model report links commit with
+publication. Only an explicit promotion request can approve them.
 
 Reposting the identical evaluation id/spec returns the original immutable report.
 A new id against an already locked foundation key returns **409**. To replace it, create a
@@ -225,13 +230,12 @@ user keys 403, and insufficient tenant grants cannot build or read reports. CLI 
 exit 1 with `evaluation_failed`; completed gate failures print a report with `passed: false`.
 
 Unit/contract checks remain the first evaluation layer and run through `make check`.
-Human review/owner approval, LLM judging, shadow/canary, training, registry transitions and
-approval APIs remain out of scope. Streaming TTFT, process-memory/cold-start attribution,
+Slice 3a adds fake training, dataset approval and gated registry transitions. Human review,
+LLM judging, real training and shadow/canary execution remain out of scope. Streaming TTFT, process-memory/cold-start attribution,
 real retrieval/infrastructure costs and real-provider behavior are unavailable in this local
 fake baseline and are declared limitations. Filesystem artifact revocation, rotation,
-asymmetric signing and backup/reconciliation remain separate lifecycle work; SQLite backups
-of tenant storage alone do not preserve the evaluation control database or report/dataset
-directories. Migration of pre-isolation local artifacts remains outside this synthetic slice.
+asymmetric signing and backup/reconciliation remain separate lifecycle work; the paired SQLite backup CLI now preserves tenant and control databases atomically, but
+report/dataset/model directories still require separate preservation. Migration of pre-isolation local artifacts remains outside this synthetic slice.
 
 ## Verification
 

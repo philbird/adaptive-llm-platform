@@ -1,0 +1,19 @@
+{
+  "policy_version": "synthetic-training-policy-1",
+  "tenants": {
+    "synthetic-a": {
+      "processing_allowed": true,
+      "content_logging_allowed": false,
+      "training_allowed": true,
+      "retention_seconds": 3600,
+      "residency": "local"
+    },
+    "synthetic-b": {
+      "processing_allowed": true,
+      "content_logging_allowed": false,
+      "training_allowed": true,
+      "retention_seconds": 3600,
+      "residency": "local"
+    }
+  }
+}

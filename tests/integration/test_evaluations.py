@@ -211,9 +211,7 @@ def test_report_publication_is_atomic(
         ).fetchone()[0]
         == 0
     )
-    assert list((seed.directory / "evaluations").iterdir()) == [
-        seed.directory / "evaluations/control"
-    ]
+    assert list((seed.directory / "evaluations").iterdir()) == []
 
 
 def test_cli_and_api_share_report(
@@ -381,7 +379,7 @@ def test_evaluations_run_off_event_loop_and_concurrent_locks_have_one_winner(
         ).fetchone()[0]
         == 1
     )
-    assert len(list((seed.directory / "evaluations").iterdir())) == 2
+    assert len(list((seed.directory / "evaluations").iterdir())) == 1
 
 
 def test_candidate_and_baseline_share_one_event_loop(evaluation_seed: "EvaluationSeed") -> None:

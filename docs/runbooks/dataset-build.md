@@ -61,7 +61,7 @@ curl -fsS http://127.0.0.1:8000/v1/datasets/synthetic-support/versions/VERSION \
 Both dataset APIs require an operator key. The key's configured `dataset_tenants` grant
 access; request fields cannot grant access. User keys receive 403. Operators with insufficient
 tenant grants cannot build or read the manifest. The synthetic operator grants both local
-tenants. Approval remains pending; no approval endpoint exists.
+tenants. Builds start pending. Slice 3a adds the operator approval endpoint described below.
 
 Stop the demo server before the CLI build, then run the same builder against its stored data:
 
@@ -125,6 +125,20 @@ re-checks the minimum train count. If the minimum cannot be met, nothing publish
 watermark stays fixed. Policy and feedback otherwise reflect the read snapshot. This remains a
 local factory rather than a distributed job runner.
 
+## Approval for training (slice 3a)
+
+An operator can POST `{"reason":"SYNTHETIC reviewed dataset"}` to
+`/v1/datasets/{dataset_id}/versions/{version}/approval`. The endpoint verifies the immutable
+manifest MAC and all encrypted shards, checks tenant grants and records the authenticated
+pseudonymous actor, UTC time and readable operator reason (at most 2,000 characters). Operators
+must not paste user content into reasons. It updates only the stored approval, binding
+the updated manifest with a MAC; immutable files remain pending and unchanged. It emits no
+new event. Training requires this approval and a fresh training-policy decision for every
+manifest tenant, including empty shards. Dataset demo policy denies tenant B training, so a
+dataset containing B cannot train under that policy. See
+[training and promotion](training-and-promotion.md) for the explicitly selected training demo
+policy and commands. Approval alone never overrides current policy.
+
 ## Selection and reproducibility
 
 Selection re-evaluates `PolicyEngine` for the trusted stored tenant/application/subject.
@@ -178,7 +192,8 @@ captured once at application startup and reused by every build on that builder.
 API, then rebuild: every interaction for that pseudonym is absent and the watermark advances.
 Existing immutable artifacts are not rewritten; external deletion propagation, dataset
 revocation, key rotation of filesystem artifacts and artifact backup/reconciliation are
-outside this slice. Existing database backup/rotation tools continue to cover SQLite only.
+outside this slice. Paired database backups now include tenant and control SQLite databases; filesystem artifacts
+remain separate. See [backup/restore](backup-restore.md).
 
 ## Checks
 

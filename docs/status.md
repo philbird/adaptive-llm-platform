@@ -1,7 +1,7 @@
 # Status and gap analysis
 
 The engineering specification v1.0 was supplied on 2026-09-23. Milestone 1 slices 1a–1c
-and milestone 2 slices 2a–2b are implemented and verified locally with synthetic data. Staging and production
+and milestone 2 slices 2a–2b plus milestone 3 slice 3a are implemented and verified locally with synthetic data. Staging and production
 acceptance remain separate; no external provider, transport or exporter is configured.
 
 Initial inspection found no existing repository, instructions, CI, deployment configuration,
@@ -11,14 +11,14 @@ Python project uses uv/FastAPI; it provides tooling precedent, not shared infras
 | Area | This checkpoint | Remaining work |
 | --- | --- | --- |
 | Discovery | Gap analysis, ADRs, owner decision list | Confirm real workload and obtain design approvals |
-| Contracts | Serving, dataset and evaluation records with generated schemas and operator APIs | Version compatibility policy, field classification coverage, full model manifest contracts |
+| Contracts | Serving, dataset and evaluation records with generated schemas and operator APIs | Version compatibility policy, field classification coverage |
 | Gateway | Authenticated foundation inference, deadlines, replay, truthful health | Production identity/quotas, SSE |
 | Privacy | Purpose policy, two redaction passes, encrypted replay/content, retention and deletion | External deletion propagation and backup reconciliation |
 | RAG | Tenant/ACL/residency filtering and exact-version synthetic evidence | Real retrieval service |
 | Telemetry | SQLite outbox, retry/quarantine, idempotent sink, in-process metrics and traces | Real transport, exporter, multi-process dispatch |
 | Evaluation (milestone 2, slice 2b, delivered 2026-09-23 on branch `slice-2b`) | Five in-process suites; blinded deterministic judge; paired bootstrap and segmented hard gates; local MACs and transactional foundation baseline lock | Real-provider baseline, human review, asymmetric signing and production promotion approvals |
-| Datasets (milestone 2, slices 2a–2b) | Authenticated feedback/corrections; current-policy eligibility; exact source provenance; indexed exact/5-gram deduplication and golden decontamination; joint family/subject splits; encrypted shards, pending manifests with local MACs and data cards; operator API/CLI; deletion/reproducibility/concurrency tests; evaluation interactions excluded | Approval API, asymmetric signing, external artifact lifecycle |
-| Training/registry | Planned boundary | Approved datasets, CPU smoke, LoRA, lineage, evaluation and promotion gates |
+| Datasets (milestone 2, slices 2a–2b) | Authenticated feedback/corrections; current-policy eligibility; exact source provenance; indexed exact/5-gram deduplication and golden decontamination; joint family/subject splits; encrypted shards, pending manifests with local MACs and data cards; operator API/CLI; deletion/reproducibility/concurrency tests; evaluation interactions excluded | Asymmetric signing, external artifact lifecycle |
+| Training/registry (milestone 3, slice 3a, delivered 2026-09-23 on branch `slice-3a`) | Signed dataset approval; current-policy fake CPU training, durable jobs and resume; MAC-verified artifacts; shared control registry; exact-model evaluation gates; audited promotions and atomic rollback; paired database backup/restore | Real LoRA/PyTorch/PEFT (3b), external artifact lifecycle, production approvals, traffic routing (milestone 4) |
 | Routing/deployment | Foundation-only routing with residency and integer-micro cost constraints | Shadow, bounded fallback, canary, rollback |
 | Research | Disabled configuration intent | Isolated activation/pruning work after earlier milestones |
 
@@ -66,9 +66,9 @@ transactions. The default serving policy is unchanged; a separate synthetic demo
 tenant A into logging/training and denies tenant B training. See the
 [dataset-build runbook](runbooks/dataset-build.md) for commands and limitations. Rebuilds keep
 stable content digests while generating new immutable versions and build-start deletion watermarks.
-All manifests remain pending. Builds compute outside database locks and recheck deletion tombstones
+Builds start pending; slice 3a adds signed store-only operator approval. Builds compute outside database locks and recheck deletion tombstones
 before publishing one lifecycle event per tenant. Migration 0005 backfills and indexes interaction
-start times for SQL window selection. The recovery drill now verifies migrations 1–6.
+start times for SQL window selection. The recovery drill now verifies tenant migrations 1–5/7 and control migrations 3/6/7.
 
 Slice 2b adds migration 0006 (`evaluation_reports`, `baselines`). Evaluation runs on a worker
 thread through `InferenceService`, with authenticated tenant grants, `application_id="evaluation"`
@@ -83,7 +83,8 @@ uses its own purpose-derived key. Candidate and baseline suites share one event 
 
 The local foundation baseline was re-measured after persistence isolation and locked on
 **2026-09-23 at 17:54:32 UTC** in
-`.local/evaluation-review-1/evaluations/control/local.sqlite3`: deployment
+the legacy `.local/evaluation-review-1/evaluations/control/local.sqlite3`
+(moved to `.local/evaluation-review-1/control/local.sqlite3` on slice-3a startup): deployment
 `fake-foundation-local-1`, dataset `synthetic-evaluation` version
 `01a0cf67-a839-7019-a072-be800b15ff1e`, evaluation
 `01a0cf67-a83c-77b3-8b4a-0ebeb6c51cdb`. All five suites passed: golden 20, held-out 8,
@@ -100,6 +101,32 @@ fixture limits and commands. The demonstration leaves the nine seeded tenant int
 35 payloads, nine replay entries and 46 tenant outbox rows unchanged; its two lifecycle events
 are stored only in the evaluation control outbox. No scratch directory remains.
 
-Future increments may broaden to milestone 3 LoRA, milestone 4 routing,
+Slice 3a uses `migrations/control/` for evaluation/registry tables and a separate tenant
+migration to remove empty legacy control tables. The shared store is
+`<data_dir>/control/<environment>.sqlite3`. Existing isolated evaluation stores move on startup;
+ambiguous paths or populated misplaced tables fail closed. Dataset approval changes only
+the stored manifest, with authenticated actor and readable audit reason. Training rechecks
+current policy for every manifest tenant and runs off the HTTP event loop. Two signed fake
+checkpoints support retry with the same job id; final versions are never overwritten.
+All artifact files are digest/MAC verified before specialist loading. Candidate reports bind
+registry version, artifact digest, dataset version and the locked foundation baseline.
+Approval remains an explicit operator action; shadow/canary/production states do not route
+traffic. Emergency rollback uses the previous version's recorded approval history and verified
+artifact, independent of later baseline replacement. Adapter architecture identifiers are
+extensible and checked against the trainer declaration; multi-dataset manifests are refused
+until mixing is supported. Backup/restore atomically covers both database schemas, records
+and outboxes;
+filesystem artifacts and keys still require separate preservation. See the
+[training and promotion runbook](runbooks/training-and-promotion.md).
+
+Slice 3a pass-1 review verification on 2026-09-23: `make check integration` passed formatting, Ruff,
+strict mypy (58 source files), 122 unit/contract tests and 89 integration tests. The separate
+security/load run passed 43 tests: event correlation 1,000/1,000 (100%), with 5,000 events;
+normal p95 overhead 1.681 ms. All five drills passed; paired backup/restore recovered both
+migration ledgers, the original replay, one control job and five pending events in 0.054 s.
+`pytest -m smoke` passed: CPU train → evaluate → approve → shadow completed in **0.122 s**, below
+the ten-second ceiling. These are local synthetic measurements, not production acceptance.
+
+Future increments may broaden to milestone 3 slice 3b LoRA, milestone 4 routing,
 milestone 5 distillation, and optional milestone 6 research. Each remains a separate reviewable
 increment. No production acceptance criterion is claimed satisfied at this checkpoint.
