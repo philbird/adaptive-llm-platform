@@ -1,0 +1,15 @@
+{
+  "local_secret": "SYNTHETIC-LOCAL-ONLY-hmac-secret-v1",
+  "keys": {
+    "synthetic-key-a": {
+      "tenant_id": "synthetic-a",
+      "application_ids": ["support-assistant"],
+      "environment": "local"
+    },
+    "synthetic-key-b": {
+      "tenant_id": "synthetic-b",
+      "application_ids": ["support-assistant"],
+      "environment": "local"
+    }
+  }
+}

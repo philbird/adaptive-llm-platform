@@ -283,7 +283,7 @@ class RouteDecision(Record):
     router_version: str = "foundation-only-1"
     experiment_id: str | None = None
     candidates: list[Candidate]
-    selected_model_deployment_id: str
+    selected_model_deployment_id: str | None
     fallback_deployment_ids: list[str] = Field(default_factory=list)
     decision_latency_ms: float
     policy_constraints: list[str]

@@ -1,16 +1,53 @@
 {
   "components": {
     "schemas": {
+      "Citation": {
+        "additionalProperties": false,
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "chunk_id"
+        ],
+        "title": "Citation",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "Health": {
         "properties": {
           "inference_enabled": {
-            "default": false,
             "title": "Inference Enabled",
             "type": "boolean"
           },
           "stage": {
-            "const": "scaffold",
-            "default": "scaffold",
+            "const": "slice-1a",
+            "default": "slice-1a",
             "title": "Stage",
             "type": "string"
           },
@@ -21,13 +58,409 @@
             "type": "string"
           }
         },
+        "required": [
+          "inference_enabled"
+        ],
         "title": "Health",
+        "type": "object"
+      },
+      "InferenceRequest": {
+        "additionalProperties": false,
+        "description": "Client request.\n\n`request_id` is the idempotency key, scoped to the authenticated tenant and\n`application_id`. A replay within the idempotency window returns the original response\nand marks it as replayed; a replay with a different body is rejected.",
+        "properties": {
+          "application_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Application Id",
+            "type": "string"
+          },
+          "max_output_tokens": {
+            "default": 512,
+            "maximum": 2048.0,
+            "minimum": 1.0,
+            "title": "Max Output Tokens",
+            "type": "integer"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Messages",
+            "type": "array"
+          },
+          "metadata": {
+            "maxProperties": 16,
+            "patternProperties": {
+              "^[\\w.-]+$": {
+                "maxLength": 200,
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "maxLength": 100,
+              "minLength": 1
+            },
+            "title": "Metadata",
+            "type": "object"
+          },
+          "rag": {
+            "$ref": "#/components/schemas/RagOptions"
+          },
+          "request_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "response_format": {
+            "$ref": "#/components/schemas/ResponseFormat"
+          },
+          "routing": {
+            "$ref": "#/components/schemas/RoutingOptions"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "stream": {
+            "default": false,
+            "title": "Stream",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "request_id",
+          "messages",
+          "application_id"
+        ],
+        "title": "InferenceRequest",
+        "type": "object"
+      },
+      "InferenceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "content": {
+            "classification": "confidential",
+            "maxLength": 32000,
+            "title": "Content",
+            "type": "string"
+          },
+          "estimated_cost_micros": {
+            "title": "Estimated Cost Micros",
+            "type": "integer"
+          },
+          "finish_reason": {
+            "enum": [
+              "stop",
+              "length",
+              "content_filter"
+            ],
+            "title": "Finish Reason",
+            "type": "string"
+          },
+          "interaction_id": {
+            "title": "Interaction Id",
+            "type": "string"
+          },
+          "model_deployment_id": {
+            "title": "Model Deployment Id",
+            "type": "string"
+          },
+          "replayed": {
+            "default": false,
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "route": {
+            "$ref": "#/components/schemas/RouteSummary"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        },
+        "required": [
+          "interaction_id",
+          "trace_id",
+          "model_deployment_id",
+          "content",
+          "citations",
+          "usage",
+          "estimated_cost_micros",
+          "finish_reason"
+        ],
+        "title": "InferenceResponse",
+        "type": "object"
+      },
+      "Message": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "classification": "confidential",
+            "maxLength": 32000,
+            "title": "Content",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "Message",
+        "type": "object"
+      },
+      "RagOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "index_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Id"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "title": "RagOptions",
+        "type": "object"
+      },
+      "ResponseFormat": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "type": {
+            "default": "text",
+            "enum": [
+              "text",
+              "json_object"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "ResponseFormat",
+        "type": "object"
+      },
+      "RouteSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "fallback_used": {
+            "default": false,
+            "title": "Fallback Used",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "title": "RouteSummary",
+        "type": "object"
+      },
+      "RoutingOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "deadline_ms": {
+            "default": 5000,
+            "maximum": 30000.0,
+            "minimum": 50.0,
+            "title": "Deadline Ms",
+            "type": "integer"
+          },
+          "max_cost_micros": {
+            "default": 20000,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Max Cost Micros",
+            "type": "integer"
+          },
+          "mode": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "foundation"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "title": "RoutingOptions",
+        "type": "object"
+      },
+      "Usage": {
+        "properties": {
+          "cached_input_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cached Input Tokens"
+          },
+          "input_tokens": {
+            "minimum": 0.0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "minimum": 0.0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "reasoning_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Tokens"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "provider_reported",
+              "locally_estimated"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "tokenizer": {
+            "title": "Tokenizer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "source",
+          "tokenizer"
+        ],
+        "title": "Usage",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
         "type": "object"
       }
     }
   },
   "info": {
-    "description": "Scaffolding only. Inference, persistence and training are not enabled.",
+    "description": "In-memory foundation inference using local synthetic identity and documents.",
     "title": "Adaptive LLM Specialisation Platform",
     "version": "0.1.0"
   },
@@ -51,6 +484,81 @@
         "summary": "Health",
         "tags": [
           "operations"
+        ]
+      }
+    },
+    "/v1/inference": {
+      "post": {
+        "operationId": "inference_v1_inference_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InferenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inference",
+        "tags": [
+          "inference"
         ]
       }
     }
