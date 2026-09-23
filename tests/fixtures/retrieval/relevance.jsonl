@@ -1,0 +1,8 @@
+{"input": "SYNTHETIC relevance topic 0", "target": "SYNTHETIC relevance topic 0 is grounded in the current source.", "expect_contains": ["grounded"], "category": "stale", "k": 3}
+{"input": "SYNTHETIC relevance topic 1", "target": "SYNTHETIC relevance topic 1 is grounded in the current source.", "expect_contains": ["grounded"], "category": "acl", "k": 3}
+{"input": "SYNTHETIC relevance topic 2", "target": "SYNTHETIC relevance topic 2 is grounded in the current source.", "expect_contains": ["grounded"], "category": "stale", "k": 3}
+{"input": "SYNTHETIC relevance topic 3", "target": "SYNTHETIC relevance topic 3 is grounded in the current source.", "expect_contains": ["grounded"], "category": "acl", "k": 3}
+{"input": "SYNTHETIC relevance topic 4", "target": "SYNTHETIC relevance topic 4 is grounded in the current source.", "expect_contains": ["grounded"], "category": "stale", "k": 3}
+{"input": "SYNTHETIC relevance topic 5", "target": "SYNTHETIC relevance topic 5 is grounded in the current source.", "expect_contains": ["grounded"], "category": "acl", "k": 3}
+{"input": "SYNTHETIC relevance topic 6", "target": "SYNTHETIC relevance topic 6 is grounded in the current source.", "expect_contains": ["grounded"], "category": "stale", "k": 3}
+{"input": "SYNTHETIC relevance topic 7", "target": "SYNTHETIC relevance topic 7 is grounded in the current source.", "expect_contains": ["grounded"], "category": "acl", "k": 3}

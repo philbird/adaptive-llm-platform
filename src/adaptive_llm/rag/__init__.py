@@ -1,5 +1,7 @@
 """ACL-first lexical retrieval with exact source evidence and bounded context."""
 
+from __future__ import annotations
+
 import hashlib
 import json
 import re
@@ -48,9 +50,30 @@ class LocalRetriever:
     ) -> None:
         if min(candidate_limit, supplied_limit, context_token_budget) < 1:
             raise ValueError("invalid_retrieval_limits")
-        self._chunks = tuple(
-            IndexedChunk.model_validate(row) for row in json.loads(path.read_text())
+        self._initialize(
+            tuple(IndexedChunk.model_validate(row) for row in json.loads(path.read_text())),
+            keyring,
+            candidate_limit,
+            supplied_limit,
+            context_token_budget,
         )
+
+    @classmethod
+    def from_chunks(cls, chunks: tuple[IndexedChunk, ...], keyring: Keyring) -> LocalRetriever:
+        """Use the same ACL/ranking path for an authenticated in-memory evaluation snapshot."""
+        retriever = cls.__new__(cls)
+        retriever._initialize(chunks, keyring, 10, 3, 2048)
+        return retriever
+
+    def _initialize(
+        self,
+        chunks: tuple[IndexedChunk, ...],
+        keyring: Keyring,
+        candidate_limit: int,
+        supplied_limit: int,
+        context_token_budget: int,
+    ) -> None:
+        self._chunks = chunks
         self._versions: dict[tuple[str, str, str, str], str] = {}
         for chunk in self._chunks:
             key = (chunk.tenant_id, chunk.environment, chunk.region, chunk.index_id)

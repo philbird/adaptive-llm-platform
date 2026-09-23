@@ -1,0 +1,56 @@
+{
+  "properties": {
+    "ci_lower": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ci Lower"
+    },
+    "ci_upper": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ci Upper"
+    },
+    "mean_delta": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mean Delta"
+    },
+    "sample_size": {
+      "minimum": 0,
+      "title": "Sample Size",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "sample_size"
+  ],
+  "title": "PairedComparison",
+  "type": "object"
+}

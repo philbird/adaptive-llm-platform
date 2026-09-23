@@ -35,6 +35,7 @@ class Keyring:
                 "replay-fingerprint-v1",
                 "dataset-example-v1",
                 "dataset-manifest-v1",
+                "evaluation-report-v1",
             )
         }
 
@@ -57,6 +58,9 @@ class Keyring:
 
     def manifest_mac(self, value: str) -> str:
         return self._hash("dataset-manifest-v1", value)
+
+    def report_mac(self, value: str) -> str:
+        return self._hash("evaluation-report-v1", value)
 
 
 @dataclass(frozen=True)

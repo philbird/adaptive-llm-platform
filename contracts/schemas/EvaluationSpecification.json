@@ -1,0 +1,181 @@
+{
+  "properties": {
+    "baseline_deployment_id": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Baseline Deployment Id"
+    },
+    "candidate_deployment_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Candidate Deployment Id",
+      "type": "string"
+    },
+    "concurrency": {
+      "default": 4,
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Concurrency",
+      "type": "integer"
+    },
+    "confidence_level": {
+      "default": 0.95,
+      "exclusiveMaximum": 1,
+      "exclusiveMinimum": 0.5,
+      "title": "Confidence Level",
+      "type": "number"
+    },
+    "cost_per_success_micros_max": {
+      "default": 20000,
+      "minimum": 0,
+      "title": "Cost Per Success Micros Max",
+      "type": "integer"
+    },
+    "critical_segments": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "title": "Critical Segments",
+      "type": "array"
+    },
+    "dataset_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "dataset_version": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Dataset Version",
+      "type": "string"
+    },
+    "error_rate_max": {
+      "default": 0,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Error Rate Max",
+      "type": "number"
+    },
+    "evaluation_id": {
+      "title": "Evaluation Id",
+      "type": "string"
+    },
+    "judge_version": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "deterministic-judge-1",
+      "title": "Judge Version"
+    },
+    "latency_p95_ms_max": {
+      "default": 5000,
+      "exclusiveMinimum": 0,
+      "title": "Latency P95 Ms Max",
+      "type": "number"
+    },
+    "minimum_sample_size": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Minimum Sample Size"
+    },
+    "non_inferiority_margin": {
+      "default": 0.02,
+      "exclusiveMaximum": 1,
+      "exclusiveMinimum": 0,
+      "title": "Non Inferiority Margin",
+      "type": "number"
+    },
+    "performance_requests": {
+      "default": 40,
+      "maximum": 10000,
+      "minimum": 1,
+      "title": "Performance Requests",
+      "type": "integer"
+    },
+    "rubric_version": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "synthetic-rubric-1",
+      "title": "Rubric Version"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "seed": {
+      "default": 23,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "suites": {
+      "items": {
+        "enum": [
+          "golden",
+          "held_out",
+          "safety",
+          "retrieval",
+          "performance"
+        ],
+        "type": "string"
+      },
+      "maxItems": 5,
+      "minItems": 1,
+      "title": "Suites",
+      "type": "array"
+    }
+  },
+  "required": [
+    "candidate_deployment_id",
+    "baseline_deployment_id",
+    "dataset_id",
+    "dataset_version",
+    "suites"
+  ],
+  "title": "EvaluationSpecification",
+  "type": "object"
+}

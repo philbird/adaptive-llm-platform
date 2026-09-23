@@ -182,7 +182,7 @@ def test_started_at_migration_backfill_index_and_window_boundaries(
             for row in database.connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
             )
-        ] == [1, 2, 3, 4, 5]
+        ] == [1, 2, 3, 4, 5, 6]
         assert database.connection.execute(
             "SELECT started_at FROM interactions WHERE record_id=?", (instances[1].interaction_id,)
         ).fetchone()[0] == timestamp(AT)

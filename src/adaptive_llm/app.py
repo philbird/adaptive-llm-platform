@@ -22,6 +22,8 @@ from adaptive_llm.contracts import (
     DatasetManifest,
     DatasetSpecification,
     Environment,
+    EvaluationInput,
+    EvaluationReport,
     Feedback,
     FeedbackInput,
     InferenceRequest,
@@ -30,6 +32,9 @@ from adaptive_llm.contracts import (
 )
 from adaptive_llm.datasets.builder import DatasetBuilder, LocalDatasetBuilder, code_revision
 from adaptive_llm.datasets.sources import LocalSourceResolver, SourceResolver
+from adaptive_llm.evaluation.data import LocalDatasetReader
+from adaptive_llm.evaluation.service import EvaluationDeployment, Evaluator, LocalEvaluator
+from adaptive_llm.evaluation.storage import EvaluationStore, SQLiteEvaluationStore
 from adaptive_llm.events import EventSink, InMemoryEventSink
 from adaptive_llm.events.outbox import Dispatcher, OutboxBackoff, OutboxStore
 from adaptive_llm.gateway.feedback import FeedbackService
@@ -72,6 +77,10 @@ class Settings:
     golden_dir: Path = ROOT / "tests/fixtures/golden"
     dataset_builder: DatasetBuilder | None = None
     dataset_sources: SourceResolver | None = None
+    evaluator: Evaluator | None = None
+    evaluation_store: EvaluationStore | None = None
+    evaluation_deployments: Mapping[str, EvaluationDeployment] | None = None
+    evaluation_events: EventSink | None = None
     event_capacity: int = 4096
     outbox_backoff: OutboxBackoff = field(default_factory=OutboxBackoff)
     outbox_pending_limit: int = 100_000
@@ -228,14 +237,63 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
     application.state.payloads = payloads
     application.state.persistence = persistence
     application.state.feedback = FeedbackService(persistence, policy)
+    revision = code_revision()
     application.state.datasets = settings.dataset_builder or LocalDatasetBuilder(
         persistence,
         policy,
         settings.dataset_sources or LocalSourceResolver(settings.documents_path),
         settings.data_dir,
         settings.golden_dir,
-        revision=code_revision(),
+        revision=revision,
     )
+    if settings.evaluator is not None:
+        application.state.evaluations = settings.evaluator
+    else:
+        evaluation_store = settings.evaluation_store
+        if evaluation_store is None:
+            evaluation_database = SQLiteDatabase(
+                settings.data_dir / "evaluations" / "control",
+                settings.environment,
+                migrate_on_startup=settings.migrate_on_startup,
+            )
+            application.state.evaluation_database = evaluation_database
+            evaluation_outbox = SQLiteOutboxStore(evaluation_database)
+            evaluation_events = settings.evaluation_events or InMemoryEventSink(
+                settings.event_capacity
+            )
+            application.state.evaluation_outbox = evaluation_outbox
+            application.state.evaluation_events = evaluation_events
+            application.state.evaluation_dispatcher = Dispatcher(
+                evaluation_outbox,
+                evaluation_events,
+                InProcessMetrics(),
+                backoff=settings.outbox_backoff,
+                tracer=settings.tracer,
+            )
+            evaluation_store = SQLiteEvaluationStore(
+                evaluation_database,
+                evaluation_outbox,
+                keyring,
+                settings.data_dir,
+                settings.outbox_pending_limit,
+            )
+        foundation = FoundationRouter(settings.routing_path).deployment
+        deployments = settings.evaluation_deployments or {
+            foundation.model_deployment_id: EvaluationDeployment(foundation, FakeProvider())
+        }
+        application.state.evaluations = LocalEvaluator(
+            persistence,
+            LocalDatasetReader(
+                application.state.datasets, settings.data_dir, persistence.cipher, keyring
+            ),
+            evaluation_store,
+            deployments,
+            foundation.model_deployment_id,
+            settings.golden_dir.parent,
+            settings.routing_path,
+            settings.validator if settings.validator is not None else LocalValidator(),
+            revision,
+        )
 
     application.state.authenticator = authenticator
     application.state.keyring = keyring
@@ -246,11 +304,16 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     settings: Settings = application.state.settings
     application.state.ready = False
     dispatcher_task: asyncio.Task[None] | None = None
+    evaluation_dispatcher_task: asyncio.Task[None] | None = None
     try:
         if settings.inference_enabled:
             _start_inference(application, settings)
             if settings.outbox_dispatch_enabled:
                 dispatcher_task = asyncio.create_task(application.state.dispatcher.run())
+                if hasattr(application.state, "evaluation_dispatcher"):
+                    evaluation_dispatcher_task = asyncio.create_task(
+                        application.state.evaluation_dispatcher.run()
+                    )
         application.state.ready = True
         yield
     finally:
@@ -258,6 +321,11 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         if dispatcher_task is not None:
             application.state.dispatcher.stop()
             await dispatcher_task
+        if evaluation_dispatcher_task is not None:
+            application.state.evaluation_dispatcher.stop()
+            await evaluation_dispatcher_task
+        if hasattr(application.state, "evaluation_database"):
+            application.state.evaluation_database.close()
         if hasattr(application.state, "database"):
             application.state.database.close()
 
@@ -378,6 +446,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return await asyncio.to_thread(builder.get, dataset_id, version, identity)
             except StorageError:
                 raise GatewayError(503, "dataset_read_failed") from None
+
+        @application.post("/v1/evaluations", response_model=EvaluationReport)
+        async def evaluate(
+            body: EvaluationInput, identity: Annotated[Identity, Depends(authenticate)]
+        ) -> EvaluationReport:
+            LocalDatasetBuilder._authorize(identity, [])
+            evaluator: Evaluator = application.state.evaluations
+            try:
+                return await asyncio.to_thread(evaluator.evaluate, body, identity)
+            except GatewayError:
+                raise
+            except Exception:
+                raise GatewayError(503, "evaluation_failed") from None
+
+        @application.get("/v1/evaluations/{evaluation_id}", response_model=EvaluationReport)
+        async def get_evaluation(
+            evaluation_id: str, identity: Annotated[Identity, Depends(authenticate)]
+        ) -> EvaluationReport:
+            LocalDatasetBuilder._authorize(identity, [])
+            evaluator: Evaluator = application.state.evaluations
+            try:
+                return await asyncio.to_thread(evaluator.get, evaluation_id, identity)
+            except GatewayError:
+                raise
+            except Exception:
+                raise GatewayError(503, "evaluation_read_failed") from None
 
         @application.delete("/v1/privacy/interactions/{interaction_id}", status_code=204)
         async def delete_one(

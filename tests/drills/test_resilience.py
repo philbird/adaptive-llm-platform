@@ -212,10 +212,10 @@ def test_backup_restore_round_trip(
             for r in restarted.state.database.connection.execute(
                 "SELECT version FROM schema_migrations"
             )
-        ] == [1, 2, 3, 4, 5]
+        ] == [1, 2, 3, 4, 5, 6]
         assert restarted.state.dispatcher.dispatch_once() == 5
     print(
-        f"backup/restore: replay=matched migrations=5 restored_events=5"
+        f"backup/restore: replay=matched migrations=6 restored_events=5"
         f" elapsed_s={perf_counter() - started:.3f}"
     )
 

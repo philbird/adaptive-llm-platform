@@ -551,10 +551,119 @@ class TrainingCompleted(Record):
     status: Literal["succeeded", "failed", "cancelled"]
 
 
+SuiteName = Literal["golden", "held_out", "safety", "retrieval", "performance"]
+EvaluationMetrics = Annotated[dict[Identifier, float], Field(max_length=40)]
+
+
+class EvaluationSpecification(Record):
+    evaluation_id: str = Field(default_factory=uid)
+    candidate_deployment_id: Identifier
+    baseline_deployment_id: Identifier | None
+    dataset_id: Identifier
+    dataset_version: Identifier
+    suites: list[SuiteName] = Field(min_length=1, max_length=5)
+    rubric_version: Identifier | None = "synthetic-rubric-1"
+    judge_version: Identifier | None = "deterministic-judge-1"
+    seed: int = Field(default=23, ge=0)
+    confidence_level: float = Field(default=0.95, gt=0.5, lt=1)
+    non_inferiority_margin: float = Field(default=0.02, gt=0, lt=1)
+    minimum_sample_size: int | None = Field(default=None, ge=1)
+    critical_segments: list[Identifier] = Field(default_factory=list, max_length=16)
+    performance_requests: int = Field(default=40, ge=1, le=10_000)
+    concurrency: int = Field(default=4, ge=1, le=100)
+    latency_p95_ms_max: float = Field(default=5000, gt=0)
+    error_rate_max: float = Field(default=0, ge=0, le=1)
+    cost_per_success_micros_max: int = Field(default=20_000, ge=0)
+
+    @model_validator(mode="after")
+    def valid_evaluation(self) -> EvaluationSpecification:
+        try:
+            identifier = UUID(self.evaluation_id)
+        except ValueError:
+            raise ValueError("invalid_evaluation_id") from None
+        if identifier.version != 7 or str(identifier) != self.evaluation_id:
+            raise ValueError("invalid_evaluation_id")
+        if self.dataset_id in {".", ".."} or self.dataset_version in {".", ".."}:
+            raise ValueError("invalid_dataset_identifier")
+        if len(set(self.suites)) != len(self.suites):
+            raise ValueError("duplicate_suites")
+        if len(set(self.critical_segments)) != len(self.critical_segments):
+            raise ValueError("duplicate_segments")
+        return self
+
+
+class EvaluationInput(EvaluationSpecification):
+    model_config = ConfigDict(extra="forbid")
+    replace: bool = Field(default=False, strict=True)
+    operator_note: Content | None = None
+
+    @model_validator(mode="after")
+    def replacement_note(self) -> EvaluationInput:
+        if self.replace and not (self.operator_note and self.operator_note.strip()):
+            raise ValueError("replacement_note_required")
+        return self
+
+
+class ItemScore(Record):
+    item_id: Identifier
+    score: float = Field(ge=0, le=1)
+    segments: list[Identifier] = Field(default_factory=list, max_length=32)
+
+
+class SuiteResult(Record):
+    suite: SuiteName
+    items: int = Field(ge=0)
+    metrics: EvaluationMetrics
+    per_segment_metrics: dict[Identifier, EvaluationMetrics] = Field(
+        default_factory=dict, max_length=1000
+    )
+    failures: dict[Identifier, int] = Field(default_factory=dict, max_length=40)
+    scores: list[ItemScore] = Field(default_factory=list, max_length=100_000)
+    completed: bool = True
+    first_token_latency_ms: float | None = Field(default=None, ge=0)
+    total_cost_micros: int | None = Field(default=None, ge=0)
+    cost_per_success_micros: int | None = Field(default=None, ge=0)
+
+
+class PairedComparison(Record):
+    mean_delta: float | None = None
+    ci_lower: float | None = None
+    ci_upper: float | None = None
+    sample_size: int = Field(ge=0)
+
+
+class GateDecision(Record):
+    gate: Identifier
+    passed: bool
+    reason: Identifier
+
+
+class EvaluationReport(Record):
+    specification: EvaluationSpecification
+    candidate_manifest_version: Identifier
+    baseline_manifest_version: Identifier | None
+    baseline_report_id: str | None = None
+    dataset_content_digest: str
+    suite_content_digest: str
+    code_revision: str
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+    suite_results: list[SuiteResult]
+    baseline_suite_results: list[SuiteResult]
+    paired_comparison: PairedComparison
+    segment_comparisons: dict[Identifier, PairedComparison]
+    coverage: dict[Identifier, int]
+    pilot_standard_deviation: float = Field(ge=0)
+    derived_minimum_sample_size: int = Field(ge=1)
+    gate_decisions: list[GateDecision]
+    passed: bool
+    known_limitations: list[str]
+
+
 class EvaluationCompleted(Record):
     evaluation_id: str
     model_version: str
-    baseline_version: str
+    baseline_version: str | None
     suites: list[str]
     passed: bool
     report_ref: Reference
