@@ -33,7 +33,7 @@ integer-micro costs; correlated events to an in-memory collector; one end-to-end
 trace walkthrough. Exit: p95 overhead for logging, classification and routing under the
 configured 50 ms on the local load test.
 
-**1b. Persistence.** Numbered migrations for SQLite metadata; persistence-path redaction;
+**1b. Persistence. Delivered 2026-09-23 on branch `slice-1b`.** Numbered migrations for SQLite metadata; persistence-path redaction;
 AES-GCM encrypted payload refs bound to tenant and interaction ids; idempotent replay of
 `request_id`; retention and deletion tombstones; privacy and isolation tests.
 

@@ -1,10 +1,25 @@
+import sqlite3
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from adaptive_llm.app import Settings, create_app
 from adaptive_llm.contracts import InferenceRequest
 from adaptive_llm.gateway.identity import Identity
+
+
+def test_constructing_app_and_openapi_do_not_create_files(tmp_path: Path) -> None:
+    data_dir = tmp_path / "not-created"
+    application = create_app(Settings(data_dir=data_dir))
+    application.openapi()
+    assert not list(tmp_path.iterdir())
+    assert not hasattr(application.state, "database")
+    with TestClient(application):
+        assert (data_dir / "local.sqlite3").is_file()
+        database = application.state.database
+    with pytest.raises(sqlite3.ProgrammingError):
+        database.connection.execute("SELECT 1")
 
 
 def test_lifespan_health_and_mounted_inference() -> None:

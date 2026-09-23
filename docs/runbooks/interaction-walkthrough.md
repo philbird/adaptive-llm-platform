@@ -1,8 +1,11 @@
-# Slice 1a: one in-memory interaction
+# Slices 1a–1b: one interaction, from serving to persistence
 
 This walkthrough uses only the synthetic keys, policies, prices and documents checked into
-the repository. All serving components run in the application process. There is no database,
-external provider call, exporter or durable content write.
+the repository. All serving components run in the application process, with one SQLite file
+at `.local/local.sqlite3` by default. Database opening and migrations happen during application
+lifespan startup; importing the module or constructing an app creates no files. There is no
+external provider call or exporter. The
+health stage label remains `slice-1a` for compatibility; persistence is now enabled.
 
 Start the local gateway with `make dev`. `/healthz` reports
 `{"status":"ok","stage":"slice-1a","inference_enabled":true}`. Setting
@@ -34,7 +37,7 @@ curl http://127.0.0.1:8000/v1/inference \
    The service atomically reserves `(tenant, application, request_id)` using an HMAC of the
    canonical validated body, including its defaults. JSON key order does not affect replay.
    `Settings.secret` defaults to the synthetic secret in the configured identity JSON and can
-   be explicitly injected. `create_app` constructs a single `Keyring` and injects it into the
+   be explicitly injected. Lifespan startup constructs a single `Keyring` and injects it into the
    authenticator, retriever and service. At startup it derives five keys with
    `HMAC-SHA256(secret, purpose_label)`, using labels `subject-pseudonym-v1`, `input-content-v1`,
    `output-content-v1`, `query-content-v1` and `replay-fingerprint-v1`. Each subsequent HMAC uses
@@ -48,9 +51,9 @@ curl http://127.0.0.1:8000/v1/inference \
    Every client metadata value goes through the same redaction patterns; counts aggregate across
    messages and metadata. Metadata keys retain their validated identifiers. Metadata remains
    untrusted for identity and policy and is not included in events or model context.
-   Card candidates must pass a Luhn checksum; this is a local heuristic. There is no persistence
-   redactor in this slice. The existing persistence version field is a reserved contract default,
-   with empty counts; it does not indicate that a persistence pass ran.
+   Card candidates must pass a Luhn checksum; this is a local heuristic. A separately versioned
+   persistence pass prepares hashes before each relevant event, as described below. Retrieval and generation continue
+   to receive the processing-path output, including business identifiers.
 3. **Start and retrieve.** New UUIDv7 interaction and trace ids correlate all records.
    `interaction.started.v1` is emitted after policy. A placeholder labels RAG requests
    `question_answering` and other requests `general`, with classifier version
@@ -66,7 +69,9 @@ curl http://127.0.0.1:8000/v1/inference \
    The retriever records up to ten candidates and supplies at most three chunks within 2048
    fake whitespace tokens. Every candidate records its retrieved rank, supplied flag, context
    position (zero-based or null), token count and SHA-256 content hash. The query hash is
-   HMAC-SHA256 with the derived query key; neither query nor chunk content appears in the event.
+   HMAC-SHA256 of the persistence-redacted query with the derived query key. The gateway prepares
+   this hash before emitting the retrieval record; the stored record retains the identical hash.
+   Neither query nor chunk content appears in the event.
    Disabled RAG skips the retriever and retrieval span entirely, emits no retrieval event and
    leaves `Interaction.retrieval_run_id` null. The provider receives empty context. Direct calls
    to `LocalRetriever` with disabled RAG are rejected without creating a run; there is no disabled
@@ -92,11 +97,44 @@ curl http://127.0.0.1:8000/v1/inference \
    route quote. The validator checks non-empty content, canonical and inline citation ids
    against supplied chunks, and an actual JSON object when requested. Truncated invalid JSON
    fails validation. Validation failure returns 502 `validation_failed`; there is no fallback.
-6. **Complete.** The gateway returns `InferenceResponse` with the same interaction/trace ids,
+6. **Prepare the response.** The gateway produces `InferenceResponse` with the same interaction/trace ids,
    content, citations, usage, estimated cost and finish reason. Operational events contain
    versions, ids, counts, decisions and keyed input/output hashes, never prompt, response or
-   retrieved text. Content reference fields remain null. The response is held in memory only
-   for explicitly requested replay; no content is written to disk.
+   retrieved text.
+7. **Persistence-path evidence.** `LocalPersistenceRedactor`, version
+   `persistence-regex-local-1`, applies the processing credential/payment classes plus emails
+   and phone numbers. The local rule set is shared by the configured tenants; names and postal
+   codes are outside this slice. Counts cover processing-path messages, metadata values and
+   generated output; the query reuses the redacted last message. Inputs are prepared before
+   retrieval events, and output before generation events. Metadata values are checked but are
+   not stored. Event and stored input/query/output hashes are HMACs of the same persistence-path
+   text. Commit adds refs without recomputing those hashes.
+   Governed chunk hashes remain the original source-version evidence; chunk content is not stored.
+   The pass completes before any content-bearing write. Failure writes content-free metadata
+   with `error_code="persistence_redaction_failed"`, null refs and no replay. Failed input
+   redaction leaves input/query/output hashes null. If only output redaction fails, its hash is
+   null and earlier successful input/query hashes remain unchanged in both events and storage.
+   Serving still returns the generated response.
+8. **Encrypt and persist.** One transaction writes the `Started`, `Interaction`, `RetrievalRun`,
+   `RouteDecision` and `GenerationAttempt` contracts, with the same correlation ids as the events.
+   Stages not reached are omitted. Failed attempts are recorded but never replayed. Message,
+   query and output payload refs require `content_logging_allowed`; all three remain null for
+   this walkthrough's default policy. The walkthrough database contains five metadata records,
+   an encrypted replay response and its scoped replay entry. There are no plaintext messages,
+   query, output, raw subject, credentials or retrieved chunks. Persistence counts are empty
+   for this request because its secrets were already removed by the processing pass.
+   SQLite rows include tenant, expiry and lifecycle state. Replay is stored for its operational
+   purpose even when content logging is disabled, separately from logging refs.
+   AES-256-GCM uses a fresh 96-bit random nonce for each blob, with a uniqueness constraint,
+   `key_version="local-1"`, and AAD `tenant_id|interaction_id|field` (`messages`, `query`,
+   `output`, or `replay`). Authentication failures never return plaintext. `Settings.payload_key`
+   accepts 32 bytes; only local development derives it from the synthetic identity secret.
+   Production must supply a KMS-managed key. A transaction failure rolls back metadata and
+   payloads together, increments `application.state.persistence.failures`, and still serves
+   the response. Encryption and the transaction run through `asyncio.to_thread`; the response
+   waits for the write while other requests can use the event loop. Replay reads and privacy
+   transactions also run off the event loop; the SQLite `RLock` protects shared transactions.
+   No retry or emergency content buffer exists in this slice.
 
 The event order with RAG enabled is:
 
@@ -112,6 +150,9 @@ All five envelopes share one `trace_id`; all five payloads share one `interactio
 With RAG disabled there are four events: `interaction.started.v1`, `route.decided.v1`,
 `generation.completed.v1` (or `generation.failed.v1`), and `interaction.completed.v1`.
 These four also share the trace/interaction ids, with a null retrieval run link on completion.
+Events remain in memory in the same order. Completion additionally carries persistence redaction
+counts and logging refs when allowed. Retrieval/generation event payloads and their persisted
+records are identical except for refs filled at commit time.
 `application.state.events.events_for_trace(trace_id)` reads them back in tests. No HTTP event
 reader is exposed. The default capacity is 4096 accepted events. The collector ignores duplicate
 accepted `event_id`s and drops new arrivals when full, incrementing `dropped_events`. Dropped
@@ -120,20 +161,63 @@ increment `application.state.inference.emission_failures`. Neither dropping nor 
 changes the inference response. The happy-path integration test also requires zero
 `emission_failures` and zero `dropped_events`, so silent contract/emission failures fail the test.
 
-Repeat the identical request to receive the original response with `replayed: true`, without
+Repeat the identical walkthrough request to receive the original response with `replayed: true`, without
 new events or generation. Change the body while keeping the same tenant/application/request id
 to receive 409 `request_id_conflict`. A concurrent identical request receives 409
 `request_in_progress` until the original finishes; a later retry replays a successful response.
-Only successful responses are cached. Every failure, including cancellation and 500/502/503/504
+Only successful responses that passed persistence redaction and committed are replayable.
+Every generation failure, including cancellation and 500/502/503/504
 errors from injected components, releases its reservation. Retrying the same request id then
 executes again with new interaction/trace ids and a new event sequence for the stages reached.
 
-`Settings.replay_capacity` defaults to 10,000 and must be positive. The bound includes completed
-responses and active reservations. When full, insertion evicts the oldest completed entry in
-reservation order; replay hits do not refresh this FIFO order. Active reservations are never
-evicted, preserving in-progress 409 protection. If every slot is active, new request ids receive
-429 `replay_capacity_exceeded` until a slot becomes available. Evicted ids can execute again.
-Replay state is also lost on process restart; there is no durable replay store in this slice.
+`Settings.replay_capacity` defaults to 10,000 and must be positive. Memory holds only in-flight
+reservations; at capacity, new requests receive 429 `replay_capacity_exceeded`. Completed
+replays live solely in the store. Separately, the same setting caps completed replay rows per
+tenant: `put_replay` deletes the oldest rows in reservation order and their blobs in SQL within
+the interaction transaction. Replay hits do not refresh that order. No tenant bulk load or
+per-request scan of completed entries occurs in memory. Evicted ids can execute again.
+Cancellation during a started persistence write waits for the worker before releasing the
+reservation; a successfully committed response remains replayable.
+Replay survives a process restart with
+the same data directory and keys. `Settings.replay_ttl_seconds` defaults to 86,400, capped by
+the interaction retention deadline (one hour under the checked-in policy). Expired or deleted
+entries cannot replay. In-flight reservations remain process-local; use one serving process for
+this local slice.
+
+**Replay content:** ADR 0003 and specification 9.1 require redaction before durable replay. When that
+pass changes an output containing PII, its durable replay returns the redacted output with the
+original ids, usage and cost; the first served output is unchanged. Exact response replay holds
+when the second pass makes no changes, including the walkthrough above. A redaction failure
+skips durable replay completely.
+
+`Settings.retention_seconds=None` uses each policy's retention; an explicit positive value
+overrides it locally. `make retention-sweep TENANT=synthetic-a` deletes expired payloads and
+replays, clears refs and marks the graph metadata `expired`; metadata and tombstones remain.
+No background scheduler runs the sweep. Payload reads and replay lookups enforce expiry even
+before a sweep physically removes the blobs.
+
+Delete one interaction using its returned id:
+
+```sh
+curl -X DELETE http://127.0.0.1:8000/v1/privacy/interactions/INTERACTION_ID \
+  -H 'Authorization: Bearer synthetic-key-a'
+curl -X POST http://127.0.0.1:8000/v1/privacy/subjects/deletion-requests \
+  -H 'Authorization: Bearer synthetic-key-a' \
+  -H 'Content-Type: application/json' \
+  -d '{"subject":"synthetic-caller-1"}'
+```
+
+The first endpoint returns 204, or 404 for an absent/other-tenant interaction. The second takes
+the raw subject in a strict JSON body (1–512 characters), HMACs it exactly as authentication
+does, and returns a deletion count. Raw subjects never appear in the URL or events. The subject
+operation records a subject-scope tombstone and deletes that tenant's existing interactions
+for the pseudonym in one transaction. Each interaction deletion
+atomically records a tombstone, removes all payloads including replay, nulls refs and marks
+metadata `deleted`, then emits `privacy.deletion.requested.v1`. Later writes for the same
+interaction id are refused. Subject deletion also emits one subject-scope deletion event, even
+when no interactions existed, and later writes for that tenant/pseudonym raise `subject_deleted`.
+Serving may still succeed, but no graph or replay can be persisted for the deleted subject.
+An interaction-only deletion permits a new interaction id. `make dev` keeps access logging disabled.
 
 For injected test failures, `FakeProvider(test_only_failure="error")` returns 502
 `provider_failed`; `"deadline_exceeded"` returns 504 `provider_deadline_exceeded`.
@@ -159,5 +243,5 @@ uv run --locked pytest tests/security tests/load -s
 The load test makes 200 distinct authenticated requests through the in-process ASGI application,
 subtracts measured provider-call time from total request time, and requires nearest-rank p95
 overhead below 50 ms. This is a local slice check, not a production throughput claim.
-Persistence, encryption, persistence redaction, durable telemetry, streaming, fallback, feedback,
-real providers and exporters remain reserved for later slices/milestones.
+Durable telemetry, outbox/retry/dead letter, key rotation and backup/restore remain slice 1c.
+Streaming, fallback, the feedback endpoint, real providers and exporters remain later work.

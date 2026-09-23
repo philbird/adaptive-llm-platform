@@ -2,8 +2,7 @@
 
 import asyncio
 import json
-from collections import OrderedDict
-from dataclasses import dataclass
+from datetime import datetime
 from threading import Lock
 from time import perf_counter
 
@@ -19,7 +18,10 @@ from adaptive_llm.contracts import (
     InferenceResponse,
     InputSummary,
     Interaction,
+    PolicyDecision,
     RequestParameters,
+    RetrievalRun,
+    RouteDecision,
     Started,
     Task,
     now,
@@ -31,13 +33,9 @@ from adaptive_llm.policy import PolicyEngine, ProcessingRedactor
 from adaptive_llm.providers import TOKENIZER, Provider, ProviderRequest, token_count
 from adaptive_llm.rag import Retriever
 from adaptive_llm.routing import Router, RouteSelection
+from adaptive_llm.storage import ReplayRecord
+from adaptive_llm.storage.persistence import InteractionGraph, Persistence, PersistenceContent
 from adaptive_llm.validation import Validator
-
-
-@dataclass
-class ReplayEntry:
-    fingerprint: str
-    response: InferenceResponse | None = None
 
 
 class InferenceService:
@@ -54,6 +52,7 @@ class InferenceService:
         validator: Validator,
         events: EventSink,
         tracer: Tracer,
+        persistence: Persistence,
     ) -> None:
         if replay_capacity < 1:
             raise ValueError("invalid_replay_capacity")
@@ -67,7 +66,8 @@ class InferenceService:
         self._validator = validator
         self._events = events
         self._tracer = tracer
-        self._replays: OrderedDict[tuple[str, str, str], ReplayEntry] = OrderedDict()
+        self.persistence = persistence
+        self._replays: dict[tuple[str, str, str], str] = {}
         self._replay_lock = Lock()
         self.emission_failures = 0
 
@@ -103,48 +103,48 @@ class InferenceService:
         fingerprint = self._keyring.fingerprint(
             json.dumps(request.model_dump(mode="json"), sort_keys=True)
         )
+        at = self.persistence.clock()
         with self._replay_lock:
             entry = self._replays.get(key)
             if entry is not None:
-                if entry.fingerprint != fingerprint:
+                if entry != fingerprint:
                     raise GatewayError(409, "request_id_conflict")
-                if entry.response is not None:
-                    return entry.response.model_copy(update={"replayed": True}, deep=True)
                 raise GatewayError(409, "request_in_progress")
             if len(self._replays) >= self._replay_capacity:
-                # Active reservations cannot be evicted without allowing duplicate execution.
-                oldest_completed = next(
-                    (key for key, entry in self._replays.items() if entry.response is not None),
-                    None,
-                )
-                if oldest_completed is None:
-                    raise GatewayError(429, "replay_capacity_exceeded")
-                del self._replays[oldest_completed]
-            entry = ReplayEntry(fingerprint=fingerprint)
-            self._replays[key] = entry
+                raise GatewayError(429, "replay_capacity_exceeded")
+            self._replays[key] = fingerprint
         try:
+            replayed = await asyncio.to_thread(self._find_replay, key, fingerprint)
+            if replayed is not None:
+                return replayed
             with self._tracer.start_as_current_span(
                 "inference",
                 attributes={"schema_version": "1.0"},
                 record_exception=False,
                 set_status_on_exception=False,
             ):
-                response = await self._execute(request, identity)
-            with self._replay_lock:
-                entry.response = response.model_copy(deep=True)
+                response, _ = await self._execute(request, identity, fingerprint, at)
             return response
         except GatewayError:
             raise
         except Exception:
             raise GatewayError(500, "internal_error") from None
         finally:
-            # Includes cancellation and failures before/after the provider call. Only a
-            # successful response survives, so a retry can reserve this id afresh.
+            # Completed entries exist solely in SQLite; memory bounds only in-flight work.
             with self._replay_lock:
-                if entry.response is None:
-                    del self._replays[key]
+                del self._replays[key]
 
-    async def _execute(self, request: InferenceRequest, identity: Identity) -> InferenceResponse:
+    def _find_replay(self, key: tuple[str, str, str], fingerprint: str) -> InferenceResponse | None:
+        stored = self.persistence.metadata.get_replay(*key, self.persistence.clock())
+        if stored is None:
+            return None
+        if stored.fingerprint != fingerprint:
+            raise GatewayError(409, "request_id_conflict")
+        return self.persistence.replay(stored)
+
+    async def _execute(
+        self, request: InferenceRequest, identity: Identity, fingerprint: str, reserved_at: datetime
+    ) -> tuple[InferenceResponse, ReplayRecord | None]:
         started_at = now()
         started = perf_counter()
         interaction_id, trace_id = uid(), uid()
@@ -163,19 +163,25 @@ class InferenceService:
                 }
             )
             span.set_attribute("policy_version", policy.policy_version)
+        started_record = Started(
+            interaction_id=interaction_id,
+            application_id=request.application_id,
+            policy_version=policy.policy_version,
+        )
         self._emit(
             "interaction.started.v1",
-            Started(
-                interaction_id=interaction_id,
-                application_id=request.application_id,
-                policy_version=policy.policy_version,
-            ),
+            started_record,
             identity,
             trace_id,
         )
+        content = self.persistence.prepare_input(request, policy)
         retrieval_id: str | None = None
         route_id: str | None = None
         attempts: list[GenerationAttempt] = []
+        retrieval_run: RetrievalRun | None = None
+        route: RouteDecision | None = None
+        response: InferenceResponse | None = None
+        replay: ReplayRecord | None = None
         failure: str | None = None
         try:
             supplied_chunks: tuple[Chunk, ...] = ()
@@ -196,8 +202,9 @@ class InferenceService:
                     )
                     span.set_attribute("index_version", retrieval.run.index_version)
                 retrieval_id = retrieval.run.retrieval_run_id
+                retrieval_run = retrieval.run.model_copy(update={"query_hash": content.query_hash})
                 supplied_chunks = retrieval.supplied_chunks
-                self._emit("retrieval.completed.v1", retrieval.run, identity, trace_id)
+                self._emit("retrieval.completed.v1", retrieval_run, identity, trace_id)
             provider_request = ProviderRequest(
                 messages=tuple(request.messages),
                 context=supplied_chunks,
@@ -215,6 +222,7 @@ class InferenceService:
                 )
                 span.set_attribute("router_version", selection.decision.router_version)
             route_id = selection.decision.route_decision_id
+            route = selection.decision
             self._emit("route.decided.v1", selection.decision, identity, trace_id)
             if selection.decision.selected_model_deployment_id is None:
                 reasons = {
@@ -230,8 +238,16 @@ class InferenceService:
                     raise GatewayError(422, "cost_limit_exceeded")
                 raise GatewayError(500, "invalid_route_decision")
             remaining = request.routing.deadline_ms / 1000 - (perf_counter() - started)
-            return await self._generate(
-                provider_request, selection, identity, interaction_id, trace_id, remaining, attempts
+            response = await self._generate(
+                provider_request,
+                selection,
+                identity,
+                interaction_id,
+                trace_id,
+                remaining,
+                attempts,
+                policy,
+                content,
             )
         except GatewayError as error:
             failure = error.code
@@ -243,42 +259,70 @@ class InferenceService:
             failure = "pipeline_failed"
             raise GatewayError(502, failure) from None
         finally:
+            interaction = Interaction(
+                interaction_id=interaction_id,
+                trace_id=trace_id,
+                request_id=request.request_id,
+                tenant_id=identity.tenant_id,
+                subject_id_pseudonymous=identity.subject_id_pseudonymous,
+                application_id=request.application_id,
+                environment=identity.environment,
+                started_at=started_at,
+                completed_at=now(),
+                task=Task(
+                    label="question_answering" if request.rag.enabled else "general",
+                    classifier_version="placeholder-rag-flag-1",
+                    confidence=0.5,
+                    reason_codes=["rag_flag_only"],
+                ),
+                policy=policy,
+                input=self._input_summary(request, content),
+                retrieval_run_id=retrieval_id,
+                route_decision_id=route_id,
+                generation_attempt_ids=[attempt.attempt_id for attempt in attempts],
+                final_attempt_id=attempts[-1].attempt_id if attempts else None,
+                status="completed" if failure is None else "failed",
+                error_code=failure,
+            )
+            cancelled_during_save = False
+            try:
+                saving = asyncio.create_task(
+                    asyncio.to_thread(
+                        self.persistence.save,
+                        InteractionGraph(
+                            interaction, started_record, retrieval_run, route, tuple(attempts)
+                        ),
+                        response,
+                        content,
+                        fingerprint,
+                        reserved_at,
+                    )
+                )
+                try:
+                    interaction, replay = await asyncio.shield(saving)
+                except asyncio.CancelledError:
+                    # A worker cannot be cancelled once SQLite is writing. Keep the reservation
+                    # until it finishes so a retry cannot race the still-running transaction.
+                    cancelled_during_save = True
+                    interaction, replay = await saving
+            except Exception:
+                self.persistence.failures += 1
             self._emit(
                 "interaction.completed.v1",
-                Interaction(
-                    interaction_id=interaction_id,
-                    trace_id=trace_id,
-                    request_id=request.request_id,
-                    tenant_id=identity.tenant_id,
-                    subject_id_pseudonymous=identity.subject_id_pseudonymous,
-                    application_id=request.application_id,
-                    environment=identity.environment,
-                    started_at=started_at,
-                    completed_at=now(),
-                    task=Task(
-                        label="question_answering" if request.rag.enabled else "general",
-                        classifier_version="placeholder-rag-flag-1",
-                        confidence=0.5,
-                        reason_codes=["rag_flag_only"],
-                    ),
-                    policy=policy,
-                    input=self._input_summary(request),
-                    retrieval_run_id=retrieval_id,
-                    route_decision_id=route_id,
-                    generation_attempt_ids=[attempt.attempt_id for attempt in attempts],
-                    final_attempt_id=attempts[-1].attempt_id if attempts else None,
-                    status="completed" if failure is None else "failed",
-                    error_code=failure,
-                ),
+                interaction,
                 identity,
                 trace_id,
             )
+            if cancelled_during_save:
+                raise asyncio.CancelledError
+        assert response is not None
+        return response, replay
 
-    def _input_summary(self, request: InferenceRequest) -> InputSummary:
+    def _input_summary(
+        self, request: InferenceRequest, content: PersistenceContent
+    ) -> InputSummary:
         return InputSummary(
-            content_hash=self._keyring.content_hash(
-                json.dumps([m.model_dump(mode="json") for m in request.messages]), purpose="input"
-            ),
+            content_hash=content.input_hash,
             token_count=sum(token_count(m.content) for m in request.messages),
             tokenizer=TOKENIZER,
         )
@@ -292,6 +336,8 @@ class InferenceService:
         trace_id: str,
         remaining: float,
         attempts: list[GenerationAttempt],
+        policy: PolicyDecision,
+        content: PersistenceContent,
     ) -> InferenceResponse:
         deployment = selection.deployment
         attributes = {
@@ -337,6 +383,8 @@ class InferenceService:
                 raise GatewayError(504, "provider_deadline_exceeded")
             if result.finish_reason not in ("stop", "length", "content_filter"):
                 raise GatewayError(502, "provider_failed")
+            self.persistence.prepare_output(result.content, policy, content)
+            attempt = attempt.model_copy(update={"output_hash": content.output_hash})
             with self._tracer.start_as_current_span(
                 "validation",
                 attributes=attributes,
@@ -348,7 +396,6 @@ class InferenceService:
             attempt = attempt.model_copy(
                 update={
                     "validation": validation,
-                    "output_hash": self._keyring.content_hash(result.content, purpose="output"),
                 }
             )
             if not validation.passed:

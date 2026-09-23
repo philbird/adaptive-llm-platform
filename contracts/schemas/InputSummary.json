@@ -1,8 +1,15 @@
 {
   "properties": {
     "content_hash": {
-      "title": "Content Hash",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Content Hash"
     },
     "hash_scheme": {
       "default": "hmac-sha256",

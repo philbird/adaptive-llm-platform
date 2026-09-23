@@ -1,20 +1,37 @@
 import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import AsyncExitStack
+from dataclasses import replace
 
 import pytest
 
 from adaptive_llm.app import Settings, create_app
-from adaptive_llm.contracts import InferenceRequest, PolicyDecision
+from adaptive_llm.contracts import InferenceRequest, PolicyDecision, now
 from adaptive_llm.events import InMemoryEventSink
 from adaptive_llm.gateway.identity import GatewayError, Identity
 from adaptive_llm.gateway.service import InferenceService
 from adaptive_llm.providers import FakeProvider, ProviderRequest, ProviderResult
 
+ServiceFactory = Callable[[Settings], Awaitable[InferenceService]]
+
+
+@pytest.fixture
+async def service_factory() -> AsyncIterator[ServiceFactory]:
+    async with AsyncExitStack() as stack:
+
+        async def start(settings: Settings) -> InferenceService:
+            app = create_app(settings)
+            await stack.enter_async_context(app.router.lifespan_context(app))
+            return app.state.inference
+
+        yield start
+
 
 async def test_replay_capacity_evicts_oldest_completed_entry(
-    inference_request: InferenceRequest, identity: Identity
+    inference_request: InferenceRequest, identity: Identity, service_factory: ServiceFactory
 ) -> None:
     assert Settings().replay_capacity == 10_000
-    service: InferenceService = create_app(Settings(replay_capacity=2)).state.inference
+    service = await service_factory(Settings(replay_capacity=2))
     second_request = inference_request.model_copy(update={"request_id": "synthetic-second"})
     third_request = inference_request.model_copy(update={"request_id": "synthetic-third"})
     first = await service.infer(inference_request, identity)
@@ -26,7 +43,42 @@ async def test_replay_capacity_evicts_oldest_completed_entry(
     evicted = await service.infer(inference_request, identity)
     assert not evicted.replayed
     assert evicted.interaction_id != first.interaction_id
-    assert len(service._replays) == 2
+    assert not service._replays
+
+
+async def test_sql_replay_cap_is_tenant_scoped_and_removes_evicted_payloads(
+    inference_request: InferenceRequest,
+    identity: Identity,
+    service_factory: ServiceFactory,
+) -> None:
+    service = await service_factory(Settings(replay_capacity=2))
+    meta, payloads = service.persistence.metadata, service.persistence.payloads
+    tenant_b = replace(identity, tenant_id="synthetic-b")
+    first = await service.infer(inference_request, identity)
+    saved = meta.get_replay(
+        identity.tenant_id, inference_request.application_id, inference_request.request_id, now()
+    )
+    assert saved is not None
+    other_tenant = await service.infer(inference_request, tenant_b)
+    for index in range(2):
+        await service.infer(
+            inference_request.model_copy(update={"request_id": f"synthetic-{index}"}), identity
+        )
+    assert (
+        meta.get_replay(
+            identity.tenant_id,
+            inference_request.application_id,
+            inference_request.request_id,
+            now(),
+        )
+        is None
+    )
+    assert payloads.get(identity.tenant_id, saved.response_ref, now()) is None
+    assert (
+        await service.infer(inference_request, tenant_b)
+    ).interaction_id == other_tenant.interaction_id
+    assert (await service.infer(inference_request, identity)).interaction_id != first.interaction_id
+    assert not service._replays
 
 
 @pytest.mark.parametrize("capacity", [0, -1])
@@ -37,7 +89,10 @@ def test_replay_capacity_must_be_positive(capacity: int) -> None:
 
 @pytest.mark.parametrize("status", [500, 502, 503, 504, None])
 async def test_failed_reservations_are_released(
-    inference_request: InferenceRequest, identity: Identity, status: int | None
+    inference_request: InferenceRequest,
+    identity: Identity,
+    status: int | None,
+    service_factory: ServiceFactory,
 ) -> None:
     class FailsOnce:
         calls = 0
@@ -51,9 +106,7 @@ async def test_failed_reservations_are_released(
             return PolicyDecision(policy_version="synthetic-1", retention_seconds=1)
 
     policy = FailsOnce()
-    service: InferenceService = create_app(
-        Settings(policy=policy, replay_capacity=1)
-    ).state.inference
+    service = await service_factory(Settings(policy=policy, replay_capacity=1))
     with pytest.raises(GatewayError) as failure:
         await service.infer(inference_request, identity)
     assert failure.value.status_code == (status or 500)
@@ -80,10 +133,10 @@ class FirstCallWaits(FakeProvider):
 
 
 async def test_cancellation_releases_reservation_and_can_retry(
-    inference_request: InferenceRequest, identity: Identity
+    inference_request: InferenceRequest, identity: Identity, service_factory: ServiceFactory
 ) -> None:
     provider, sink = FirstCallWaits(), InMemoryEventSink()
-    service: InferenceService = create_app(Settings(provider=provider, events=sink)).state.inference
+    service = await service_factory(Settings(provider=provider, events=sink))
     task = asyncio.create_task(service.infer(inference_request, identity))
     await asyncio.wait_for(provider.entered.wait(), timeout=2)
     task.cancel()
@@ -99,13 +152,11 @@ async def test_cancellation_releases_reservation_and_can_retry(
     assert provider.calls == 2
 
 
-async def test_capacity_evicts_completed_entry_without_evicting_active_reservation(
-    inference_request: InferenceRequest, identity: Identity
+async def test_completed_entries_do_not_count_towards_in_flight_capacity(
+    inference_request: InferenceRequest, identity: Identity, service_factory: ServiceFactory
 ) -> None:
     provider = FirstCallWaits()
-    service: InferenceService = create_app(
-        Settings(provider=provider, replay_capacity=2)
-    ).state.inference
+    service = await service_factory(Settings(provider=provider, replay_capacity=2))
     task = asyncio.create_task(service.infer(inference_request, identity))
     await asyncio.wait_for(provider.entered.wait(), timeout=2)
     try:
@@ -117,21 +168,20 @@ async def test_capacity_evicts_completed_entry_without_evicting_active_reservati
         with pytest.raises(GatewayError, match="^request_in_progress$") as duplicate:
             await service.infer(inference_request, identity)
         assert duplicate.value.status_code == 409
-        evicted = await service.infer(second_request, identity)
-        assert evicted.interaction_id != second.interaction_id
-        assert len(service._replays) == 2
+        replayed = await service.infer(second_request, identity)
+        assert replayed.interaction_id == second.interaction_id
+        assert replayed.replayed
+        assert len(service._replays) == 1
     finally:
         provider.release.set()
         await task
 
 
 async def test_full_active_cache_rejects_new_work_without_losing_reservation(
-    inference_request: InferenceRequest, identity: Identity
+    inference_request: InferenceRequest, identity: Identity, service_factory: ServiceFactory
 ) -> None:
     provider = FirstCallWaits()
-    service: InferenceService = create_app(
-        Settings(provider=provider, replay_capacity=1)
-    ).state.inference
+    service = await service_factory(Settings(provider=provider, replay_capacity=1))
     task = asyncio.create_task(service.infer(inference_request, identity))
     await asyncio.wait_for(provider.entered.wait(), timeout=2)
     try:

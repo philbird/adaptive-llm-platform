@@ -58,22 +58,29 @@ class ProcessingRedactor:
             total += digit
         return bool(total) and total % 10 == 0
 
+    def redact_text(self, content: str) -> tuple[str, dict[str, int]]:
+        counts: dict[str, int] = {}
+        for name, pattern in self._patterns:
+            content, count = pattern.subn("[REDACTED]", content)
+            if count:
+                counts[name] = counts.get(name, 0) + count
+
+        def redact_card(match: re.Match[str]) -> str:
+            if not self._is_card(match.group()):
+                return match.group()
+            counts["card_numbers"] = counts.get("card_numbers", 0) + 1
+            return "[REDACTED]"
+
+        return self._cards.sub(redact_card, content), counts
+
     def redact(self, request: InferenceRequest) -> tuple[InferenceRequest, dict[str, int]]:
         counts: dict[str, int] = {}
 
         def redact_text(content: str) -> str:
-            for name, pattern in self._patterns:
-                content, count = pattern.subn("[REDACTED]", content)
-                if count:
-                    counts[name] = counts.get(name, 0) + count
-
-            def redact_card(match: re.Match[str]) -> str:
-                if not self._is_card(match.group()):
-                    return match.group()
-                counts["card_numbers"] = counts.get("card_numbers", 0) + 1
-                return "[REDACTED]"
-
-            return self._cards.sub(redact_card, content)
+            redacted, found = self.redact_text(content)
+            for name, count in found.items():
+                counts[name] = counts.get(name, 0) + count
+            return redacted
 
         messages = [
             message.model_copy(update={"content": redact_text(message.content)})
