@@ -1,0 +1,612 @@
+{
+  "$defs": {
+    "EvaluationSpecification": {
+      "properties": {
+        "baseline_deployment_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Baseline Deployment Id"
+        },
+        "candidate_deployment_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Candidate Deployment Id",
+          "type": "string"
+        },
+        "concurrency": {
+          "default": 4,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "confidence_level": {
+          "default": 0.95,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0.5,
+          "title": "Confidence Level",
+          "type": "number"
+        },
+        "cost_per_success_micros_max": {
+          "default": 20000,
+          "minimum": 0,
+          "title": "Cost Per Success Micros Max",
+          "type": "integer"
+        },
+        "critical_segments": {
+          "items": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Critical Segments",
+          "type": "array"
+        },
+        "dataset_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "dataset_version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Dataset Version",
+          "type": "string"
+        },
+        "error_rate_max": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Error Rate Max",
+          "type": "number"
+        },
+        "evaluation_id": {
+          "title": "Evaluation Id",
+          "type": "string"
+        },
+        "judge_version": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "deterministic-judge-1",
+          "title": "Judge Version"
+        },
+        "latency_p95_ms_max": {
+          "default": 5000,
+          "exclusiveMinimum": 0,
+          "title": "Latency P95 Ms Max",
+          "type": "number"
+        },
+        "minimum_sample_size": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minimum Sample Size"
+        },
+        "non_inferiority_margin": {
+          "default": 0.02,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Non Inferiority Margin",
+          "type": "number"
+        },
+        "performance_requests": {
+          "default": 40,
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Performance Requests",
+          "type": "integer"
+        },
+        "rubric_version": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "synthetic-rubric-1",
+          "title": "Rubric Version"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "seed": {
+          "default": 23,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "suites": {
+          "items": {
+            "enum": [
+              "golden",
+              "held_out",
+              "safety",
+              "retrieval",
+              "performance"
+            ],
+            "type": "string"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Suites",
+          "type": "array"
+        }
+      },
+      "required": [
+        "candidate_deployment_id",
+        "baseline_deployment_id",
+        "dataset_id",
+        "dataset_version",
+        "suites"
+      ],
+      "title": "EvaluationSpecification",
+      "type": "object"
+    },
+    "GateDecision": {
+      "properties": {
+        "gate": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Gate",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "reason": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Reason",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "gate",
+        "passed",
+        "reason"
+      ],
+      "title": "GateDecision",
+      "type": "object"
+    },
+    "ItemScore": {
+      "properties": {
+        "item_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Score",
+          "type": "number"
+        },
+        "segments": {
+          "items": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "item_id",
+        "score"
+      ],
+      "title": "ItemScore",
+      "type": "object"
+    },
+    "PairedComparison": {
+      "properties": {
+        "ci_lower": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Lower"
+        },
+        "ci_upper": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Upper"
+        },
+        "mean_delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mean Delta"
+        },
+        "sample_size": {
+          "minimum": 0,
+          "title": "Sample Size",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample_size"
+      ],
+      "title": "PairedComparison",
+      "type": "object"
+    },
+    "SuiteResult": {
+      "properties": {
+        "completed": {
+          "default": true,
+          "title": "Completed",
+          "type": "boolean"
+        },
+        "cost_per_success_micros": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Per Success Micros"
+        },
+        "failures": {
+          "maxProperties": 40,
+          "patternProperties": {
+            "^[\\w.-]+$": {
+              "type": "integer"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "title": "Failures",
+          "type": "object"
+        },
+        "first_token_latency_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Token Latency Ms"
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "metrics": {
+          "maxProperties": 40,
+          "patternProperties": {
+            "^[\\w.-]+$": {
+              "type": "number"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "title": "Metrics",
+          "type": "object"
+        },
+        "per_segment_metrics": {
+          "maxProperties": 1000,
+          "patternProperties": {
+            "^[\\w.-]+$": {
+              "maxProperties": 40,
+              "patternProperties": {
+                "^[\\w.-]+$": {
+                  "type": "number"
+                }
+              },
+              "propertyNames": {
+                "maxLength": 100,
+                "minLength": 1
+              },
+              "type": "object"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "title": "Per Segment Metrics",
+          "type": "object"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "scores": {
+          "items": {
+            "$ref": "#/$defs/ItemScore"
+          },
+          "maxItems": 100000,
+          "title": "Scores",
+          "type": "array"
+        },
+        "suite": {
+          "enum": [
+            "golden",
+            "held_out",
+            "safety",
+            "retrieval",
+            "performance"
+          ],
+          "title": "Suite",
+          "type": "string"
+        },
+        "total_cost_micros": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Cost Micros"
+        }
+      },
+      "required": [
+        "suite",
+        "items",
+        "metrics"
+      ],
+      "title": "SuiteResult",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "baseline_manifest_version": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Baseline Manifest Version"
+    },
+    "baseline_report_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Baseline Report Id"
+    },
+    "baseline_suite_results": {
+      "items": {
+        "$ref": "#/$defs/SuiteResult"
+      },
+      "title": "Baseline Suite Results",
+      "type": "array"
+    },
+    "candidate_manifest_version": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Candidate Manifest Version",
+      "type": "string"
+    },
+    "code_revision": {
+      "title": "Code Revision",
+      "type": "string"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "title": "Completed At",
+      "type": "string"
+    },
+    "coverage": {
+      "patternProperties": {
+        "^[\\w.-]+$": {
+          "type": "integer"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 100,
+        "minLength": 1
+      },
+      "title": "Coverage",
+      "type": "object"
+    },
+    "dataset_content_digest": {
+      "title": "Dataset Content Digest",
+      "type": "string"
+    },
+    "derived_minimum_sample_size": {
+      "minimum": 1,
+      "title": "Derived Minimum Sample Size",
+      "type": "integer"
+    },
+    "gate_decisions": {
+      "items": {
+        "$ref": "#/$defs/GateDecision"
+      },
+      "title": "Gate Decisions",
+      "type": "array"
+    },
+    "known_limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Known Limitations",
+      "type": "array"
+    },
+    "paired_comparison": {
+      "$ref": "#/$defs/PairedComparison"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "pilot_standard_deviation": {
+      "minimum": 0,
+      "title": "Pilot Standard Deviation",
+      "type": "number"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "segment_comparisons": {
+      "patternProperties": {
+        "^[\\w.-]+$": {
+          "$ref": "#/$defs/PairedComparison"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 100,
+        "minLength": 1
+      },
+      "title": "Segment Comparisons",
+      "type": "object"
+    },
+    "specification": {
+      "$ref": "#/$defs/EvaluationSpecification"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "suite_content_digest": {
+      "title": "Suite Content Digest",
+      "type": "string"
+    },
+    "suite_results": {
+      "items": {
+        "$ref": "#/$defs/SuiteResult"
+      },
+      "title": "Suite Results",
+      "type": "array"
+    }
+  },
+  "required": [
+    "specification",
+    "candidate_manifest_version",
+    "baseline_manifest_version",
+    "dataset_content_digest",
+    "suite_content_digest",
+    "code_revision",
+    "started_at",
+    "completed_at",
+    "suite_results",
+    "baseline_suite_results",
+    "paired_comparison",
+    "segment_comparisons",
+    "coverage",
+    "pilot_standard_deviation",
+    "derived_minimum_sample_size",
+    "gate_decisions",
+    "passed",
+    "known_limitations"
+  ],
+  "title": "EvaluationReport",
+  "type": "object"
+}

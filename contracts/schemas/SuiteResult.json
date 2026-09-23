@@ -1,0 +1,179 @@
+{
+  "$defs": {
+    "ItemScore": {
+      "properties": {
+        "item_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Score",
+          "type": "number"
+        },
+        "segments": {
+          "items": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "item_id",
+        "score"
+      ],
+      "title": "ItemScore",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "completed": {
+      "default": true,
+      "title": "Completed",
+      "type": "boolean"
+    },
+    "cost_per_success_micros": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cost Per Success Micros"
+    },
+    "failures": {
+      "maxProperties": 40,
+      "patternProperties": {
+        "^[\\w.-]+$": {
+          "type": "integer"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 100,
+        "minLength": 1
+      },
+      "title": "Failures",
+      "type": "object"
+    },
+    "first_token_latency_ms": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "First Token Latency Ms"
+    },
+    "items": {
+      "minimum": 0,
+      "title": "Items",
+      "type": "integer"
+    },
+    "metrics": {
+      "maxProperties": 40,
+      "patternProperties": {
+        "^[\\w.-]+$": {
+          "type": "number"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 100,
+        "minLength": 1
+      },
+      "title": "Metrics",
+      "type": "object"
+    },
+    "per_segment_metrics": {
+      "maxProperties": 1000,
+      "patternProperties": {
+        "^[\\w.-]+$": {
+          "maxProperties": 40,
+          "patternProperties": {
+            "^[\\w.-]+$": {
+              "type": "number"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "type": "object"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 100,
+        "minLength": 1
+      },
+      "title": "Per Segment Metrics",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scores": {
+      "items": {
+        "$ref": "#/$defs/ItemScore"
+      },
+      "maxItems": 100000,
+      "title": "Scores",
+      "type": "array"
+    },
+    "suite": {
+      "enum": [
+        "golden",
+        "held_out",
+        "safety",
+        "retrieval",
+        "performance"
+      ],
+      "title": "Suite",
+      "type": "string"
+    },
+    "total_cost_micros": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Total Cost Micros"
+    }
+  },
+  "required": [
+    "suite",
+    "items",
+    "metrics"
+  ],
+  "title": "SuiteResult",
+  "type": "object"
+}

@@ -1,0 +1,40 @@
+{
+  "properties": {
+    "item_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Item Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "score": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Score",
+      "type": "number"
+    },
+    "segments": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Segments",
+      "type": "array"
+    }
+  },
+  "required": [
+    "item_id",
+    "score"
+  ],
+  "title": "ItemScore",
+  "type": "object"
+}

@@ -1,4 +1,4 @@
-.PHONY: dev check integration contracts sbom migrate retention-sweep dispatch-once dead-letters redeliver rotate-key backup restore drills dataset-build
+.PHONY: dev check integration contracts sbom migrate retention-sweep dispatch-once dead-letters redeliver rotate-key backup restore drills dataset-build evaluate
 
 DATA_DIR ?= .local
 ENVIRONMENT ?= local
@@ -11,6 +11,9 @@ dev:
 
 dataset-build:
 	uv run --locked python -m adaptive_llm.datasets --spec "$(SPEC)" --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)" $(if $(POLICY),--policy "$(POLICY)",)
+
+evaluate:
+	uv run --locked python -m adaptive_llm.evaluation --spec "$(SPEC)" --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)"
 
 migrate:
 	uv run --locked python -m adaptive_llm.storage migrate --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)"

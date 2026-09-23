@@ -54,11 +54,13 @@ class SQLiteDatabase:
         *,
         migrate_on_startup: bool = True,
         migrations: Path = MIGRATIONS,
+        in_memory: bool = False,
     ) -> None:
         if environment not in ("local", "development", "staging", "production"):
             raise ValueError("invalid_environment")
-        data_dir.mkdir(parents=True, exist_ok=True)
-        self.path = data_dir / f"{environment}.sqlite3"
+        if not in_memory:
+            data_dir.mkdir(parents=True, exist_ok=True)
+        self.path = Path(":memory:") if in_memory else data_dir / f"{environment}.sqlite3"
         self.lock = RLock()
         self.connection = sqlite3.connect(self.path, isolation_level=None, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row

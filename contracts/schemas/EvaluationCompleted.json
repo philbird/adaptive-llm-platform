@@ -1,8 +1,15 @@
 {
   "properties": {
     "baseline_version": {
-      "title": "Baseline Version",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Baseline Version"
     },
     "evaluation_id": {
       "title": "Evaluation Id",

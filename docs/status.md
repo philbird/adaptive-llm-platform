@@ -1,7 +1,7 @@
 # Status and gap analysis
 
 The engineering specification v1.0 was supplied on 2026-09-23. Milestone 1 slices 1a–1c
-and milestone 2 slice 2a are implemented and verified locally with synthetic data. Staging and production
+and milestone 2 slices 2a–2b are implemented and verified locally with synthetic data. Staging and production
 acceptance remain separate; no external provider, transport or exporter is configured.
 
 Initial inspection found no existing repository, instructions, CI, deployment configuration,
@@ -11,13 +11,13 @@ Python project uses uv/FastAPI; it provides tooling precedent, not shared infras
 | Area | This checkpoint | Remaining work |
 | --- | --- | --- |
 | Discovery | Gap analysis, ADRs, owner decision list | Confirm real workload and obtain design approvals |
-| Contracts | Initial serving/event models and generated schemas | Version compatibility policy, field classification coverage, full manifest contracts |
+| Contracts | Serving, dataset and evaluation records with generated schemas and operator APIs | Version compatibility policy, field classification coverage, full model manifest contracts |
 | Gateway | Authenticated foundation inference, deadlines, replay, truthful health | Production identity/quotas, SSE |
 | Privacy | Purpose policy, two redaction passes, encrypted replay/content, retention and deletion | External deletion propagation and backup reconciliation |
 | RAG | Tenant/ACL/residency filtering and exact-version synthetic evidence | Real retrieval service |
 | Telemetry | SQLite outbox, retry/quarantine, idempotent sink, in-process metrics and traces | Real transport, exporter, multi-process dispatch |
-| Evaluation | Fake provider conformance, privacy, load and recovery drills | Golden/held-out evaluation and real-provider baseline |
-| Datasets (milestone 2, slice 2a, delivered 2026-09-23 on branch `slice-2a`) | Authenticated feedback/corrections; current-policy eligibility; exact source provenance; indexed exact/5-gram deduplication and golden decontamination; joint family/subject splits; encrypted shards, pending manifests with local MACs and data cards; operator API/CLI; deletion/reproducibility/concurrency tests | Evaluation and baseline locking (2b), approval API, asymmetric signing, external artifact lifecycle |
+| Evaluation (milestone 2, slice 2b, delivered 2026-09-23 on branch `slice-2b`) | Five in-process suites; blinded deterministic judge; paired bootstrap and segmented hard gates; local MACs and transactional foundation baseline lock | Real-provider baseline, human review, asymmetric signing and production promotion approvals |
+| Datasets (milestone 2, slices 2a–2b) | Authenticated feedback/corrections; current-policy eligibility; exact source provenance; indexed exact/5-gram deduplication and golden decontamination; joint family/subject splits; encrypted shards, pending manifests with local MACs and data cards; operator API/CLI; deletion/reproducibility/concurrency tests; evaluation interactions excluded | Approval API, asymmetric signing, external artifact lifecycle |
 | Training/registry | Planned boundary | Approved datasets, CPU smoke, LoRA, lineage, evaluation and promotion gates |
 | Routing/deployment | Foundation-only routing with residency and integer-micro cost constraints | Shadow, bounded fallback, canary, rollback |
 | Research | Disabled configuration intent | Isolated activation/pruning work after earlier milestones |
@@ -68,8 +68,38 @@ tenant A into logging/training and denies tenant B training. See the
 stable content digests while generating new immutable versions and build-start deletion watermarks.
 All manifests remain pending. Builds compute outside database locks and recheck deletion tombstones
 before publishing one lifecycle event per tenant. Migration 0005 backfills and indexes interaction
-start times for SQL window selection. The recovery drill now verifies migrations 1–5.
+start times for SQL window selection. The recovery drill now verifies migrations 1–6.
 
-Future increments may broaden to milestone 2 evaluation (2b), milestone 3 LoRA, milestone 4 routing,
+Slice 2b adds migration 0006 (`evaluation_reports`, `baselines`). Evaluation runs on a worker
+thread through `InferenceService`, with authenticated tenant grants, `application_id="evaluation"`
+and a fixed no-logging/no-training policy. Each evaluation owns an in-memory SQLite database,
+a no-op case outbox and private metrics; its connection closes before publication or on failure.
+Tenant operational tables, replay entries and the tenant outbox remain unchanged.
+The test shards are MAC/hash/AAD verified;
+reports contain only identifiers, aggregate metrics, keyed segment labels and per-item scores.
+Publication, baseline locking and one `evaluation.completed.v1` event per dataset tenant share
+a transaction in a separate evaluation control database and event stream. The local report MAC
+uses its own purpose-derived key. Candidate and baseline suites share one event loop.
+
+The local foundation baseline was re-measured after persistence isolation and locked on
+**2026-09-23 at 17:54:32 UTC** in
+`.local/evaluation-review-1/evaluations/control/local.sqlite3`: deployment
+`fake-foundation-local-1`, dataset `synthetic-evaluation` version
+`01a0cf67-a839-7019-a072-be800b15ff1e`, evaluation
+`01a0cf67-a83c-77b3-8b4a-0ebeb6c51cdb`. All five suites passed: golden 20, held-out 8,
+safety 20, retrieval 8, performance 40 at concurrency 4. Paired mean delta was 0, 95% CI
+`[0, 0]`, n=8 overall and on each critical segment. Performance p95 was **2.264 ms**
+(the earlier measurement including tenant persistence was 6.777 ms),
+error rate 0, cost **42 USD micros per successful outcome**, and TTFT null.
+The synthetic planning pilot `[-0.01, 0, 0.01]` has sample SD 0.01, yielding minimum n=4;
+this is not a real-workload variance estimate. The lock is a local milestone artifact,
+not dataset approval or production promotion. The referenced database and report are local,
+git-ignored artifacts and are **not checked in**. The lock is reproducible from the
+[evaluation runbook](runbooks/evaluation.md), which also describes replacement semantics,
+fixture limits and commands. The demonstration leaves the nine seeded tenant interactions,
+35 payloads, nine replay entries and 46 tenant outbox rows unchanged; its two lifecycle events
+are stored only in the evaluation control outbox. No scratch directory remains.
+
+Future increments may broaden to milestone 3 LoRA, milestone 4 routing,
 milestone 5 distillation, and optional milestone 6 research. Each remains a separate reviewable
 increment. No production acceptance criterion is claimed satisfied at this checkpoint.

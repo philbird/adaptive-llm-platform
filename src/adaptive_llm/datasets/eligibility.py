@@ -59,6 +59,8 @@ def select(
             if current.policy_version != specification.eligibility_policy_version:
                 raise GatewayError(409, "eligibility_policy_version_mismatch")
             reasons: set[str] = set()
+            if interaction.application_id == "evaluation":
+                reasons.add("evaluation_interaction")
             if not current.training_allowed or not current.processing_allowed:
                 reasons.add("training_forbidden")
             # Evaluation datasets also require their own purpose permission.

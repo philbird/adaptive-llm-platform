@@ -12,11 +12,14 @@ from fastapi.testclient import TestClient
 from adaptive_llm.app import Settings, create_app
 from adaptive_llm.contracts import (
     Chunk,
+    DatasetManifest,
     DatasetSpecification,
+    EvaluationInput,
     InferenceRequest,
     Message,
     PolicyDecision,
     SourceWindow,
+    TimeSplit,
     now,
     uid,
 )
@@ -194,3 +197,70 @@ def documents_path(settings: Settings, tmp_path: Path) -> Path:
     path = tmp_path / "documents.json"
     path.write_text(settings.documents_path.read_text())
     return path
+
+
+@dataclass
+class EvaluationSeed:
+    app: FastAPI
+    client: TestClient
+    directory: Path
+    manifest: DatasetManifest
+    request: EvaluationInput
+
+
+@pytest.fixture
+def evaluation_seed(tmp_path: Path) -> Iterator[EvaluationSeed]:
+    app = create_app(
+        Settings(data_dir=tmp_path, policy=DatasetPolicy(), outbox_dispatch_enabled=False)
+    )
+    start = now() - timedelta(seconds=1)
+    with TestClient(app) as client:
+        cutoff = now()
+        for i in range(9):
+            result = client.post(
+                "/v1/inference",
+                headers={
+                    "Authorization": "Bearer synthetic-key-a",
+                    "X-Subject": f"synthetic-eval-{i}",
+                },
+                json={
+                    "request_id": f"synthetic-eval-seed-{i}",
+                    "application_id": "support-assistant",
+                    "messages": [
+                        {"role": "user", "content": f"SYNTHETIC unique case {i} unused receipt"}
+                    ],
+                    "rag": {"enabled": i > 0, "index_id": "synthetic-kb"},
+                },
+            )
+            assert result.status_code == 200
+            if i == 0:
+                cutoff = now()
+        spec = DatasetSpecification(
+            dataset_id="synthetic-evaluation",
+            tenant_ids=["synthetic-a", "synthetic-b"],
+            source_window=SourceWindow(start=start, end=now()),
+            eligibility_policy_version="synthetic-dataset-policy-1",
+            near_duplicate_threshold=1,
+            time_split=TimeSplit(
+                train_end=cutoff, validation_end=cutoff + timedelta(microseconds=1)
+            ),
+        )
+        result = client.post(
+            "/v1/datasets/builds",
+            headers={"Authorization": "Bearer synthetic-operator-key"},
+            json=spec.model_dump(mode="json"),
+        )
+        assert result.status_code == 200
+        manifest = DatasetManifest.model_validate(result.json())
+        assert manifest.examples == {"train": 1, "validation": 0, "test": 8}
+        request = EvaluationInput(
+            candidate_deployment_id="fake-foundation-local-1",
+            baseline_deployment_id="fake-foundation-local-1",
+            dataset_id=manifest.dataset_id,
+            dataset_version=manifest.version,
+            suites=["golden", "held_out", "safety", "retrieval", "performance"],
+            minimum_sample_size=4,
+            critical_segments=["citation", "safety"],
+            performance_requests=12,
+        )
+        yield EvaluationSeed(app, client, tmp_path, manifest, request)
