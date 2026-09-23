@@ -137,6 +137,7 @@ def dataset_seed(tmp_path: Path) -> Iterator[DatasetSeed]:
 
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "drill: measured local resilience and recovery drills")
+    config.addinivalue_line("markers", "smoke: CPU-only training and evaluation under ten seconds")
 
 
 @pytest.fixture(autouse=True)

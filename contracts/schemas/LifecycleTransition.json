@@ -1,16 +1,23 @@
 {
   "properties": {
-    "actor_id": {
-      "title": "Actor Id",
+    "actor": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Actor",
       "type": "string"
     },
-    "deployment_id": {
-      "title": "Deployment Id",
+    "at": {
+      "format": "date-time",
+      "title": "At",
       "type": "string"
     },
     "evaluation_id": {
       "anyOf": [
         {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
           "type": "string"
         },
         {
@@ -20,25 +27,7 @@
       "default": null,
       "title": "Evaluation Id"
     },
-    "model_version": {
-      "title": "Model Version",
-      "type": "string"
-    },
-    "new_state": {
-      "enum": [
-        "candidate",
-        "evaluating",
-        "approved",
-        "shadow",
-        "canary",
-        "production",
-        "deprecated",
-        "revoked"
-      ],
-      "title": "New State",
-      "type": "string"
-    },
-    "previous_state": {
+    "from_state": {
       "anyOf": [
         {
           "enum": [
@@ -57,7 +46,7 @@
           "type": "null"
         }
       ],
-      "title": "Previous State"
+      "title": "From State"
     },
     "reason": {
       "title": "Reason",
@@ -68,16 +57,28 @@
       "default": "1.0",
       "title": "Schema Version",
       "type": "string"
+    },
+    "to_state": {
+      "enum": [
+        "candidate",
+        "evaluating",
+        "approved",
+        "shadow",
+        "canary",
+        "production",
+        "deprecated",
+        "revoked"
+      ],
+      "title": "To State",
+      "type": "string"
     }
   },
   "required": [
-    "deployment_id",
-    "model_version",
-    "previous_state",
-    "new_state",
-    "actor_id",
+    "from_state",
+    "to_state",
+    "actor",
     "reason"
   ],
-  "title": "DeploymentChanged",
+  "title": "LifecycleTransition",
   "type": "object"
 }

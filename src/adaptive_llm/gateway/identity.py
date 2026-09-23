@@ -36,6 +36,7 @@ class Keyring:
                 "dataset-example-v1",
                 "dataset-manifest-v1",
                 "evaluation-report-v1",
+                "model-artifact-v1",
             )
         }
 
@@ -61,6 +62,9 @@ class Keyring:
 
     def report_mac(self, value: str) -> str:
         return self._hash("evaluation-report-v1", value)
+
+    def artifact_mac(self, value: str) -> str:
+        return self._hash("model-artifact-v1", value)
 
 
 @dataclass(frozen=True)
@@ -104,7 +108,9 @@ class LocalAuthenticator:
         if identity is None:
             raise GatewayError(401, "unauthenticated")
         pseudonym = (
-            self._keyring.pseudonym(identity.tenant_id, subject) if subject is not None else None
+            self._keyring.pseudonym(identity.tenant_id, subject if subject is not None else key)
+            if subject is not None or identity.key_class == "operator"
+            else None
         )
         return Identity(
             tenant_id=identity.tenant_id,

@@ -186,8 +186,17 @@ def test_backup_restore_round_trip(
     with TestClient(app) as client:
         first = client.post("/v1/inference", headers=HEADERS, json=inference_request.model_dump())
         assert first.status_code == 200
+        from adaptive_llm.contracts import TrainingJob, TrainingJobSpecification, uid
+
+        control_job = TrainingJob(
+            specification=TrainingJobSpecification(
+                dataset_id="synthetic-drill", dataset_version=uid()
+            )
+        )
+        app.state.registry.save_job(control_job, ["synthetic-a"])
         main(["backup", "--data-dir", str(settings.data_dir), "--out", str(output)])
         assert capsys.readouterr().out == "backup_complete\n"
+        app.state.evaluation_database.connection.execute("DELETE FROM training_jobs")
         assert (
             client.delete(
                 f"/v1/privacy/interactions/{first.json()['interaction_id']}", headers=HEADERS
@@ -212,10 +221,17 @@ def test_backup_restore_round_trip(
             for r in restarted.state.database.connection.execute(
                 "SELECT version FROM schema_migrations"
             )
-        ] == [1, 2, 3, 4, 5, 6]
+        ] == [1, 2, 3, 4, 5, 7]
+        control = restarted.state.evaluation_database.connection
+        assert [r[0] for r in control.execute("SELECT version FROM schema_migrations")] == [3, 6, 7]
+        assert (
+            control.execute("SELECT data FROM training_jobs").fetchone()[0]
+            == control_job.model_dump_json()
+        )
         assert restarted.state.dispatcher.dispatch_once() == 5
     print(
-        f"backup/restore: replay=matched migrations=6 restored_events=5"
+        "backup/restore: replay=matched tenant_migrations=1-5,7 control_migrations=3,6,7"
+        " restored_jobs=1 restored_events=5"
         f" elapsed_s={perf_counter() - started:.3f}"
     )
 

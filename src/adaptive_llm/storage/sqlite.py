@@ -28,7 +28,7 @@ from adaptive_llm.storage import (
     StorageError,
     StoredRecord,
 )
-from adaptive_llm.storage.migrations import MIGRATIONS, migrate
+from adaptive_llm.storage.migrations import CONTROL_MIGRATIONS, MIGRATIONS, migrate
 
 TABLES: dict[type[StoredRecord], tuple[str, str]] = {
     Interaction: ("interactions", "interaction_id"),
@@ -104,6 +104,22 @@ class SQLiteDatabase:
         ).fetchone()
         if row and row["state"] != "active":
             raise StorageError("interaction_inactive")
+
+
+def control_database(
+    data_dir: Path, environment: Environment = "local", *, migrate_on_startup: bool = True
+) -> SQLiteDatabase:
+    legacy, destination = data_dir / "evaluations" / "control", data_dir / "control"
+    if legacy.exists():
+        if destination.exists():
+            raise StorageError("ambiguous_control_database")
+        legacy.rename(destination)
+    return SQLiteDatabase(
+        destination,
+        environment,
+        migrate_on_startup=migrate_on_startup,
+        migrations=CONTROL_MIGRATIONS,
+    )
 
 
 class SQLiteMetadataStore:
@@ -368,6 +384,14 @@ class SQLiteMetadataStore:
         self.database.connection.execute(
             "INSERT INTO dataset_manifests VALUES (?, ?, ?)",
             (manifest.dataset_id, manifest.version, manifest.model_dump_json()),
+        )
+
+    def approve_manifest(self, manifest: DatasetManifest) -> None:
+        if not self.database.connection.in_transaction:
+            raise StorageError("storage_transaction_required")
+        self.database.connection.execute(
+            "UPDATE dataset_manifests SET data=? WHERE dataset_id=? AND version=?",
+            (manifest.model_dump_json(), manifest.dataset_id, manifest.version),
         )
 
     def get_manifest(self, dataset_id: str, version: str) -> DatasetManifest | None:

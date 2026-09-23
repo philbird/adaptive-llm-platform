@@ -1,0 +1,444 @@
+{
+  "$defs": {
+    "AdapterConfig": {
+      "properties": {
+        "alpha": {
+          "default": 16,
+          "exclusiveMinimum": 0,
+          "title": "Alpha",
+          "type": "number"
+        },
+        "dropout": {
+          "default": 0,
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "Dropout",
+          "type": "number"
+        },
+        "gradient_accumulation": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Gradient Accumulation",
+          "type": "integer"
+        },
+        "learning_rate": {
+          "default": 0.0002,
+          "exclusiveMinimum": 0,
+          "title": "Learning Rate",
+          "type": "number"
+        },
+        "precision": {
+          "default": "fp32",
+          "enum": [
+            "fp32",
+            "fp16",
+            "bf16"
+          ],
+          "title": "Precision",
+          "type": "string"
+        },
+        "rank": {
+          "default": 8,
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "target_modules": {
+          "items": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Target Modules",
+          "type": "array"
+        }
+      },
+      "title": "AdapterConfig",
+      "type": "object"
+    },
+    "DatasetLineage": {
+      "properties": {
+        "content_digest": {
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "dataset_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "weight": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "dataset_id",
+        "version",
+        "content_digest"
+      ],
+      "title": "DatasetLineage",
+      "type": "object"
+    },
+    "LifecycleTransition": {
+      "properties": {
+        "actor": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Actor",
+          "type": "string"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "evaluation_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evaluation Id"
+        },
+        "from_state": {
+          "anyOf": [
+            {
+              "enum": [
+                "candidate",
+                "evaluating",
+                "approved",
+                "shadow",
+                "canary",
+                "production",
+                "deprecated",
+                "revoked"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "From State"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "to_state": {
+          "enum": [
+            "candidate",
+            "evaluating",
+            "approved",
+            "shadow",
+            "canary",
+            "production",
+            "deprecated",
+            "revoked"
+          ],
+          "title": "To State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_state",
+        "to_state",
+        "actor",
+        "reason"
+      ],
+      "title": "LifecycleTransition",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "adapter_architecture": {
+      "default": "deterministic-fake-adapter-v1",
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Adapter Architecture",
+      "type": "string"
+    },
+    "adapter_config": {
+      "$ref": "#/$defs/AdapterConfig"
+    },
+    "artifact_digest": {
+      "title": "Artifact Digest",
+      "type": "string"
+    },
+    "artifact_hashes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Artifact Hashes",
+      "type": "object"
+    },
+    "artifact_mac": {
+      "title": "Artifact Mac",
+      "type": "string"
+    },
+    "base_model_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Base Model Id",
+      "type": "string"
+    },
+    "base_model_licence": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Base Model Licence",
+      "type": "string"
+    },
+    "base_model_revision": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Base Model Revision",
+      "type": "string"
+    },
+    "chat_template_version": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Chat Template Version",
+      "type": "string"
+    },
+    "code_revision": {
+      "title": "Code Revision",
+      "type": "string"
+    },
+    "configuration_digest": {
+      "title": "Configuration Digest",
+      "type": "string"
+    },
+    "container_digest": {
+      "title": "Container Digest",
+      "type": "string"
+    },
+    "context_limit": {
+      "default": 4096,
+      "minimum": 1,
+      "title": "Context Limit",
+      "type": "integer"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "datasets": {
+      "items": {
+        "$ref": "#/$defs/DatasetLineage"
+      },
+      "title": "Datasets",
+      "type": "array"
+    },
+    "evaluation_reports": {
+      "patternProperties": {
+        "^[\\w.-]+$": {
+          "type": "boolean"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 100,
+        "minLength": 1
+      },
+      "title": "Evaluation Reports",
+      "type": "object"
+    },
+    "excluded_tasks": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "title": "Excluded Tasks",
+      "type": "array"
+    },
+    "hardware_class": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Hardware Class",
+      "type": "string"
+    },
+    "intended_tasks": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "title": "Intended Tasks",
+      "type": "array"
+    },
+    "known_limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Known Limitations",
+      "type": "array"
+    },
+    "languages": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "title": "Languages",
+      "type": "array"
+    },
+    "lifecycle_history": {
+      "items": {
+        "$ref": "#/$defs/LifecycleTransition"
+      },
+      "title": "Lifecycle History",
+      "type": "array"
+    },
+    "registry_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Registry Id",
+      "type": "string"
+    },
+    "safety_notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Safety Notes",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "seed": {
+      "title": "Seed",
+      "type": "integer"
+    },
+    "state": {
+      "default": "candidate",
+      "enum": [
+        "candidate",
+        "evaluating",
+        "approved",
+        "shadow",
+        "canary",
+        "production",
+        "deprecated",
+        "revoked"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "storage_location": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Storage Location",
+      "type": "string"
+    },
+    "tenant_ids": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "title": "Tenant Ids",
+      "type": "array"
+    },
+    "tokenizer_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Tokenizer Id",
+      "type": "string"
+    },
+    "training_job_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Training Job Id",
+      "type": "string"
+    },
+    "version": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "registry_id",
+    "version",
+    "tenant_ids",
+    "base_model_id",
+    "base_model_revision",
+    "base_model_licence",
+    "adapter_config",
+    "tokenizer_id",
+    "chat_template_version",
+    "datasets",
+    "training_job_id",
+    "code_revision",
+    "container_digest",
+    "configuration_digest",
+    "seed",
+    "hardware_class",
+    "artifact_hashes",
+    "artifact_digest",
+    "artifact_mac",
+    "storage_location"
+  ],
+  "title": "ModelManifest",
+  "type": "object"
+}

@@ -14,6 +14,43 @@
           "default": null,
           "title": "Actor"
         },
+        "at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "At"
+        },
+        "mac": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mac"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
         "schema_version": {
           "const": "1.0",
           "default": "1.0",
@@ -21,8 +58,12 @@
           "type": "string"
         },
         "status": {
-          "const": "pending",
           "default": "pending",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ],
           "title": "Status",
           "type": "string"
         }

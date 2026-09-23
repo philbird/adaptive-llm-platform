@@ -36,3 +36,17 @@ Unit/integration/security tests cover fresh application, repeat application, fai
 legacy-ledger upgrades, graph/payload transaction rollback, tenant isolation, ciphertext
 integrity, restart replay, per-tenant SQL eviction, retention, and atomic subject tombstones.
 Outbox, retry/dead letter, key rotation and backup/restore belong to 1c.
+
+
+Slice 3a separates migration streams. Root migrations apply only to tenant databases.
+`0007_control_separation.sql` removes empty legacy evaluation tables and refuses to drop
+populated ones. Applied tenant ledgers may retain version 6 from slice 2b. Control migrations
+live in `control/`: 0003 creates its outbox, 0006 creates evaluation reports/baselines, and
+0007 creates jobs, model versions, transitions and deployments while removing empty tenant
+tables inherited from the old control store. That upgrade preserves control rows and outbox
+events. The runner receives a directory; it contains no special-case control table logic.
+
+`make migrate` opens both databases. The control store is `<data-dir>/control/<environment>.sqlite3`.
+Startup moves the old `evaluations/control/` directory when the new one is absent; ambiguous
+paths fail closed. Backups and restore validate both migration streams; see the
+[paired backup runbook](../docs/runbooks/backup-restore.md).

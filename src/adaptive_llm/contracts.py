@@ -519,8 +519,22 @@ class DatasetQualitySummary(Record):
 
 
 class DatasetApproval(Record):
-    status: Literal["pending"] = "pending"
+    status: Literal["pending", "approved", "rejected"] = "pending"
     actor: str | None = None
+    reason: str | None = None
+    at: AwareDatetime | None = None
+    mac: str | None = None
+
+
+class OperatorNote(Record):
+    reason: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("operator_note_required")
+        return value
 
 
 class DatasetManifest(Record):
@@ -543,12 +557,144 @@ class DatasetManifest(Record):
     specification: DatasetSpecification
 
 
+class AdapterConfig(Record):
+    target_modules: list[Identifier] = Field(
+        default_factory=lambda: ["q_proj", "v_proj"], min_length=1
+    )
+    rank: int = Field(default=8, ge=1)
+    alpha: float = Field(default=16, gt=0)
+    dropout: float = Field(default=0, ge=0, lt=1)
+    learning_rate: float = Field(default=0.0002, gt=0)
+    precision: Literal["fp32", "fp16", "bf16"] = "fp32"
+    gradient_accumulation: int = Field(default=1, ge=1)
+
+
+class TrainingJobSpecification(Record):
+    job_id: Identifier = Field(default_factory=uid)
+    job_type: Literal["adapter"] = "adapter"
+    registry_id: Identifier = "synthetic-specialist"
+    dataset_id: Identifier
+    dataset_version: Identifier
+    base_model_id: Identifier = "fake-foundation"
+    base_model_revision: Identifier = "fake-1"
+    base_model_licence: Identifier = "synthetic"
+    tokenizer_id: Identifier = "fake-whitespace-v1"
+    chat_template_version: Identifier = "fake-chat-1"
+    adapter_config: AdapterConfig = Field(default_factory=AdapterConfig)
+    seed: int = Field(default=23, ge=0)
+    hardware_class: Identifier = "cpu"
+    container_digest: str = "local"
+    code_revision: str = "server"
+
+    @model_validator(mode="after")
+    def valid_training(self) -> TrainingJobSpecification:
+        try:
+            identifier = UUID(self.job_id)
+        except ValueError:
+            raise ValueError("invalid_job_id") from None
+        if identifier.version != 7 or str(identifier) != self.job_id:
+            raise ValueError("invalid_job_id")
+        if any(v in {".", ".."} for v in (self.registry_id, self.dataset_id, self.dataset_version)):
+            raise ValueError("invalid_training_identifier")
+        if self.container_digest != "local" and not (
+            self.container_digest.startswith("sha256:")
+            and len(self.container_digest) == 71
+            and all(c in "0123456789abcdef" for c in self.container_digest[7:])
+        ):
+            raise ValueError("invalid_container_digest")
+        return self
+
+
+class ResourceUsage(Record):
+    examples: int = Field(default=0, ge=0)
+    steps: int = Field(default=0, ge=0)
+    artifact_bytes: int = Field(default=0, ge=0)
+    cpu_seconds: float | None = Field(default=None, ge=0)
+    peak_memory_bytes: int | None = Field(default=None, ge=0)
+
+
+class TrainingJob(Record):
+    specification: TrainingJobSpecification
+    model_version: Identifier = Field(default_factory=uid)
+    state: Literal["queued", "running", "succeeded", "failed", "cancelled"] = "queued"
+    started_at: AwareDatetime | None = None
+    completed_at: AwareDatetime | None = None
+    resource_usage: ResourceUsage = Field(default_factory=ResourceUsage)
+    checkpoint_refs: list[Reference] = Field(default_factory=list)
+    artifact_ref: Reference | None = None
+    artifact_digest: str | None = None
+    failure_code: Identifier | None = None
+
+
+class LifecycleTransition(Record):
+    from_state: LifecycleState | None
+    to_state: LifecycleState
+    actor: Identifier
+    at: AwareDatetime = Field(default_factory=now)
+    reason: str
+    evaluation_id: Identifier | None = None
+
+
+class DatasetLineage(Record):
+    dataset_id: Identifier
+    version: Identifier
+    content_digest: str
+    weight: float = Field(default=1, gt=0, le=1)
+
+
+class ModelManifest(Record):
+    registry_id: Identifier
+    version: Identifier
+    created_at: AwareDatetime = Field(default_factory=now)
+    state: LifecycleState = "candidate"
+    tenant_ids: list[Identifier]
+    base_model_id: Identifier
+    base_model_revision: Identifier
+    base_model_licence: Identifier
+    adapter_architecture: Identifier = "deterministic-fake-adapter-v1"
+    adapter_config: AdapterConfig
+    tokenizer_id: Identifier
+    chat_template_version: Identifier
+    datasets: list[DatasetLineage]
+    training_job_id: Identifier
+    code_revision: str
+    container_digest: str
+    configuration_digest: str
+    seed: int
+    hardware_class: Identifier
+    evaluation_reports: dict[Identifier, bool] = Field(default_factory=dict)
+    intended_tasks: list[Identifier] = Field(default_factory=lambda: ["synthetic-smoke"])
+    excluded_tasks: list[Identifier] = Field(default_factory=lambda: ["real-inference"])
+    languages: list[Identifier] = Field(default_factory=lambda: ["en"])
+    context_limit: int = Field(default=4096, ge=1)
+    safety_notes: list[str] = Field(
+        default_factory=lambda: ["Synthetic adapter; no learned weights."]
+    )
+    known_limitations: list[str] = Field(
+        default_factory=lambda: ["Local MAC, not asymmetric signing."]
+    )
+    artifact_hashes: dict[str, str]
+    artifact_digest: str
+    artifact_mac: str
+    storage_location: Reference
+    lifecycle_history: list[LifecycleTransition] = Field(default_factory=list)
+
+
+class PromotionRequest(OperatorNote):
+    model_version: Identifier
+    target_state: LifecycleState
+    actor: Identifier | None = None
+    evaluation_id: Identifier | None = None
+
+
 class TrainingCompleted(Record):
     job_id: str
     job_type: Literal["adapter", "sft", "distillation", "router"]
     dataset_refs: list[str]
     model_version: str | None
     status: Literal["succeeded", "failed", "cancelled"]
+    artifact_digest: str | None = None
+    failure_code: Identifier | None = None
 
 
 SuiteName = Literal["golden", "held_out", "safety", "retrieval", "performance"]
@@ -641,6 +787,8 @@ class GateDecision(Record):
 class EvaluationReport(Record):
     specification: EvaluationSpecification
     candidate_manifest_version: Identifier
+    candidate_model_version: str | None = None
+    candidate_artifact_digest: str | None = None
     baseline_manifest_version: Identifier | None
     baseline_report_id: str | None = None
     dataset_content_digest: str
@@ -676,6 +824,7 @@ class DeploymentChanged(Record):
     new_state: LifecycleState
     actor_id: str
     reason: str
+    evaluation_id: str | None = None
 
 
 EventData = (

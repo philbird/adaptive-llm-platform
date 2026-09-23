@@ -11,10 +11,15 @@ from adaptive_llm.events.outbox import Dispatcher
 from adaptive_llm.metrics import InProcessMetrics
 from adaptive_llm.storage import StorageError
 from adaptive_llm.storage.crypto import PayloadCipher, load_keyring
-from adaptive_llm.storage.operations import backup, restore, rotate_key
+from adaptive_llm.storage.operations import backup_pair, restore_pair, rotate_key
 from adaptive_llm.storage.outbox import SQLiteOutboxStore
 from adaptive_llm.storage.retention import sweep
-from adaptive_llm.storage.sqlite import SQLiteDatabase, SQLiteMetadataStore, SQLitePayloadStore
+from adaptive_llm.storage.sqlite import (
+    SQLiteDatabase,
+    SQLiteMetadataStore,
+    SQLitePayloadStore,
+    control_database,
+)
 
 
 def main(argv: list[str] | None = None, *, sink: EventSink | None = None) -> None:
@@ -54,7 +59,7 @@ def main(argv: list[str] | None = None, *, sink: EventSink | None = None) -> Non
         parser.error("rotate-key requires --new-key-version and --keyring")
     try:
         if args.command == "restore":
-            restore(args.out, args.data_dir / f"{args.environment}.sqlite3", force=args.force)
+            restore_pair(args.out, args.data_dir, args.environment, force=args.force)
             print("database_restored")
             return
         database = SQLiteDatabase(args.data_dir, cast(Environment, args.environment))
@@ -86,9 +91,21 @@ def main(argv: list[str] | None = None, *, sink: EventSink | None = None) -> Non
                 )
                 print(f"rotated_payloads={count}")
             elif args.command == "backup":
-                backup(database, args.out)
+                control = control_database(
+                    args.data_dir,
+                    cast(Environment, args.environment),
+                )
+                try:
+                    backup_pair(database, control, args.out)
+                finally:
+                    control.close()
                 print("backup_complete")
             else:
+                control = control_database(
+                    args.data_dir,
+                    cast(Environment, args.environment),
+                )
+                control.close()
                 print("migrations_applied")
         finally:
             database.close()
