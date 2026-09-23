@@ -26,7 +26,7 @@ Python project uses uv/FastAPI; it provides tooling precedent, not shared infras
 Milestone 1 is split so a running pipeline exists early and hardening is reviewed separately
 (specification section 21.1 asks for a vertical slice before broadening).
 
-**1a. Vertical slice (in memory).** Deterministic fake provider with conformance tests; static
+**1a. Vertical slice (in memory). Delivered 2026-09-23 on branch `slice-1a`; see `docs/runbooks/interaction-walkthrough.md`.** Deterministic fake provider with conformance tests; static
 API-key tenant resolution; policy decision and processing-path redaction; synthetic tenant-scoped
 retrieval with exact source versions; foundation generation and validation with tokens and
 integer-micro costs; correlated events to an in-memory collector; one end-to-end test and a

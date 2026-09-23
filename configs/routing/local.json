@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "status": "design_example_not_loaded",
+  "status": "local_in_memory",
   "foundation_provider": "deterministic_fake",
   "specialist_routing_enabled": false,
   "shadow_enabled": false,
@@ -8,6 +8,17 @@
   "pruning_research_enabled": false,
   "content_logging_enabled": false,
   "training_enabled": false,
-  "max_attempts": 1
+  "max_attempts": 1,
+  "foundation": {
+    "model_deployment_id": "fake-foundation-local-1",
+    "model_provider": "deterministic_fake",
+    "model_id": "fake-foundation",
+    "model_version": "fake-1",
+    "processing_region": "local",
+    "price_list": {
+      "version": "synthetic-prices-1",
+      "input_micros_per_1000_tokens": 1000,
+      "output_micros_per_1000_tokens": 2000
+    }
+  }
 }
-
