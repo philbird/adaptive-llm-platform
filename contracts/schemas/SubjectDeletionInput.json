@@ -1,0 +1,23 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "subject": {
+      "classification": "personal",
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Subject",
+      "type": "string"
+    }
+  },
+  "required": [
+    "subject"
+  ],
+  "title": "SubjectDeletionInput",
+  "type": "object"
+}

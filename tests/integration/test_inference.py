@@ -312,9 +312,10 @@ async def test_concurrent_replay_executes_once(inference_request: InferenceReque
 
     provider = WaitingProvider()
     app = create_app(Settings(provider=provider))
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client,
+    ):
         first = asyncio.create_task(
             client.post("/v1/inference", json=inference_request.model_dump(), headers=HEADERS)
         )

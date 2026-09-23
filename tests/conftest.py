@@ -4,9 +4,15 @@ from pathlib import Path
 import pytest
 
 from adaptive_llm.app import Settings
-from adaptive_llm.contracts import Chunk, InferenceRequest, Message
+from adaptive_llm.contracts import Chunk, InferenceRequest, Message, uid
 from adaptive_llm.gateway.identity import Identity, Keyring, LocalAuthenticator
 from adaptive_llm.providers import ProviderRequest
+
+
+@pytest.fixture(autouse=True)
+def isolated_default_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Each app gets a fresh database unless a test explicitly shares data_dir (restart tests).
+    monkeypatch.setattr("adaptive_llm.app._default_data_dir", lambda: tmp_path / uid())
 
 
 @pytest.fixture

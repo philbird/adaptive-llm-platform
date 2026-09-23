@@ -3,7 +3,7 @@
 ## Engineering Specification for Codex
 
 **Status:** Draft for implementation  
-**Version:** 1.1 (1.0 plus review refinements of 2026-09-23; see `docs/adr/0003` and the changelog at the end)  
+**Version:** 1.2 (1.0 plus review refinements of 2026-09-23; see `docs/adr/0003` and the changelog at the end)  
 **Primary audience:** Software engineers, ML engineers, platform/security engineers, and Codex  
 **Document purpose:** Define a production-oriented system that learns from observed LLM workloads while preserving quality, privacy, auditability, and safe fallback to a foundation model.
 
@@ -604,7 +604,7 @@ Response:
 }
 ```
 
-`request_id` is the idempotency key. It is scoped to the authenticated tenant and `application_id`, never global. A replay of the same key with the same body within the idempotency window (default 24 hours) returns the original response with `replayed: true` and creates no new interaction; a replay with a different body is rejected with a conflict error. A replay of a request that is still in flight waits for or is rejected in favour of the original, never executed twice.
+`request_id` is the idempotency key. It is scoped to the authenticated tenant and `application_id`, never global. A replay of the same key with the same body within the idempotency window (default 24 hours) returns the original response with `replayed: true` and creates no new interaction; a replay with a different body is rejected with a conflict error. A replay of a request that is still in flight waits for or is rejected in favour of the original, never executed twice. A durable replay entry is content subject to persistence-path redaction (ADR 0003), so a replayed body may differ from the first delivery only where redaction changed it; ids, usage, cost and route metadata are identical. Replay entries expire no later than the interaction's retention deadline.
 
 `application_id` and `rag.index_id` have no server-side defaults; `rag` defaults to disabled. Client metadata is a bounded map of short strings (`metadata.locale` above) and is never trusted for policy.
 
@@ -615,7 +615,7 @@ Support streaming with Server-Sent Events or the organisation's standard streami
 - `POST /v1/interactions/{interaction_id}/feedback`
 - `POST /v1/interactions/{interaction_id}/correction`
 - `DELETE /v1/privacy/interactions/{interaction_id}`
-- `POST /v1/privacy/subjects/{subject_id}/deletion-requests`
+- `POST /v1/privacy/subjects/deletion-requests` with body `{"subject": "<raw subject identifier>"}`. The raw identifier travels in the body, never in the URL path, because paths reach proxy and access logs; the service pseudonymises it exactly as the gateway does and acts on the pseudonym. A subject-scope tombstone is written so late-arriving records for that pseudonym are refused.
 
 Feedback endpoints must authenticate the actor, protect against cross-tenant access, and record whether a correction is licensed/authorised for training.
 
@@ -1365,4 +1365,5 @@ The platform is successful when it can prove—not merely assume—that an appro
 
 ## Changelog
 
+- **1.2 (2026-09-23):** replay entries carry persistence-redacted content (9.1). Subject deletion takes the raw subject in the request body and writes a subject-scope tombstone (9.2).
 - **1.1 (2026-09-23):** cost target defined as total cost per successful outcome (was median; conflicted with section 23). Two-pass redaction (7.2, ADR 0003). Backward compatibility clarified as strict ingress, tolerant records (8). Keyed hashes for user-derived text (8, 8.1). `processing_region` and `price_list_version` on route candidates and attempts (8.3, 8.4). Finish reasons enumerated including `cancelled` and `deadline_exceeded` (8.4). Feedback actor pseudonymised, `judge_version` required for automated labels, `training_authorised` recorded (8.5). Idempotency semantics for `request_id` and no demo defaults in the request (9.1). Residency as a hard router constraint (7.5). Non-inferiority test and sample-size rule made explicit (12.3). Milestone 1 split into slices 1a/1b/1c (19). Adapter cross-tenant mitigation made concrete (23).

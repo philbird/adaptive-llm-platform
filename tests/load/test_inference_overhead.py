@@ -16,9 +16,10 @@ async def test_200_requests_have_under_50ms_p95_overhead(
     sink = InMemoryEventSink(capacity=1000)
     app = create_app(Settings(events=sink))
     overheads = []
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client,
+    ):
         for index in range(200):
             body = {**inference_request.model_dump(), "request_id": f"synthetic-load-{index}"}
             started = perf_counter()

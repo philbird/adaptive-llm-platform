@@ -194,6 +194,13 @@ class FeedbackInput(Contract):
     training_authorised: bool = False
 
 
+class SubjectDeletionInput(Contract):
+    model_config = ConfigDict(strict=True)
+    subject: str = Field(
+        min_length=1, max_length=512, json_schema_extra={"classification": "personal"}
+    )
+
+
 # --------------------------------------------------------------------------- records
 
 
@@ -258,7 +265,7 @@ class RetrievalRun(Record):
     embedding_model: str | None = None
     reranker_model: str | None = None
     filters: dict[str, str] = Field(default_factory=dict)
-    query_hash: str
+    query_hash: str | None
     query_hash_scheme: HashScheme = "hmac-sha256"
     query_ref: Reference | None = None
     latency_ms: float
@@ -342,7 +349,7 @@ class GenerationAttempt(Record):
 
 class InputSummary(Record):
     messages_ref: Reference | None = None
-    content_hash: str
+    content_hash: str | None
     hash_scheme: HashScheme = "hmac-sha256"
     token_count: int = Field(ge=0)
     tokenizer: str

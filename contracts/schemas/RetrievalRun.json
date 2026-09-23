@@ -142,8 +142,15 @@
       "type": "number"
     },
     "query_hash": {
-      "title": "Query Hash",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Query Hash"
     },
     "query_hash_scheme": {
       "default": "hmac-sha256",
