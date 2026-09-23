@@ -21,16 +21,25 @@ Python project uses uv/FastAPI; it provides tooling precedent, not shared infras
 | Routing/deployment | Foundation-only configuration intent | Constraints, shadow, bounded fallback, canary, rollback |
 | Research | Disabled configuration intent | Isolated activation/pruning work after earlier milestones |
 
-## Next increment: milestone 1 vertical slice
+## Next increment: milestone 1, delivered as three reviewable slices
 
-1. Validate contracts against provider/storage/retriever/policy interfaces.
-2. Implement the deterministic fake foundation provider with conformance tests.
-3. Authenticate and resolve a synthetic tenant; enforce policy before persistence.
-4. Retrieve synthetic tenant-scoped chunks and record exact source versions.
-5. Generate and validate a foundation response; record tokens and integer-micro costs.
-6. Emit correlated metadata events through bounded asynchronous collection.
-7. Produce an offline evaluation record, metrics and a trace walkthrough.
-8. Add privacy, isolation, retry/dead-letter, failure and load tests plus runbooks.
+Milestone 1 is split so a running pipeline exists early and hardening is reviewed separately
+(specification section 21.1 asks for a vertical slice before broadening).
+
+**1a. Vertical slice (in memory).** Deterministic fake provider with conformance tests; static
+API-key tenant resolution; policy decision and processing-path redaction; synthetic tenant-scoped
+retrieval with exact source versions; foundation generation and validation with tokens and
+integer-micro costs; correlated events to an in-memory collector; one end-to-end test and a
+trace walkthrough. Exit: p95 overhead for logging, classification and routing under the
+configured 50 ms on the local load test.
+
+**1b. Persistence.** Numbered migrations for SQLite metadata; persistence-path redaction;
+AES-GCM encrypted payload refs bound to tenant and interaction ids; idempotent replay of
+`request_id`; retention and deletion tombstones; privacy and isolation tests.
+
+**1c. Resilience.** Durable outbox, retry, dead letter and quarantine; telemetry outage drill
+proving serving is unaffected; dead-letter recovery, key rotation, retention/deletion and
+backup/restore drills and runbooks. Exit: ≥99.9% valid event correlation under local load.
 
 Only then broaden to milestone 2 datasets/evaluation, milestone 3 LoRA, milestone 4 routing,
 milestone 5 distillation, and optional milestone 6 research. Each remains a separate reviewable

@@ -3,7 +3,7 @@
 ## Engineering Specification for Codex
 
 **Status:** Draft for implementation  
-**Version:** 1.0  
+**Version:** 1.1 (1.0 plus review refinements of 2026-09-23; see `docs/adr/0003` and the changelog at the end)  
 **Primary audience:** Software engineers, ML engineers, platform/security engineers, and Codex  
 **Document purpose:** Define a production-oriented system that learns from observed LLM workloads while preserving quality, privacy, auditability, and safe fallback to a foundation model.
 
@@ -237,7 +237,8 @@ Responsibilities:
 - Decide whether content may be processed, logged, used for evaluation, or used for training.
 - Detect and redact configured PII, credentials, secrets, payment data, and prohibited content.
 - Apply tenant-specific retention and regional-residency rules.
-- Emit the policy version and redaction summary with every interaction.
+- Run redaction in two passes with separate versions and counts: a processing-path pass before classification and retrieval that removes only credentials, secrets, payment data and prohibited content, and a persistence-path pass before any durable write that applies the tenant's full PII and identifier redaction. Retrieval and validation therefore keep business identifiers. See ADR 0003.
+- Emit the policy version and both redaction summaries with every interaction.
 - Support hard deletion by subject, tenant, document, interaction, and dataset lineage.
 
 ### 7.3 RAG orchestrator
@@ -260,7 +261,7 @@ Produces a task/domain label, capabilities required, risk tier, and confidence. 
 
 Selects an eligible candidate using:
 
-- Tenant and policy constraints.
+- Tenant and policy constraints, including that the candidate's `processing_region` satisfies the policy's residency.
 - Required modalities, context length, tool use, structured-output support, and language.
 - Task/domain membership.
 - Specialist scope and version.
@@ -336,7 +337,7 @@ Validation failure, endpoint failure, timeout, out-of-distribution detection, or
 
 ## 8. Canonical data model
 
-Use UUIDv7 or another sortable unique identifier. Timestamps are UTC ISO 8601. Every schema includes `schema_version`, and additive changes remain backward compatible. Sensitive fields are classified and encrypted at rest.
+Use UUIDv7 or another sortable unique identifier. Timestamps are UTC ISO 8601. Every schema includes `schema_version`, and additive changes remain backward compatible: client-facing request bodies reject unknown fields, but stored and emitted records must ignore unknown fields so producers can add fields before consumers upgrade. The event type suffix (`.v1`) and `schema_version` major must agree. Sensitive fields are classified and encrypted at rest. Hashes of user-derived text use keyed HMAC and record a `hash_scheme`; plain SHA-256 is reserved for governed knowledge content.
 
 ### 8.1 Interaction record
 
@@ -368,12 +369,15 @@ Use UUIDv7 or another sortable unique identifier. Timestamps are UTC ISO 8601. E
     "training_allowed": false,
     "retention_class": "30d",
     "residency": "uk",
-    "redaction_version": "redactor-7",
-    "redaction_counts": {"email": 1}
+    "processing_redaction_version": "redactor-processing-2",
+    "processing_redaction_counts": {"credential": 0},
+    "persistence_redaction_version": "redactor-7",
+    "persistence_redaction_counts": {"email": 1}
   },
   "input": {
     "messages_ref": "object://encrypted/redacted/payload",
-    "content_hash": "sha256",
+    "content_hash": "hmac",
+    "hash_scheme": "hmac-sha256",
     "token_count": 214,
     "tokenizer": "tokenizer_id",
     "modality": ["text"]
@@ -436,7 +440,9 @@ Use UUIDv7 or another sortable unique identifier. Timestamps are UTC ISO 8601. E
       "model_deployment_id": "specialist-refund-v4",
       "eligible": true,
       "predicted_quality": 0.93,
+      "processing_region": "uk",
       "estimated_cost_usd": 0.0012,
+      "price_list_version": "prices-2026-09-01",
       "estimated_latency_ms": 410,
       "ood_score": 0.04,
       "reason_codes": ["domain_match", "within_context_limit"]
@@ -476,6 +482,7 @@ Use UUIDv7 or another sortable unique identifier. Timestamps are UTC ISO 8601. E
   "first_token_latency_ms": 180,
   "total_latency_ms": 620,
   "estimated_cost_usd": 0.0012,
+  "price_list_version": "prices-2026-09-01",
   "finish_reason": "stop",
   "validation": {
     "passed": true,
@@ -487,7 +494,9 @@ Use UUIDv7 or another sortable unique identifier. Timestamps are UTC ISO 8601. E
 }
 ```
 
-When a provider does not expose a token class, store `null`, not zero. Mark token counts as `provider_reported` or `locally_estimated` in a companion field.
+When a provider does not expose a token class, store `null`, not zero. Mark token counts as `provider_reported` or `locally_estimated` in a companion field. Every cost carries the `price_list_version` that produced it, so savings can be recomputed when prices change.
+
+`finish_reason` is one of `stop`, `length`, `error`, `cancelled` (client disconnected), `deadline_exceeded` (request deadline reached before completion) and `content_filter`. Cancelled and deadline-exceeded attempts are still recorded with their partial usage.
 
 ### 8.5 Feedback and labels
 
@@ -501,12 +510,14 @@ When a provider does not expose a token class, store `null`, not zero. Mark toke
   "value": {"score": 4, "max_score": 5},
   "comment_ref": null,
   "rubric_version": "support-quality-3",
+  "judge_version": null,
+  "training_authorised": false,
   "created_at": "2026-09-23T10:05:00Z",
-  "actor_id": "reviewer_ref_or_null"
+  "actor_id_pseudonymous": "hmac_ref_or_null"
 }
 ```
 
-Automated labels must never be represented as human labels. Preserve label source and model/rubric version.
+Automated labels must never be represented as human labels. Preserve label source and model/rubric version; `automated` feedback must carry `judge_version`, and no other source may. Actor identifiers are pseudonymised the same way as subject identifiers.
 
 ### 8.6 Dataset manifest
 
@@ -593,7 +604,11 @@ Response:
 }
 ```
 
-Support streaming with Server-Sent Events or the organisation's standard streaming protocol. Emit usage and final route metadata in the terminal event.
+`request_id` is the idempotency key. It is scoped to the authenticated tenant and `application_id`, never global. A replay of the same key with the same body within the idempotency window (default 24 hours) returns the original response with `replayed: true` and creates no new interaction; a replay with a different body is rejected with a conflict error. A replay of a request that is still in flight waits for or is rejected in favour of the original, never executed twice.
+
+`application_id` and `rag.index_id` have no server-side defaults; `rag` defaults to disabled. Client metadata is a bounded map of short strings (`metadata.locale` above) and is never trusted for policy.
+
+Support streaming with Server-Sent Events or the organisation's standard streaming protocol. Emit usage and final route metadata in the terminal event. Client disconnect during streaming records the attempt with `finish_reason: cancelled`.
 
 ### 9.2 Feedback API
 
@@ -820,6 +835,7 @@ A candidate may advance only when:
 - Latency/error/cost targets are met at expected concurrency.
 - Human review meets the minimum sample and agreement threshold when required.
 - The report includes confidence intervals, sample sizes, distribution coverage, and known limitations.
+- Non-inferiority is tested as a paired comparison on the same held-out items: the lower bound of the 95% bootstrap confidence interval on the mean per-item (candidate − baseline) score must exceed −margin, overall and on every critical segment. The minimum sample size is derived from pilot variance so the interval half-width is below half the margin, and the pilot and derived n are recorded in the report. A gate with no recorded sample size is not passable.
 - Data, ML, security, and product owners approve according to risk tier.
 
 Do not collapse evaluation to a single composite score. Hard safety/quality gates take precedence over cost savings.
@@ -1105,7 +1121,9 @@ Deliverables:
 - Cost, latency, token, retrieval, and error dashboards.
 - Foundation-only inference with no behaviour regression.
 
-Exit criteria: ≥99.9% valid event correlation in staging load tests; content policy/retention tests pass; telemetry degradation does not break serving.
+Deliver milestone 1 as three reviewable slices: **1a** an in-memory vertical slice (fake provider, tenant resolution, policy and processing-path redaction, retrieval, generation, validation, correlated events, one end-to-end test); **1b** persistence (migrations, persistence-path redaction, encrypted payload refs bound to tenant and interaction, idempotent replay, retention and deletion tombstones); **1c** resilience (durable outbox, retry, dead letter, quarantine, telemetry-outage drill, runbooks and drills).
+
+Exit criteria: ≥99.9% valid event correlation in staging load tests; content policy/retention tests pass; telemetry degradation does not break serving; slice 1a alone must meet the 50 ms p95 overhead target on a local load test.
 
 ### Milestone 2 — Dataset and evaluation platform
 
@@ -1332,7 +1350,7 @@ If these inputs are missing, Codex should build provider-neutral interfaces, fak
 | Apparent savings hide fallback cost | Measure total cost per successful outcome, including retries and retrieval |
 | Judge-model bias | Blind/randomised comparisons, human calibration, multiple evaluators, pinned versions |
 | Model drift or workload shift | Distribution monitoring, recurring evaluation, route disablement, retraining gates |
-| Adapter cross-tenant leakage | Strict adapter/data tenancy policy, isolated serving where required, access tests |
+| Adapter cross-tenant leakage | Strict adapter/data tenancy policy: dataset manifests carry the tenant set and the registry refuses a deployment scope wider than training consent scope; isolated serving where required; access and membership-inference tests |
 | Pruning reduces parameters but not latency | Benchmark on target hardware/runtime before promotion |
 | Provider telemetry discrepancies | Preserve reported/estimated provenance and reconcile sampled counts |
 | Foundation fallback overload | Capacity planning, circuit breakers, admission controls, and degradation plan |
@@ -1342,3 +1360,9 @@ If these inputs are missing, Codex should build provider-neutral interfaces, fak
 ## 24. Final success definition
 
 The platform is successful when it can prove—not merely assume—that an approved subset of real traffic is served by a cheaper or faster specialist at an agreed quality and safety level, while every decision and artifact is traceable, user data remains governed, the foundation model remains a dependable fallback, and future experimentation such as structured pruning can occur without weakening production controls.
+
+---
+
+## Changelog
+
+- **1.1 (2026-09-23):** cost target defined as total cost per successful outcome (was median; conflicted with section 23). Two-pass redaction (7.2, ADR 0003). Backward compatibility clarified as strict ingress, tolerant records (8). Keyed hashes for user-derived text (8, 8.1). `processing_region` and `price_list_version` on route candidates and attempts (8.3, 8.4). Finish reasons enumerated including `cancelled` and `deadline_exceeded` (8.4). Feedback actor pseudonymised, `judge_version` required for automated labels, `training_authorised` recorded (8.5). Idempotency semantics for `request_id` and no demo defaults in the request (9.1). Residency as a hard router constraint (7.5). Non-inferiority test and sample-size rule made explicit (12.3). Milestone 1 split into slices 1a/1b/1c (19). Adapter cross-tenant mitigation made concrete (23).

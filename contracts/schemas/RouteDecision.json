@@ -1,7 +1,6 @@
 {
   "$defs": {
     "Candidate": {
-      "additionalProperties": false,
       "properties": {
         "eligible": {
           "title": "Eligible",
@@ -10,6 +9,18 @@
         "estimated_cost_micros": {
           "title": "Estimated Cost Micros",
           "type": "integer"
+        },
+        "estimated_latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Latency Ms"
         },
         "model_deployment_id": {
           "title": "Model Deployment Id",
@@ -39,6 +50,17 @@
           "default": null,
           "title": "Predicted Quality"
         },
+        "price_list_version": {
+          "title": "Price List Version",
+          "type": "string"
+        },
+        "processing_region": {
+          "maxLength": 32,
+          "minLength": 1,
+          "pattern": "^[a-z0-9-]+$",
+          "title": "Processing Region",
+          "type": "string"
+        },
         "reason_codes": {
           "items": {
             "type": "string"
@@ -56,14 +78,15 @@
       "required": [
         "model_deployment_id",
         "eligible",
+        "processing_region",
         "estimated_cost_micros",
+        "price_list_version",
         "reason_codes"
       ],
       "title": "Candidate",
       "type": "object"
     }
   },
-  "additionalProperties": false,
   "properties": {
     "candidates": {
       "items": {
@@ -75,6 +98,18 @@
     "decision_latency_ms": {
       "title": "Decision Latency Ms",
       "type": "number"
+    },
+    "experiment_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Experiment Id"
     },
     "fallback_deployment_ids": {
       "items": {

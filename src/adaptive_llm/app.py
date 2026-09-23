@@ -11,7 +11,7 @@ from pydantic import BaseModel
 class Health(BaseModel):
     status: Literal["ok"] = "ok"
     stage: Literal["scaffold"] = "scaffold"
-    inference_enabled: Literal[False] = False
+    inference_enabled: bool = False
 
 
 @asynccontextmanager

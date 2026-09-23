@@ -15,4 +15,7 @@ work for later increments, not claims about implemented controls.
 | Model extraction/memorisation | Rate limits, private evaluation sets, canary extraction tests |
 | Removal races | Tombstones and deletion watermarks consulted by late events and builders |
 | Unapproved/unsafe model promotion | Role separation, hard quality/safety gates, audit and rollback |
+| Adapter cross-tenant leakage (specialist trained on tenant A serves tenant B) | Dataset manifests carry the tenant set; registry refuses a deployment scope wider than training consent scope; per-tenant adapters or isolated serving where required; membership-inference canaries |
+| Provider processes data outside permitted residency | `processing_region` on every route candidate; residency is a hard router constraint, tested with a negative routing test |
+| Hash of short user input reversed by dictionary attack | User-derived hashes use keyed HMAC (`hash_scheme` recorded); plain SHA-256 only for governed knowledge content |
 

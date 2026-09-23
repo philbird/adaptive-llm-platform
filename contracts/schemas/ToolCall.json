@@ -1,0 +1,61 @@
+{
+  "description": "Reserved for tool use. Arguments are never stored inline; only a hash and a reference.",
+  "properties": {
+    "allowed": {
+      "title": "Allowed",
+      "type": "boolean"
+    },
+    "arguments_hash": {
+      "title": "Arguments Hash",
+      "type": "string"
+    },
+    "arguments_ref": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Arguments Ref"
+    },
+    "result_ref": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result Ref"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tool_name": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Tool Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tool_name",
+    "arguments_hash",
+    "allowed"
+  ],
+  "title": "ToolCall",
+  "type": "object"
+}

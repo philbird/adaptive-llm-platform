@@ -1,7 +1,113 @@
 {
   "$defs": {
+    "RequestParameters": {
+      "properties": {
+        "max_output_tokens": {
+          "minimum": 1,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        }
+      },
+      "required": [
+        "max_output_tokens"
+      ],
+      "title": "RequestParameters",
+      "type": "object"
+    },
+    "ToolCall": {
+      "description": "Reserved for tool use. Arguments are never stored inline; only a hash and a reference.",
+      "properties": {
+        "allowed": {
+          "title": "Allowed",
+          "type": "boolean"
+        },
+        "arguments_hash": {
+          "title": "Arguments Hash",
+          "type": "string"
+        },
+        "arguments_ref": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arguments Ref"
+        },
+        "result_ref": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result Ref"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "tool_name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Tool Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_name",
+        "arguments_hash",
+        "allowed"
+      ],
+      "title": "ToolCall",
+      "type": "object"
+    },
     "Usage": {
-      "additionalProperties": false,
       "properties": {
         "cached_input_tokens": {
           "anyOf": [
@@ -68,7 +174,6 @@
       "type": "object"
     },
     "Validation": {
-      "additionalProperties": false,
       "properties": {
         "checks": {
           "items": {
@@ -101,7 +206,6 @@
       "type": "object"
     },
     "ValidationCheck": {
-      "additionalProperties": false,
       "properties": {
         "name": {
           "title": "Name",
@@ -126,7 +230,6 @@
       "type": "object"
     }
   },
-  "additionalProperties": false,
   "properties": {
     "adapter_id": {
       "anyOf": [
@@ -177,11 +280,26 @@
       "default": null,
       "title": "Estimated Cost Micros"
     },
+    "fallback_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fallback Reason"
+    },
     "finish_reason": {
       "enum": [
         "stop",
         "length",
-        "error"
+        "error",
+        "cancelled",
+        "deadline_exceeded",
+        "content_filter"
       ],
       "title": "Finish Reason",
       "type": "string"
@@ -229,6 +347,8 @@
     "output_ref": {
       "anyOf": [
         {
+          "maxLength": 512,
+          "minLength": 1,
           "type": "string"
         },
         {
@@ -238,11 +358,41 @@
       "default": null,
       "title": "Output Ref"
     },
+    "price_list_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Price List Version"
+    },
+    "request_parameters": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RequestParameters"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "schema_version": {
       "const": "1.0",
       "default": "1.0",
       "title": "Schema Version",
       "type": "string"
+    },
+    "tool_calls": {
+      "items": {
+        "$ref": "#/$defs/ToolCall"
+      },
+      "title": "Tool Calls",
+      "type": "array"
     },
     "total_latency_ms": {
       "title": "Total Latency Ms",

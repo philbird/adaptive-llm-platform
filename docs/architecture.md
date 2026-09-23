@@ -41,6 +41,11 @@ may bypass the standard registry, signatures, evaluations and approval gates.
 - [FastAPI lifespan](https://fastapi.tiangolo.com/advanced/events/): application startup/shutdown.
 - [Pydantic models](https://docs.pydantic.dev/latest/concepts/models/): validated contracts.
 - [Pydantic JSON Schema](https://docs.pydantic.dev/latest/concepts/json_schema/): schema exports.
-- [Fernet authenticated encryption](https://cryptography.io/en/stable/fernet/): candidate for
-  bounded local payload encryption, pending storage implementation; production KMS is unresolved.
+- [AES-GCM (cryptography)](https://cryptography.io/en/stable/hazmat/primitives/aead/): chosen
+  for payload encryption because associated data binds each ciphertext to its tenant and
+  interaction id, so a payload cannot be swapped between rows undetected (Fernet has no
+  associated data). Key wrapping and production KMS are unresolved.
+- [OpenTelemetry](https://opentelemetry.io/docs/languages/python/): traces and metrics API from
+  the first serving slice, as the specification's sections 7.8 and 17 require; the exporter
+  is chosen with the observability backend.
 

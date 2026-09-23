@@ -1,7 +1,6 @@
 {
   "$defs": {
     "ChunkEvidence": {
-      "additionalProperties": false,
       "properties": {
         "chunk_id": {
           "title": "Chunk Id",
@@ -10,6 +9,20 @@
         "content_hash": {
           "title": "Content Hash",
           "type": "string"
+        },
+        "content_ref": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Ref"
         },
         "context_position": {
           "anyOf": [
@@ -37,6 +50,18 @@
         "rank_retrieved": {
           "title": "Rank Retrieved",
           "type": "integer"
+        },
+        "rerank_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rerank Score"
         },
         "retrieval_score": {
           "title": "Retrieval Score",
@@ -73,7 +98,6 @@
       "type": "object"
     }
   },
-  "additionalProperties": false,
   "properties": {
     "candidates": {
       "items": {
@@ -94,6 +118,13 @@
       "default": null,
       "title": "Embedding Model"
     },
+    "filters": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Filters",
+      "type": "object"
+    },
     "index_id": {
       "title": "Index Id",
       "type": "string"
@@ -113,6 +144,29 @@
     "query_hash": {
       "title": "Query Hash",
       "type": "string"
+    },
+    "query_hash_scheme": {
+      "default": "hmac-sha256",
+      "enum": [
+        "sha256",
+        "hmac-sha256"
+      ],
+      "title": "Query Hash Scheme",
+      "type": "string"
+    },
+    "query_ref": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Query Ref"
     },
     "reranker_model": {
       "anyOf": [

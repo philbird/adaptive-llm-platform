@@ -1,9 +1,58 @@
 {
-  "additionalProperties": false,
+  "$defs": {
+    "FeedbackValue": {
+      "properties": {
+        "max_score": {
+          "minimum": 1,
+          "title": "Max Score",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "score": {
+          "minimum": 0,
+          "title": "Score",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "score",
+        "max_score"
+      ],
+      "title": "FeedbackValue",
+      "type": "object"
+    }
+  },
   "properties": {
-    "actor_id": {
-      "title": "Actor Id",
-      "type": "string"
+    "actor_id_pseudonymous": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Actor Id Pseudonymous"
+    },
+    "comment_ref": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Comment Ref"
     },
     "created_at": {
       "format": "date-time",
@@ -18,16 +67,40 @@
       "title": "Interaction Id",
       "type": "string"
     },
+    "judge_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Judge Version"
+    },
     "label_type": {
-      "const": "rubric",
-      "default": "rubric",
+      "enum": [
+        "thumb",
+        "rubric",
+        "correction",
+        "resolution",
+        "safety"
+      ],
       "title": "Label Type",
       "type": "string"
     },
     "rubric_version": {
-      "default": "user-satisfaction-1",
-      "title": "Rubric Version",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rubric Version"
     },
     "schema_version": {
       "const": "1.0",
@@ -35,23 +108,30 @@
       "title": "Schema Version",
       "type": "string"
     },
-    "score": {
-      "maximum": 5,
-      "minimum": 1,
-      "title": "Score",
-      "type": "integer"
-    },
     "source": {
-      "const": "user",
-      "default": "user",
+      "enum": [
+        "user",
+        "reviewer",
+        "automated",
+        "business_outcome"
+      ],
       "title": "Source",
       "type": "string"
+    },
+    "training_authorised": {
+      "default": false,
+      "title": "Training Authorised",
+      "type": "boolean"
+    },
+    "value": {
+      "$ref": "#/$defs/FeedbackValue"
     }
   },
   "required": [
     "interaction_id",
-    "actor_id",
-    "score"
+    "source",
+    "label_type",
+    "value"
   ],
   "title": "Feedback",
   "type": "object"

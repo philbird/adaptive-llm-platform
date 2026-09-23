@@ -7,9 +7,12 @@ Processing and each retained purpose require independent policy decisions. Trust
 comes from authentication, never a request body. Foundation-only routing is the first serving
 milestone. Training, shadow/canary and research remain separate changes.
 
-Draft contracts reject unknown fields and schema versions. New fields require schema regeneration
-and compatibility review; additive changes must include defaults and consumer-first rollout.
-This scaffold's consumers are not yet a compatibility guarantee for external producers.
+Ingress contracts (client request bodies) reject unknown fields. Records (stored and emitted
+payloads) ignore unknown fields so producers may add fields before consumers upgrade, which
+the specification's backward-compatibility rule (section 8) requires. Every contract rejects
+an unknown `schema_version`; the event type suffix carries the same major version and the
+envelope validator checks they agree. New fields require schema regeneration and review;
+additive changes must include defaults. Removing or retyping a field is a new major version.
 Use integer USD micros for internal/API cost fields, UUIDv7 identifiers, UTC timestamps and
 null for unavailable usage categories.
 

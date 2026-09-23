@@ -7,7 +7,10 @@ classification registry is still required before persistence is implemented.
 The serving increment must apply authenticated tenant policy before durable content storage,
 redact both input and output in two passes as set out in ADR 0003 (secrets only before
 processing, full PII before persistence), HMAC subject identifiers with a managed secret, and
-keep payloads separate from queryable metadata. Never include raw content or provider error bodies in
+keep payloads separate from queryable metadata. Hashes of user-derived text (inputs, queries,
+outputs) use keyed HMAC with a recorded `hash_scheme`, because a plain hash of a short
+message can be reversed by dictionary attack; plain SHA-256 is reserved for governed knowledge
+content. Never include raw content or provider error bodies in
 exceptions, logs, metric labels or traces. Redaction failure must fail closed for persistence.
 
 Logging, evaluation, review and training permissions are independent. A future dataset build

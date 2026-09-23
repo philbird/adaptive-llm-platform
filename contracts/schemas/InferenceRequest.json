@@ -35,17 +35,24 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "default": true,
+          "default": false,
           "title": "Enabled",
           "type": "boolean"
         },
         "index_id": {
-          "default": "support-kb",
-          "maxLength": 100,
-          "minLength": 1,
-          "pattern": "^[\\w.-]+$",
-          "title": "Index Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index Id"
         },
         "schema_version": {
           "const": "1.0",
@@ -117,22 +124,13 @@
     }
   },
   "additionalProperties": false,
+  "description": "Client request.\n\n`request_id` is the idempotency key, scoped to the authenticated tenant and\n`application_id`. A replay within the idempotency window returns the original response\nand marks it as replayed; a replay with a different body is rejected.",
   "properties": {
     "application_id": {
-      "default": "support-assistant",
       "maxLength": 100,
       "minLength": 1,
       "pattern": "^[\\w.-]+$",
       "title": "Application Id",
-      "type": "string"
-    },
-    "locale": {
-      "default": "en-GB",
-      "enum": [
-        "en-GB",
-        "en-US"
-      ],
-      "title": "Locale",
       "type": "string"
     },
     "max_output_tokens": {
@@ -150,6 +148,21 @@
       "minItems": 1,
       "title": "Messages",
       "type": "array"
+    },
+    "metadata": {
+      "maxProperties": 16,
+      "patternProperties": {
+        "^[\\w.-]+$": {
+          "maxLength": 200,
+          "type": "string"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 100,
+        "minLength": 1
+      },
+      "title": "Metadata",
+      "type": "object"
     },
     "rag": {
       "$ref": "#/$defs/RagOptions"
@@ -181,7 +194,8 @@
   },
   "required": [
     "request_id",
-    "messages"
+    "messages",
+    "application_id"
   ],
   "title": "InferenceRequest",
   "type": "object"

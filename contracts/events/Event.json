@@ -1,7 +1,6 @@
 {
   "$defs": {
     "Candidate": {
-      "additionalProperties": false,
       "properties": {
         "eligible": {
           "title": "Eligible",
@@ -10,6 +9,18 @@
         "estimated_cost_micros": {
           "title": "Estimated Cost Micros",
           "type": "integer"
+        },
+        "estimated_latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Latency Ms"
         },
         "model_deployment_id": {
           "title": "Model Deployment Id",
@@ -39,6 +50,17 @@
           "default": null,
           "title": "Predicted Quality"
         },
+        "price_list_version": {
+          "title": "Price List Version",
+          "type": "string"
+        },
+        "processing_region": {
+          "maxLength": 32,
+          "minLength": 1,
+          "pattern": "^[a-z0-9-]+$",
+          "title": "Processing Region",
+          "type": "string"
+        },
         "reason_codes": {
           "items": {
             "type": "string"
@@ -56,14 +78,15 @@
       "required": [
         "model_deployment_id",
         "eligible",
+        "processing_region",
         "estimated_cost_micros",
+        "price_list_version",
         "reason_codes"
       ],
       "title": "Candidate",
       "type": "object"
     },
     "ChunkEvidence": {
-      "additionalProperties": false,
       "properties": {
         "chunk_id": {
           "title": "Chunk Id",
@@ -72,6 +95,20 @@
         "content_hash": {
           "title": "Content Hash",
           "type": "string"
+        },
+        "content_ref": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Ref"
         },
         "context_position": {
           "anyOf": [
@@ -99,6 +136,18 @@
         "rank_retrieved": {
           "title": "Rank Retrieved",
           "type": "integer"
+        },
+        "rerank_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rerank Score"
         },
         "retrieval_score": {
           "title": "Retrieval Score",
@@ -134,12 +183,264 @@
       "title": "ChunkEvidence",
       "type": "object"
     },
-    "Feedback": {
-      "additionalProperties": false,
+    "DatasetBuilt": {
+      "properties": {
+        "approval_status": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ],
+          "title": "Approval Status",
+          "type": "string"
+        },
+        "dataset_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "deletions_applied_through": {
+          "format": "date-time",
+          "title": "Deletions Applied Through",
+          "type": "string"
+        },
+        "manifest_digest": {
+          "title": "Manifest Digest",
+          "type": "string"
+        },
+        "purpose": {
+          "enum": [
+            "adapter_training",
+            "distillation",
+            "router_training",
+            "evaluation"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dataset_id",
+        "version",
+        "purpose",
+        "manifest_digest",
+        "deletions_applied_through"
+      ],
+      "title": "DatasetBuilt",
+      "type": "object"
+    },
+    "DeletionRequest": {
+      "properties": {
+        "actor_id_pseudonymous": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actor Id Pseudonymous"
+        },
+        "deletion_request_id": {
+          "title": "Deletion Request Id",
+          "type": "string"
+        },
+        "requested_at": {
+          "format": "date-time",
+          "title": "Requested At",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "scope": {
+          "enum": [
+            "subject",
+            "interaction",
+            "tenant",
+            "document",
+            "dataset"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "target_id": {
+          "title": "Target Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope",
+        "target_id"
+      ],
+      "title": "DeletionRequest",
+      "type": "object"
+    },
+    "DeploymentChanged": {
       "properties": {
         "actor_id": {
           "title": "Actor Id",
           "type": "string"
+        },
+        "deployment_id": {
+          "title": "Deployment Id",
+          "type": "string"
+        },
+        "model_version": {
+          "title": "Model Version",
+          "type": "string"
+        },
+        "new_state": {
+          "enum": [
+            "candidate",
+            "evaluating",
+            "approved",
+            "shadow",
+            "canary",
+            "production",
+            "deprecated",
+            "revoked"
+          ],
+          "title": "New State",
+          "type": "string"
+        },
+        "previous_state": {
+          "anyOf": [
+            {
+              "enum": [
+                "candidate",
+                "evaluating",
+                "approved",
+                "shadow",
+                "canary",
+                "production",
+                "deprecated",
+                "revoked"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Previous State"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "deployment_id",
+        "model_version",
+        "previous_state",
+        "new_state",
+        "actor_id",
+        "reason"
+      ],
+      "title": "DeploymentChanged",
+      "type": "object"
+    },
+    "EvaluationCompleted": {
+      "properties": {
+        "baseline_version": {
+          "title": "Baseline Version",
+          "type": "string"
+        },
+        "evaluation_id": {
+          "title": "Evaluation Id",
+          "type": "string"
+        },
+        "model_version": {
+          "title": "Model Version",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "report_ref": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Report Ref",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "suites": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Suites",
+          "type": "array"
+        }
+      },
+      "required": [
+        "evaluation_id",
+        "model_version",
+        "baseline_version",
+        "suites",
+        "passed",
+        "report_ref"
+      ],
+      "title": "EvaluationCompleted",
+      "type": "object"
+    },
+    "Feedback": {
+      "properties": {
+        "actor_id_pseudonymous": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actor Id Pseudonymous"
+        },
+        "comment_ref": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comment Ref"
         },
         "created_at": {
           "format": "date-time",
@@ -154,16 +455,81 @@
           "title": "Interaction Id",
           "type": "string"
         },
+        "judge_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Judge Version"
+        },
         "label_type": {
-          "const": "rubric",
-          "default": "rubric",
+          "enum": [
+            "thumb",
+            "rubric",
+            "correction",
+            "resolution",
+            "safety"
+          ],
           "title": "Label Type",
           "type": "string"
         },
         "rubric_version": {
-          "default": "user-satisfaction-1",
-          "title": "Rubric Version",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rubric Version"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
           "type": "string"
+        },
+        "source": {
+          "enum": [
+            "user",
+            "reviewer",
+            "automated",
+            "business_outcome"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "training_authorised": {
+          "default": false,
+          "title": "Training Authorised",
+          "type": "boolean"
+        },
+        "value": {
+          "$ref": "#/$defs/FeedbackValue"
+        }
+      },
+      "required": [
+        "interaction_id",
+        "source",
+        "label_type",
+        "value"
+      ],
+      "title": "Feedback",
+      "type": "object"
+    },
+    "FeedbackValue": {
+      "properties": {
+        "max_score": {
+          "minimum": 1,
+          "title": "Max Score",
+          "type": "integer"
         },
         "schema_version": {
           "const": "1.0",
@@ -172,28 +538,19 @@
           "type": "string"
         },
         "score": {
-          "maximum": 5,
-          "minimum": 1,
+          "minimum": 0,
           "title": "Score",
           "type": "integer"
-        },
-        "source": {
-          "const": "user",
-          "default": "user",
-          "title": "Source",
-          "type": "string"
         }
       },
       "required": [
-        "interaction_id",
-        "actor_id",
-        "score"
+        "score",
+        "max_score"
       ],
-      "title": "Feedback",
+      "title": "FeedbackValue",
       "type": "object"
     },
     "GenerationAttempt": {
-      "additionalProperties": false,
       "properties": {
         "adapter_id": {
           "anyOf": [
@@ -244,11 +601,26 @@
           "default": null,
           "title": "Estimated Cost Micros"
         },
+        "fallback_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Reason"
+        },
         "finish_reason": {
           "enum": [
             "stop",
             "length",
-            "error"
+            "error",
+            "cancelled",
+            "deadline_exceeded",
+            "content_filter"
           ],
           "title": "Finish Reason",
           "type": "string"
@@ -296,6 +668,8 @@
         "output_ref": {
           "anyOf": [
             {
+              "maxLength": 512,
+              "minLength": 1,
               "type": "string"
             },
             {
@@ -305,11 +679,41 @@
           "default": null,
           "title": "Output Ref"
         },
+        "price_list_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Price List Version"
+        },
+        "request_parameters": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestParameters"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "schema_version": {
           "const": "1.0",
           "default": "1.0",
           "title": "Schema Version",
           "type": "string"
+        },
+        "tool_calls": {
+          "items": {
+            "$ref": "#/$defs/ToolCall"
+          },
+          "title": "Tool Calls",
+          "type": "array"
         },
         "total_latency_ms": {
           "title": "Total Latency Ms",
@@ -350,8 +754,68 @@
       "title": "GenerationAttempt",
       "type": "object"
     },
+    "InputSummary": {
+      "properties": {
+        "content_hash": {
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "hash_scheme": {
+          "default": "hmac-sha256",
+          "enum": [
+            "sha256",
+            "hmac-sha256"
+          ],
+          "title": "Hash Scheme",
+          "type": "string"
+        },
+        "messages_ref": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Messages Ref"
+        },
+        "modality": {
+          "items": {
+            "const": "text",
+            "type": "string"
+          },
+          "title": "Modality",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "token_count": {
+          "minimum": 0,
+          "title": "Token Count",
+          "type": "integer"
+        },
+        "tokenizer": {
+          "title": "Tokenizer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content_hash",
+        "token_count",
+        "tokenizer"
+      ],
+      "title": "InputSummary",
+      "type": "object"
+    },
     "Interaction": {
-      "additionalProperties": false,
       "properties": {
         "application_id": {
           "title": "Application Id",
@@ -363,8 +827,12 @@
           "type": "string"
         },
         "environment": {
-          "const": "local",
-          "default": "local",
+          "enum": [
+            "local",
+            "development",
+            "staging",
+            "production"
+          ],
           "title": "Environment",
           "type": "string"
         },
@@ -379,6 +847,13 @@
           ],
           "default": null,
           "title": "Error Code"
+        },
+        "feedback_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Feedback Ids",
+          "type": "array"
         },
         "final_attempt_id": {
           "anyOf": [
@@ -398,11 +873,14 @@
           "title": "Generation Attempt Ids",
           "type": "array"
         },
-        "input_hash": {
-          "title": "Input Hash",
+        "input": {
+          "$ref": "#/$defs/InputSummary"
+        },
+        "interaction_id": {
+          "title": "Interaction Id",
           "type": "string"
         },
-        "input_ref": {
+        "parent_interaction_id": {
           "anyOf": [
             {
               "type": "string"
@@ -412,11 +890,7 @@
             }
           ],
           "default": null,
-          "title": "Input Ref"
-        },
-        "interaction_id": {
-          "title": "Interaction Id",
-          "type": "string"
+          "title": "Parent Interaction Id"
         },
         "policy": {
           "$ref": "#/$defs/PolicyDecision"
@@ -467,8 +941,15 @@
           "type": "string"
         },
         "subject_id_pseudonymous": {
-          "title": "Subject Id Pseudonymous",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject Id Pseudonymous"
         },
         "task": {
           "$ref": "#/$defs/Task"
@@ -489,11 +970,12 @@
         "tenant_id",
         "subject_id_pseudonymous",
         "application_id",
+        "environment",
         "started_at",
         "completed_at",
         "task",
         "policy",
-        "input_hash",
+        "input",
         "retrieval_run_id",
         "route_decision_id",
         "generation_attempt_ids",
@@ -504,7 +986,6 @@
       "type": "object"
     },
     "PolicyDecision": {
-      "additionalProperties": false,
       "properties": {
         "content_logging_allowed": {
           "default": false,
@@ -521,6 +1002,18 @@
           "title": "Human Review Allowed",
           "type": "boolean"
         },
+        "persistence_redaction_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Persistence Redaction Counts",
+          "type": "object"
+        },
+        "persistence_redaction_version": {
+          "default": "persistence-regex-local-1",
+          "title": "Persistence Redaction Version",
+          "type": "string"
+        },
         "policy_version": {
           "title": "Policy Version",
           "type": "string"
@@ -530,20 +1023,23 @@
           "title": "Processing Allowed",
           "type": "boolean"
         },
-        "redaction_counts": {
+        "processing_redaction_counts": {
           "additionalProperties": {
             "type": "integer"
           },
-          "title": "Redaction Counts",
+          "title": "Processing Redaction Counts",
           "type": "object"
         },
-        "redaction_version": {
-          "default": "regex-local-1",
-          "title": "Redaction Version",
+        "processing_redaction_version": {
+          "default": "processing-regex-local-1",
+          "title": "Processing Redaction Version",
           "type": "string"
         },
         "residency": {
           "default": "local",
+          "maxLength": 32,
+          "minLength": 1,
+          "pattern": "^[a-z0-9-]+$",
           "title": "Residency",
           "type": "string"
         },
@@ -571,8 +1067,53 @@
       "title": "PolicyDecision",
       "type": "object"
     },
+    "RequestParameters": {
+      "properties": {
+        "max_output_tokens": {
+          "minimum": 1,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        }
+      },
+      "required": [
+        "max_output_tokens"
+      ],
+      "title": "RequestParameters",
+      "type": "object"
+    },
     "RetrievalRun": {
-      "additionalProperties": false,
       "properties": {
         "candidates": {
           "items": {
@@ -593,6 +1134,13 @@
           "default": null,
           "title": "Embedding Model"
         },
+        "filters": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Filters",
+          "type": "object"
+        },
         "index_id": {
           "title": "Index Id",
           "type": "string"
@@ -612,6 +1160,29 @@
         "query_hash": {
           "title": "Query Hash",
           "type": "string"
+        },
+        "query_hash_scheme": {
+          "default": "hmac-sha256",
+          "enum": [
+            "sha256",
+            "hmac-sha256"
+          ],
+          "title": "Query Hash Scheme",
+          "type": "string"
+        },
+        "query_ref": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query Ref"
         },
         "reranker_model": {
           "anyOf": [
@@ -648,7 +1219,6 @@
       "type": "object"
     },
     "RouteDecision": {
-      "additionalProperties": false,
       "properties": {
         "candidates": {
           "items": {
@@ -660,6 +1230,18 @@
         "decision_latency_ms": {
           "title": "Decision Latency Ms",
           "type": "number"
+        },
+        "experiment_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Experiment Id"
         },
         "fallback_deployment_ids": {
           "items": {
@@ -710,7 +1292,6 @@
       "type": "object"
     },
     "Started": {
-      "additionalProperties": false,
       "properties": {
         "application_id": {
           "title": "Application Id",
@@ -740,7 +1321,6 @@
       "type": "object"
     },
     "Task": {
-      "additionalProperties": false,
       "properties": {
         "classifier_version": {
           "default": "rules-1",
@@ -794,8 +1374,128 @@
       "title": "Task",
       "type": "object"
     },
+    "ToolCall": {
+      "description": "Reserved for tool use. Arguments are never stored inline; only a hash and a reference.",
+      "properties": {
+        "allowed": {
+          "title": "Allowed",
+          "type": "boolean"
+        },
+        "arguments_hash": {
+          "title": "Arguments Hash",
+          "type": "string"
+        },
+        "arguments_ref": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arguments Ref"
+        },
+        "result_ref": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result Ref"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "tool_name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Tool Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_name",
+        "arguments_hash",
+        "allowed"
+      ],
+      "title": "ToolCall",
+      "type": "object"
+    },
+    "TrainingCompleted": {
+      "properties": {
+        "dataset_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dataset Refs",
+          "type": "array"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "job_type": {
+          "enum": [
+            "adapter",
+            "sft",
+            "distillation",
+            "router"
+          ],
+          "title": "Job Type",
+          "type": "string"
+        },
+        "model_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Model Version"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "job_type",
+        "dataset_refs",
+        "model_version",
+        "status"
+      ],
+      "title": "TrainingCompleted",
+      "type": "object"
+    },
     "Usage": {
-      "additionalProperties": false,
       "properties": {
         "cached_input_tokens": {
           "anyOf": [
@@ -862,7 +1562,6 @@
       "type": "object"
     },
     "Validation": {
-      "additionalProperties": false,
       "properties": {
         "checks": {
           "items": {
@@ -895,7 +1594,6 @@
       "type": "object"
     },
     "ValidationCheck": {
-      "additionalProperties": false,
       "properties": {
         "name": {
           "title": "Name",
@@ -920,7 +1618,7 @@
       "type": "object"
     }
   },
-  "additionalProperties": false,
+  "description": "Envelope. `event_type` carries the payload major version; `schema_version` must agree.",
   "properties": {
     "data": {
       "anyOf": [
@@ -941,6 +1639,21 @@
         },
         {
           "$ref": "#/$defs/Feedback"
+        },
+        {
+          "$ref": "#/$defs/DeletionRequest"
+        },
+        {
+          "$ref": "#/$defs/DatasetBuilt"
+        },
+        {
+          "$ref": "#/$defs/TrainingCompleted"
+        },
+        {
+          "$ref": "#/$defs/EvaluationCompleted"
+        },
+        {
+          "$ref": "#/$defs/DeploymentChanged"
         }
       ],
       "title": "Data"
@@ -957,7 +1670,12 @@
         "generation.completed.v1",
         "generation.failed.v1",
         "interaction.completed.v1",
-        "feedback.recorded.v1"
+        "feedback.recorded.v1",
+        "privacy.deletion.requested.v1",
+        "dataset.built.v1",
+        "training.completed.v1",
+        "evaluation.completed.v1",
+        "deployment.changed.v1"
       ],
       "title": "Event Type",
       "type": "string"
@@ -968,8 +1686,18 @@
       "type": "string"
     },
     "producer": {
-      "const": "gateway",
       "default": "gateway",
+      "enum": [
+        "gateway",
+        "policy_redaction",
+        "rag_orchestrator",
+        "model_router",
+        "event_collector",
+        "dataset_builder",
+        "training_orchestrator",
+        "evaluation_service",
+        "deployment_controller"
+      ],
       "title": "Producer",
       "type": "string"
     },

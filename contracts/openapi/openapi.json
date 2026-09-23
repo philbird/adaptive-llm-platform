@@ -4,7 +4,6 @@
       "Health": {
         "properties": {
           "inference_enabled": {
-            "const": false,
             "default": false,
             "title": "Inference Enabled",
             "type": "boolean"

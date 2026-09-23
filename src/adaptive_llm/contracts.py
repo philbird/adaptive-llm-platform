@@ -1,4 +1,10 @@
-"""Provider-neutral v1 contracts. Money is integer USD micros; unknown counts are null."""
+"""Provider-neutral v1 contracts.
+
+Money is integer USD micros; unknown counts are null. Ingress contracts (client-supplied
+bodies) reject unknown fields. Records (stored and emitted payloads) ignore unknown fields so
+producers may add fields before consumers upgrade, as required by the specification's
+backward-compatibility rule. Both reject an unknown schema_version.
+"""
 
 from __future__ import annotations
 
@@ -23,14 +29,55 @@ def now() -> datetime:
 
 
 class Contract(BaseModel):
+    """Ingress contract: unknown fields are rejected."""
+
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
     schema_version: Literal["1.0"] = "1.0"
 
 
+class Record(Contract):
+    """Stored or emitted payload: unknown fields are ignored (additive compatibility)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+
 Identifier = Annotated[str, Field(min_length=1, max_length=100, pattern=r"^[\w.-]+$")]
+Region = Annotated[str, Field(min_length=1, max_length=32, pattern=r"^[a-z0-9-]+$")]
 Content = Annotated[
     str, Field(max_length=32_000, json_schema_extra={"classification": "confidential"})
 ]
+Reference = Annotated[str, Field(min_length=1, max_length=512)]
+MetadataValue = Annotated[str, Field(max_length=200)]
+
+Environment = Literal["local", "development", "staging", "production"]
+Producer = Literal[
+    "gateway",
+    "policy_redaction",
+    "rag_orchestrator",
+    "model_router",
+    "event_collector",
+    "dataset_builder",
+    "training_orchestrator",
+    "evaluation_service",
+    "deployment_controller",
+]
+FinishReason = Literal[
+    "stop", "length", "error", "cancelled", "deadline_exceeded", "content_filter"
+]
+HashScheme = Literal["sha256", "hmac-sha256"]
+Modality = Literal["text"]
+
+
+def _text_only() -> list[Modality]:
+    return ["text"]
+
+
+LifecycleState = Literal[
+    "candidate", "evaluating", "approved", "shadow", "canary", "production", "deprecated", "revoked"
+]
+
+
+# --------------------------------------------------------------------------- inference ingress
 
 
 class Message(Contract):
@@ -39,8 +86,14 @@ class Message(Contract):
 
 
 class RagOptions(Contract):
-    enabled: bool = True
-    index_id: Identifier = "support-kb"
+    enabled: bool = False
+    index_id: Identifier | None = None
+
+    @model_validator(mode="after")
+    def index_required_when_enabled(self) -> RagOptions:
+        if self.enabled and self.index_id is None:
+            raise ValueError("rag.index_id is required when rag is enabled")
+        return self
 
 
 class ResponseFormat(Contract):
@@ -54,13 +107,20 @@ class RoutingOptions(Contract):
 
 
 class InferenceRequest(Contract):
+    """Client request.
+
+    `request_id` is the idempotency key, scoped to the authenticated tenant and
+    `application_id`. A replay within the idempotency window returns the original response
+    and marks it as replayed; a replay with a different body is rejected.
+    """
+
     request_id: Identifier
     messages: list[Message] = Field(min_length=1, max_length=32)
-    application_id: Identifier = "support-assistant"
+    application_id: Identifier
     rag: RagOptions = Field(default_factory=RagOptions)
     response_format: ResponseFormat = Field(default_factory=ResponseFormat)
     routing: RoutingOptions = Field(default_factory=RoutingOptions)
-    locale: Literal["en-GB", "en-US"] = "en-GB"
+    metadata: dict[Identifier, MetadataValue] = Field(default_factory=dict, max_length=16)
     max_output_tokens: int = Field(default=512, ge=1, le=2_048)
     stream: bool = False
 
@@ -73,88 +133,16 @@ class InferenceRequest(Contract):
         return self
 
 
-class PolicyDecision(Contract):
-    policy_version: str
-    processing_allowed: bool = True
-    content_logging_allowed: bool = False
-    evaluation_allowed: bool = False
-    human_review_allowed: bool = False
-    training_allowed: bool = False
-    retention_seconds: int = Field(ge=1)
-    residency: str = "local"
-    redaction_version: str = "regex-local-1"
-    redaction_counts: dict[str, int] = Field(default_factory=dict)
-
-
-class Task(Contract):
-    label: str
-    language: str = "en"
-    risk_tier: Literal["low", "medium", "high"] = "medium"
-    classifier_version: str = "rules-1"
-    confidence: float = Field(ge=0, le=1)
-    reason_codes: list[str]
-
-
-class Chunk(Contract):
-    tenant_id: Identifier
-    environment: Literal["local"] = "local"
-    region: Literal["local"] = "local"
-    allowed_applications: list[Identifier]
-    index_id: Identifier = "support-kb"
-    document_id: Identifier
-    document_version: str
-    document_family: Identifier
-    chunk_id: Identifier
-    content: Content
-    licence_class: Literal["synthetic", "internal-approved", "unknown"] = "unknown"
-
-
-class ChunkEvidence(Contract):
+class Citation(Contract):
     document_id: str
-    document_version: str
     chunk_id: str
-    rank_retrieved: int
-    retrieval_score: float
-    supplied_to_model: bool
-    context_position: int | None
-    token_count: int
-    content_hash: str
-    licence_class: str
 
 
-class RetrievalRun(Contract):
-    retrieval_run_id: str = Field(default_factory=uid)
-    interaction_id: str
-    index_id: str
-    index_version: str
-    embedding_model: str | None = None
-    reranker_model: str | None = None
-    query_hash: str
-    latency_ms: float
-    candidates: list[ChunkEvidence]
+class RouteSummary(Contract):
+    fallback_used: bool = False
 
 
-class Candidate(Contract):
-    model_deployment_id: str
-    eligible: bool
-    estimated_cost_micros: int
-    predicted_quality: float | None = None
-    ood_score: float | None = None
-    reason_codes: list[str]
-
-
-class RouteDecision(Contract):
-    route_decision_id: str = Field(default_factory=uid)
-    interaction_id: str
-    router_version: str = "foundation-only-1"
-    candidates: list[Candidate]
-    selected_model_deployment_id: str
-    fallback_deployment_ids: list[str] = Field(default_factory=list)
-    decision_latency_ms: float
-    policy_constraints: list[str]
-
-
-class Usage(Contract):
+class Usage(Record):
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
     cached_input_tokens: int | None = Field(default=None, ge=0)
@@ -169,68 +157,6 @@ class Usage(Contract):
         return self
 
 
-class Citation(Contract):
-    document_id: str
-    chunk_id: str
-
-
-class ValidationCheck(Contract):
-    name: str
-    passed: bool
-
-
-class Validation(Contract):
-    validator_version: str = "baseline-validator-1"
-    passed: bool
-    checks: list[ValidationCheck]
-
-
-class GenerationAttempt(Contract):
-    attempt_id: str = Field(default_factory=uid)
-    interaction_id: str
-    attempt_number: int = 1
-    model_provider: str
-    model_id: str
-    model_version: str
-    deployment_id: str
-    adapter_id: str | None = None
-    usage: Usage | None = None
-    output_ref: str | None = None
-    output_hash: str | None = None
-    first_token_latency_ms: float | None = None
-    total_latency_ms: float
-    estimated_cost_micros: int | None = None
-    finish_reason: Literal["stop", "length", "error"]
-    validation: Validation | None = None
-    error_code: str | None = None
-
-
-class Interaction(Contract):
-    interaction_id: str
-    trace_id: str
-    request_id: str
-    tenant_id: str
-    subject_id_pseudonymous: str
-    application_id: str
-    environment: Literal["local"] = "local"
-    started_at: datetime
-    completed_at: datetime
-    task: Task
-    policy: PolicyDecision
-    input_ref: str | None = None
-    input_hash: str
-    retrieval_run_id: str | None
-    route_decision_id: str | None
-    generation_attempt_ids: list[str]
-    final_attempt_id: str | None
-    status: Literal["completed", "failed"]
-    error_code: str | None = None
-
-
-class RouteSummary(Contract):
-    fallback_used: bool = False
-
-
 class InferenceResponse(Contract):
     interaction_id: str
     trace_id: str
@@ -240,62 +166,343 @@ class InferenceResponse(Contract):
     usage: Usage
     estimated_cost_micros: int
     route: RouteSummary = Field(default_factory=RouteSummary)
-    finish_reason: Literal["stop", "length"]
+    finish_reason: Literal["stop", "length", "content_filter"]
+    replayed: bool = False
 
 
-class Started(Contract):
+# --------------------------------------------------------------------------- feedback ingress
+
+
+class FeedbackValue(Record):
+    score: int = Field(ge=0)
+    max_score: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def score_within_scale(self) -> FeedbackValue:
+        if self.score > self.max_score:
+            raise ValueError("score cannot exceed max_score")
+        return self
+
+
+class FeedbackInput(Contract):
+    """Body of POST /v1/interactions/{interaction_id}/feedback from an end user or reviewer."""
+
+    label_type: Literal["thumb", "rubric", "correction", "resolution", "safety"]
+    value: FeedbackValue
+    comment: Content | None = None
+    rubric_version: str | None = None
+    training_authorised: bool = False
+
+
+# --------------------------------------------------------------------------- records
+
+
+class PolicyDecision(Record):
+    policy_version: str
+    processing_allowed: bool = True
+    content_logging_allowed: bool = False
+    evaluation_allowed: bool = False
+    human_review_allowed: bool = False
+    training_allowed: bool = False
+    retention_seconds: int = Field(ge=1)
+    residency: Region = "local"
+    processing_redaction_version: str = "processing-regex-local-1"
+    processing_redaction_counts: dict[str, int] = Field(default_factory=dict)
+    persistence_redaction_version: str = "persistence-regex-local-1"
+    persistence_redaction_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class Task(Record):
+    label: str
+    language: str = "en"
+    risk_tier: Literal["low", "medium", "high"] = "medium"
+    classifier_version: str = "rules-1"
+    confidence: float = Field(ge=0, le=1)
+    reason_codes: list[str]
+
+
+class Chunk(Record):
+    tenant_id: Identifier
+    environment: Environment = "local"
+    region: Region = "local"
+    allowed_applications: list[Identifier]
+    index_id: Identifier
+    document_id: Identifier
+    document_version: str
+    document_family: Identifier
+    chunk_id: Identifier
+    content: Content
+    licence_class: Literal["synthetic", "internal-approved", "unknown"] = "unknown"
+
+
+class ChunkEvidence(Record):
+    document_id: str
+    document_version: str
+    chunk_id: str
+    rank_retrieved: int
+    retrieval_score: float
+    rerank_score: float | None = None
+    supplied_to_model: bool
+    context_position: int | None
+    token_count: int
+    content_hash: str
+    content_ref: Reference | None = None
+    licence_class: str
+
+
+class RetrievalRun(Record):
+    retrieval_run_id: str = Field(default_factory=uid)
+    interaction_id: str
+    index_id: str
+    index_version: str
+    embedding_model: str | None = None
+    reranker_model: str | None = None
+    filters: dict[str, str] = Field(default_factory=dict)
+    query_hash: str
+    query_hash_scheme: HashScheme = "hmac-sha256"
+    query_ref: Reference | None = None
+    latency_ms: float
+    candidates: list[ChunkEvidence]
+
+
+class Candidate(Record):
+    model_deployment_id: str
+    eligible: bool
+    processing_region: Region
+    estimated_cost_micros: int
+    price_list_version: str
+    estimated_latency_ms: float | None = None
+    predicted_quality: float | None = None
+    ood_score: float | None = None
+    reason_codes: list[str]
+
+
+class RouteDecision(Record):
+    route_decision_id: str = Field(default_factory=uid)
+    interaction_id: str
+    router_version: str = "foundation-only-1"
+    experiment_id: str | None = None
+    candidates: list[Candidate]
+    selected_model_deployment_id: str
+    fallback_deployment_ids: list[str] = Field(default_factory=list)
+    decision_latency_ms: float
+    policy_constraints: list[str]
+
+
+class ValidationCheck(Record):
+    name: str
+    passed: bool
+
+
+class Validation(Record):
+    validator_version: str = "baseline-validator-1"
+    passed: bool
+    checks: list[ValidationCheck]
+
+
+class RequestParameters(Record):
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    max_output_tokens: int = Field(ge=1)
+    seed: int | None = None
+
+
+class ToolCall(Record):
+    """Reserved for tool use. Arguments are never stored inline; only a hash and a reference."""
+
+    tool_name: Identifier
+    arguments_hash: str
+    arguments_ref: Reference | None = None
+    allowed: bool
+    result_ref: Reference | None = None
+
+
+class GenerationAttempt(Record):
+    attempt_id: str = Field(default_factory=uid)
+    interaction_id: str
+    attempt_number: int = 1
+    model_provider: str
+    model_id: str
+    model_version: str
+    deployment_id: str
+    adapter_id: str | None = None
+    request_parameters: RequestParameters | None = None
+    usage: Usage | None = None
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    output_ref: Reference | None = None
+    output_hash: str | None = None
+    first_token_latency_ms: float | None = None
+    total_latency_ms: float
+    estimated_cost_micros: int | None = None
+    price_list_version: str | None = None
+    finish_reason: FinishReason
+    validation: Validation | None = None
+    fallback_reason: str | None = None
+    error_code: str | None = None
+
+
+class InputSummary(Record):
+    messages_ref: Reference | None = None
+    content_hash: str
+    hash_scheme: HashScheme = "hmac-sha256"
+    token_count: int = Field(ge=0)
+    tokenizer: str
+    modality: list[Modality] = Field(default_factory=_text_only)
+
+
+class Interaction(Record):
+    interaction_id: str
+    trace_id: str
+    request_id: str
+    parent_interaction_id: str | None = None
+    tenant_id: str
+    subject_id_pseudonymous: str | None
+    application_id: str
+    environment: Environment
+    started_at: datetime
+    completed_at: datetime
+    task: Task
+    policy: PolicyDecision
+    input: InputSummary
+    retrieval_run_id: str | None
+    route_decision_id: str | None
+    generation_attempt_ids: list[str]
+    final_attempt_id: str | None
+    feedback_ids: list[str] = Field(default_factory=list)
+    status: Literal["completed", "failed"]
+    error_code: str | None = None
+
+
+class Started(Record):
     interaction_id: str
     application_id: str
     policy_version: str
 
 
-class FeedbackInput(Contract):
-    request_id: Identifier
-    score: int = Field(ge=1, le=5)
-
-
-class Feedback(Contract):
+class Feedback(Record):
     interaction_id: str
     feedback_id: str = Field(default_factory=uid)
-    actor_id: str
-    source: Literal["user"] = "user"
-    label_type: Literal["rubric"] = "rubric"
-    rubric_version: str = "user-satisfaction-1"
-    score: int = Field(ge=1, le=5)
+    source: Literal["user", "reviewer", "automated", "business_outcome"]
+    label_type: Literal["thumb", "rubric", "correction", "resolution", "safety"]
+    value: FeedbackValue
+    comment_ref: Reference | None = None
+    rubric_version: str | None = None
+    judge_version: str | None = None
+    actor_id_pseudonymous: str | None = None
+    training_authorised: bool = False
     created_at: datetime = Field(default_factory=now)
 
+    @model_validator(mode="after")
+    def automated_labels_declare_judge(self) -> Feedback:
+        if self.source == "automated" and self.judge_version is None:
+            raise ValueError("automated feedback must record judge_version")
+        if self.source != "automated" and self.judge_version is not None:
+            raise ValueError("judge_version is only valid for automated feedback")
+        return self
 
-EventData = Started | RetrievalRun | RouteDecision | GenerationAttempt | Interaction | Feedback
+
+class DeletionRequest(Record):
+    deletion_request_id: str = Field(default_factory=uid)
+    scope: Literal["subject", "interaction", "tenant", "document", "dataset"]
+    target_id: str
+    requested_at: datetime = Field(default_factory=now)
+    actor_id_pseudonymous: str | None = None
 
 
-class Event(Contract):
+class DatasetBuilt(Record):
+    dataset_id: Identifier
+    version: str
+    purpose: Literal["adapter_training", "distillation", "router_training", "evaluation"]
+    manifest_digest: str
+    deletions_applied_through: datetime
+    approval_status: Literal["pending", "approved", "rejected"] = "pending"
+
+
+class TrainingCompleted(Record):
+    job_id: str
+    job_type: Literal["adapter", "sft", "distillation", "router"]
+    dataset_refs: list[str]
+    model_version: str | None
+    status: Literal["succeeded", "failed", "cancelled"]
+
+
+class EvaluationCompleted(Record):
+    evaluation_id: str
+    model_version: str
+    baseline_version: str
+    suites: list[str]
+    passed: bool
+    report_ref: Reference
+
+
+class DeploymentChanged(Record):
+    deployment_id: str
+    model_version: str
+    previous_state: LifecycleState | None
+    new_state: LifecycleState
+    actor_id: str
+    reason: str
+
+
+EventData = (
+    Started
+    | RetrievalRun
+    | RouteDecision
+    | GenerationAttempt
+    | Interaction
+    | Feedback
+    | DeletionRequest
+    | DatasetBuilt
+    | TrainingCompleted
+    | EvaluationCompleted
+    | DeploymentChanged
+)
+
+EventType = Literal[
+    "interaction.started.v1",
+    "retrieval.completed.v1",
+    "route.decided.v1",
+    "generation.completed.v1",
+    "generation.failed.v1",
+    "interaction.completed.v1",
+    "feedback.recorded.v1",
+    "privacy.deletion.requested.v1",
+    "dataset.built.v1",
+    "training.completed.v1",
+    "evaluation.completed.v1",
+    "deployment.changed.v1",
+]
+
+EVENT_PAYLOADS: dict[str, type[Record]] = {
+    "interaction.started.v1": Started,
+    "retrieval.completed.v1": RetrievalRun,
+    "route.decided.v1": RouteDecision,
+    "generation.completed.v1": GenerationAttempt,
+    "generation.failed.v1": GenerationAttempt,
+    "interaction.completed.v1": Interaction,
+    "feedback.recorded.v1": Feedback,
+    "privacy.deletion.requested.v1": DeletionRequest,
+    "dataset.built.v1": DatasetBuilt,
+    "training.completed.v1": TrainingCompleted,
+    "evaluation.completed.v1": EvaluationCompleted,
+    "deployment.changed.v1": DeploymentChanged,
+}
+
+
+class Event(Record):
+    """Envelope. `event_type` carries the payload major version; `schema_version` must agree."""
+
     event_id: str = Field(default_factory=uid)
-    event_type: Literal[
-        "interaction.started.v1",
-        "retrieval.completed.v1",
-        "route.decided.v1",
-        "generation.completed.v1",
-        "generation.failed.v1",
-        "interaction.completed.v1",
-        "feedback.recorded.v1",
-    ]
+    event_type: EventType
     occurred_at: datetime = Field(default_factory=now)
-    producer: Literal["gateway"] = "gateway"
+    producer: Producer = "gateway"
     tenant_id: str
     trace_id: str
     data: EventData
 
     @model_validator(mode="after")
     def matching_event_data(self) -> Event:
-        kinds = {
-            "interaction.started.v1": Started,
-            "retrieval.completed.v1": RetrievalRun,
-            "route.decided.v1": RouteDecision,
-            "generation.completed.v1": GenerationAttempt,
-            "generation.failed.v1": GenerationAttempt,
-            "interaction.completed.v1": Interaction,
-            "feedback.recorded.v1": Feedback,
-        }
-        if not isinstance(self.data, kinds[self.event_type]):
+        if not isinstance(self.data, EVENT_PAYLOADS[self.event_type]):
             raise ValueError("event type and payload do not match")
+        if self.event_type.rsplit(".", 1)[1] != f"v{self.schema_version.split('.')[0]}":
+            raise ValueError("event type version and schema major version disagree")
         return self

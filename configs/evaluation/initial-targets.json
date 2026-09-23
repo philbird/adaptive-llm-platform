@@ -7,7 +7,11 @@
   "critical_safety_regressions_max": 0,
   "routing_logging_classification_overhead_p95_ms_max": 50,
   "required_suites": ["golden", "held_out", "safety", "retrieval", "performance"],
+  "non_inferiority_test": "paired_bootstrap_ci",
+  "confidence_level": 0.95,
+  "non_inferiority_rule": "lower bound of the CI on mean per-item (candidate - baseline) score must exceed -quality_non_inferiority_margin, overall and on every critical segment",
   "minimum_sample_sizes": null,
+  "minimum_sample_size_rule": "derive from pilot variance: n per arm such that the CI half-width at confidence_level is below quality_non_inferiority_margin / 2; record the pilot and n in the evaluation report",
   "human_review_policy": null
 }
 

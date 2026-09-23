@@ -1,0 +1,61 @@
+{
+  "properties": {
+    "content_hash": {
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "hash_scheme": {
+      "default": "hmac-sha256",
+      "enum": [
+        "sha256",
+        "hmac-sha256"
+      ],
+      "title": "Hash Scheme",
+      "type": "string"
+    },
+    "messages_ref": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Messages Ref"
+    },
+    "modality": {
+      "items": {
+        "const": "text",
+        "type": "string"
+      },
+      "title": "Modality",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "token_count": {
+      "minimum": 0,
+      "title": "Token Count",
+      "type": "integer"
+    },
+    "tokenizer": {
+      "title": "Tokenizer",
+      "type": "string"
+    }
+  },
+  "required": [
+    "content_hash",
+    "token_count",
+    "tokenizer"
+  ],
+  "title": "InputSummary",
+  "type": "object"
+}

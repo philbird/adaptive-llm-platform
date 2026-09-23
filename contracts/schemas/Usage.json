@@ -1,5 +1,4 @@
 {
-  "additionalProperties": false,
   "properties": {
     "cached_input_tokens": {
       "anyOf": [

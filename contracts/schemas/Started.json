@@ -1,5 +1,4 @@
 {
-  "additionalProperties": false,
   "properties": {
     "application_id": {
       "title": "Application Id",

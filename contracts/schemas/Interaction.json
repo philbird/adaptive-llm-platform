@@ -1,7 +1,67 @@
 {
   "$defs": {
+    "InputSummary": {
+      "properties": {
+        "content_hash": {
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "hash_scheme": {
+          "default": "hmac-sha256",
+          "enum": [
+            "sha256",
+            "hmac-sha256"
+          ],
+          "title": "Hash Scheme",
+          "type": "string"
+        },
+        "messages_ref": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Messages Ref"
+        },
+        "modality": {
+          "items": {
+            "const": "text",
+            "type": "string"
+          },
+          "title": "Modality",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "token_count": {
+          "minimum": 0,
+          "title": "Token Count",
+          "type": "integer"
+        },
+        "tokenizer": {
+          "title": "Tokenizer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content_hash",
+        "token_count",
+        "tokenizer"
+      ],
+      "title": "InputSummary",
+      "type": "object"
+    },
     "PolicyDecision": {
-      "additionalProperties": false,
       "properties": {
         "content_logging_allowed": {
           "default": false,
@@ -18,6 +78,18 @@
           "title": "Human Review Allowed",
           "type": "boolean"
         },
+        "persistence_redaction_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Persistence Redaction Counts",
+          "type": "object"
+        },
+        "persistence_redaction_version": {
+          "default": "persistence-regex-local-1",
+          "title": "Persistence Redaction Version",
+          "type": "string"
+        },
         "policy_version": {
           "title": "Policy Version",
           "type": "string"
@@ -27,20 +99,23 @@
           "title": "Processing Allowed",
           "type": "boolean"
         },
-        "redaction_counts": {
+        "processing_redaction_counts": {
           "additionalProperties": {
             "type": "integer"
           },
-          "title": "Redaction Counts",
+          "title": "Processing Redaction Counts",
           "type": "object"
         },
-        "redaction_version": {
-          "default": "regex-local-1",
-          "title": "Redaction Version",
+        "processing_redaction_version": {
+          "default": "processing-regex-local-1",
+          "title": "Processing Redaction Version",
           "type": "string"
         },
         "residency": {
           "default": "local",
+          "maxLength": 32,
+          "minLength": 1,
+          "pattern": "^[a-z0-9-]+$",
           "title": "Residency",
           "type": "string"
         },
@@ -69,7 +144,6 @@
       "type": "object"
     },
     "Task": {
-      "additionalProperties": false,
       "properties": {
         "classifier_version": {
           "default": "rules-1",
@@ -124,7 +198,6 @@
       "type": "object"
     }
   },
-  "additionalProperties": false,
   "properties": {
     "application_id": {
       "title": "Application Id",
@@ -136,8 +209,12 @@
       "type": "string"
     },
     "environment": {
-      "const": "local",
-      "default": "local",
+      "enum": [
+        "local",
+        "development",
+        "staging",
+        "production"
+      ],
       "title": "Environment",
       "type": "string"
     },
@@ -152,6 +229,13 @@
       ],
       "default": null,
       "title": "Error Code"
+    },
+    "feedback_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Feedback Ids",
+      "type": "array"
     },
     "final_attempt_id": {
       "anyOf": [
@@ -171,11 +255,14 @@
       "title": "Generation Attempt Ids",
       "type": "array"
     },
-    "input_hash": {
-      "title": "Input Hash",
+    "input": {
+      "$ref": "#/$defs/InputSummary"
+    },
+    "interaction_id": {
+      "title": "Interaction Id",
       "type": "string"
     },
-    "input_ref": {
+    "parent_interaction_id": {
       "anyOf": [
         {
           "type": "string"
@@ -185,11 +272,7 @@
         }
       ],
       "default": null,
-      "title": "Input Ref"
-    },
-    "interaction_id": {
-      "title": "Interaction Id",
-      "type": "string"
+      "title": "Parent Interaction Id"
     },
     "policy": {
       "$ref": "#/$defs/PolicyDecision"
@@ -240,8 +323,15 @@
       "type": "string"
     },
     "subject_id_pseudonymous": {
-      "title": "Subject Id Pseudonymous",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Subject Id Pseudonymous"
     },
     "task": {
       "$ref": "#/$defs/Task"
@@ -262,11 +352,12 @@
     "tenant_id",
     "subject_id_pseudonymous",
     "application_id",
+    "environment",
     "started_at",
     "completed_at",
     "task",
     "policy",
-    "input_hash",
+    "input",
     "retrieval_run_id",
     "route_decision_id",
     "generation_attempt_ids",

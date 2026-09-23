@@ -1,0 +1,52 @@
+{
+  "properties": {
+    "actor_id_pseudonymous": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Actor Id Pseudonymous"
+    },
+    "deletion_request_id": {
+      "title": "Deletion Request Id",
+      "type": "string"
+    },
+    "requested_at": {
+      "format": "date-time",
+      "title": "Requested At",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope": {
+      "enum": [
+        "subject",
+        "interaction",
+        "tenant",
+        "document",
+        "dataset"
+      ],
+      "title": "Scope",
+      "type": "string"
+    },
+    "target_id": {
+      "title": "Target Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "scope",
+    "target_id"
+  ],
+  "title": "DeletionRequest",
+  "type": "object"
+}

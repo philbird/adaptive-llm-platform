@@ -1,5 +1,4 @@
 {
-  "additionalProperties": false,
   "properties": {
     "content_logging_allowed": {
       "default": false,
@@ -16,6 +15,18 @@
       "title": "Human Review Allowed",
       "type": "boolean"
     },
+    "persistence_redaction_counts": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Persistence Redaction Counts",
+      "type": "object"
+    },
+    "persistence_redaction_version": {
+      "default": "persistence-regex-local-1",
+      "title": "Persistence Redaction Version",
+      "type": "string"
+    },
     "policy_version": {
       "title": "Policy Version",
       "type": "string"
@@ -25,20 +36,23 @@
       "title": "Processing Allowed",
       "type": "boolean"
     },
-    "redaction_counts": {
+    "processing_redaction_counts": {
       "additionalProperties": {
         "type": "integer"
       },
-      "title": "Redaction Counts",
+      "title": "Processing Redaction Counts",
       "type": "object"
     },
-    "redaction_version": {
-      "default": "regex-local-1",
-      "title": "Redaction Version",
+    "processing_redaction_version": {
+      "default": "processing-regex-local-1",
+      "title": "Processing Redaction Version",
       "type": "string"
     },
     "residency": {
       "default": "local",
+      "maxLength": 32,
+      "minLength": 1,
+      "pattern": "^[a-z0-9-]+$",
       "title": "Residency",
       "type": "string"
     },

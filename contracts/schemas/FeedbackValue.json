@@ -1,0 +1,26 @@
+{
+  "properties": {
+    "max_score": {
+      "minimum": 1,
+      "title": "Max Score",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "score": {
+      "minimum": 0,
+      "title": "Score",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "score",
+    "max_score"
+  ],
+  "title": "FeedbackValue",
+  "type": "object"
+}

@@ -1,0 +1,71 @@
+{
+  "properties": {
+    "actor_id": {
+      "title": "Actor Id",
+      "type": "string"
+    },
+    "deployment_id": {
+      "title": "Deployment Id",
+      "type": "string"
+    },
+    "model_version": {
+      "title": "Model Version",
+      "type": "string"
+    },
+    "new_state": {
+      "enum": [
+        "candidate",
+        "evaluating",
+        "approved",
+        "shadow",
+        "canary",
+        "production",
+        "deprecated",
+        "revoked"
+      ],
+      "title": "New State",
+      "type": "string"
+    },
+    "previous_state": {
+      "anyOf": [
+        {
+          "enum": [
+            "candidate",
+            "evaluating",
+            "approved",
+            "shadow",
+            "canary",
+            "production",
+            "deprecated",
+            "revoked"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Previous State"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "deployment_id",
+    "model_version",
+    "previous_state",
+    "new_state",
+    "actor_id",
+    "reason"
+  ],
+  "title": "DeploymentChanged",
+  "type": "object"
+}

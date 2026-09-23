@@ -10,11 +10,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def export() -> None:
+    for stale in (ROOT / "contracts/schemas").glob("*.json"):
+        stale.unlink()
     for name, cls in vars(contracts).items():
         if (
             isinstance(cls, type)
             and issubclass(cls, contracts.Contract)
-            and cls is not contracts.Contract
+            and cls not in (contracts.Contract, contracts.Record)
         ):
             folder = "events" if cls is contracts.Event else "schemas"
             path = ROOT / "contracts" / folder / f"{name}.json"

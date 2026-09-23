@@ -1,0 +1,46 @@
+{
+  "properties": {
+    "max_output_tokens": {
+      "minimum": 1,
+      "title": "Max Output Tokens",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "seed": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Seed"
+    },
+    "temperature": {
+      "anyOf": [
+        {
+          "maximum": 2,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Temperature"
+    }
+  },
+  "required": [
+    "max_output_tokens"
+  ],
+  "title": "RequestParameters",
+  "type": "object"
+}

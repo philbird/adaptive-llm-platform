@@ -1,5 +1,4 @@
 {
-  "additionalProperties": false,
   "properties": {
     "chunk_id": {
       "title": "Chunk Id",
@@ -8,6 +7,20 @@
     "content_hash": {
       "title": "Content Hash",
       "type": "string"
+    },
+    "content_ref": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Content Ref"
     },
     "context_position": {
       "anyOf": [
@@ -35,6 +48,18 @@
     "rank_retrieved": {
       "title": "Rank Retrieved",
       "type": "integer"
+    },
+    "rerank_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rerank Score"
     },
     "retrieval_score": {
       "title": "Retrieval Score",

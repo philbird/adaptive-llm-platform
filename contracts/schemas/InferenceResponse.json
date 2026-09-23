@@ -44,7 +44,6 @@
       "type": "object"
     },
     "Usage": {
-      "additionalProperties": false,
       "properties": {
         "cached_input_tokens": {
           "anyOf": [
@@ -133,7 +132,8 @@
     "finish_reason": {
       "enum": [
         "stop",
-        "length"
+        "length",
+        "content_filter"
       ],
       "title": "Finish Reason",
       "type": "string"
@@ -145,6 +145,11 @@
     "model_deployment_id": {
       "title": "Model Deployment Id",
       "type": "string"
+    },
+    "replayed": {
+      "default": false,
+      "title": "Replayed",
+      "type": "boolean"
     },
     "route": {
       "$ref": "#/$defs/RouteSummary"

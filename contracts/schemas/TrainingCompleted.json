@@ -1,0 +1,60 @@
+{
+  "properties": {
+    "dataset_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Dataset Refs",
+      "type": "array"
+    },
+    "job_id": {
+      "title": "Job Id",
+      "type": "string"
+    },
+    "job_type": {
+      "enum": [
+        "adapter",
+        "sft",
+        "distillation",
+        "router"
+      ],
+      "title": "Job Type",
+      "type": "string"
+    },
+    "model_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Model Version"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "cancelled"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_id",
+    "job_type",
+    "dataset_refs",
+    "model_version",
+    "status"
+  ],
+  "title": "TrainingCompleted",
+  "type": "object"
+}

@@ -2,17 +2,24 @@
   "additionalProperties": false,
   "properties": {
     "enabled": {
-      "default": true,
+      "default": false,
       "title": "Enabled",
       "type": "boolean"
     },
     "index_id": {
-      "default": "support-kb",
-      "maxLength": 100,
-      "minLength": 1,
-      "pattern": "^[\\w.-]+$",
-      "title": "Index Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Index Id"
     },
     "schema_version": {
       "const": "1.0",

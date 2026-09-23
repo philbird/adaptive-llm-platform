@@ -1,7 +1,6 @@
 {
   "$defs": {
     "ValidationCheck": {
-      "additionalProperties": false,
       "properties": {
         "name": {
           "title": "Name",
@@ -26,7 +25,6 @@
       "type": "object"
     }
   },
-  "additionalProperties": false,
   "properties": {
     "checks": {
       "items": {

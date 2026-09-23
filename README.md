@@ -25,8 +25,9 @@ The application is deliberately bound to loopback. Stop it with Ctrl-C.
 ## What exists
 
 - Installable Python package, dependency lock, Make commands and CI with a CycloneDX SBOM.
-- Initial Pydantic contracts for inference, policy decisions, RAG evidence, routing,
-  attempts, interactions, usage, feedback and event envelopes; generated JSON Schemas.
+- Pydantic contracts for inference, policy decisions, RAG evidence, routing, attempts,
+  interactions, usage, feedback, deletion, dataset/training/evaluation/deployment events and
+  the event envelope; generated JSON Schemas. Ingress is strict, records tolerate additions.
 - Sortable UUIDv7 identifiers, UTC timestamps, bounded requests and integer USD micros.
 - Health-only FastAPI application with a tested startup/shutdown path.
 - Synthetic knowledge fixtures, initial local configuration examples and component boundaries.
@@ -46,12 +47,13 @@ packages/              planned shared interfaces (currently consolidated in Pyth
 pipelines/             milestone plans; no executable training/research code
 configs/               local synthetic examples and future configurable thresholds
 migrations/            database migration policy; no database created yet
-tests/                 unit, contract and application integration tests
+tests/                 unit, contract, application integration tests and synthetic fixtures
 docs/                  architecture, governance, threat model, decisions and runbooks
 infra/                 future environment/deployment boundary
 scripts/               contract export
 ```
 
+The specification is checked in at `docs/spec/`.
 Start with [the implementation status and gap analysis](docs/status.md), then
 [architecture](docs/architecture.md) and [open decisions](docs/decisions.md).
 The next increment is one foundation-only request through policy, RAG, generation,

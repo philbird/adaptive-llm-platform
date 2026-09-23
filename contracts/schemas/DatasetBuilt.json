@@ -1,0 +1,59 @@
+{
+  "properties": {
+    "approval_status": {
+      "default": "pending",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected"
+      ],
+      "title": "Approval Status",
+      "type": "string"
+    },
+    "dataset_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "deletions_applied_through": {
+      "format": "date-time",
+      "title": "Deletions Applied Through",
+      "type": "string"
+    },
+    "manifest_digest": {
+      "title": "Manifest Digest",
+      "type": "string"
+    },
+    "purpose": {
+      "enum": [
+        "adapter_training",
+        "distillation",
+        "router_training",
+        "evaluation"
+      ],
+      "title": "Purpose",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "dataset_id",
+    "version",
+    "purpose",
+    "manifest_digest",
+    "deletions_applied_through"
+  ],
+  "title": "DatasetBuilt",
+  "type": "object"
+}

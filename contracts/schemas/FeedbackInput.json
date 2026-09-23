@@ -1,12 +1,71 @@
 {
+  "$defs": {
+    "FeedbackValue": {
+      "properties": {
+        "max_score": {
+          "minimum": 1,
+          "title": "Max Score",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "score": {
+          "minimum": 0,
+          "title": "Score",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "score",
+        "max_score"
+      ],
+      "title": "FeedbackValue",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
+  "description": "Body of POST /v1/interactions/{interaction_id}/feedback from an end user or reviewer.",
   "properties": {
-    "request_id": {
-      "maxLength": 100,
-      "minLength": 1,
-      "pattern": "^[\\w.-]+$",
-      "title": "Request Id",
+    "comment": {
+      "anyOf": [
+        {
+          "classification": "confidential",
+          "maxLength": 32000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Comment"
+    },
+    "label_type": {
+      "enum": [
+        "thumb",
+        "rubric",
+        "correction",
+        "resolution",
+        "safety"
+      ],
+      "title": "Label Type",
       "type": "string"
+    },
+    "rubric_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rubric Version"
     },
     "schema_version": {
       "const": "1.0",
@@ -14,16 +73,18 @@
       "title": "Schema Version",
       "type": "string"
     },
-    "score": {
-      "maximum": 5,
-      "minimum": 1,
-      "title": "Score",
-      "type": "integer"
+    "training_authorised": {
+      "default": false,
+      "title": "Training Authorised",
+      "type": "boolean"
+    },
+    "value": {
+      "$ref": "#/$defs/FeedbackValue"
     }
   },
   "required": [
-    "request_id",
-    "score"
+    "label_type",
+    "value"
   ],
   "title": "FeedbackInput",
   "type": "object"

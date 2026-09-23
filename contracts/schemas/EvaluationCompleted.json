@@ -1,0 +1,49 @@
+{
+  "properties": {
+    "baseline_version": {
+      "title": "Baseline Version",
+      "type": "string"
+    },
+    "evaluation_id": {
+      "title": "Evaluation Id",
+      "type": "string"
+    },
+    "model_version": {
+      "title": "Model Version",
+      "type": "string"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "report_ref": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Report Ref",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "suites": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Suites",
+      "type": "array"
+    }
+  },
+  "required": [
+    "evaluation_id",
+    "model_version",
+    "baseline_version",
+    "suites",
+    "passed",
+    "report_ref"
+  ],
+  "title": "EvaluationCompleted",
+  "type": "object"
+}

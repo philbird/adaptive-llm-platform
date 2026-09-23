@@ -1,5 +1,4 @@
 {
-  "additionalProperties": false,
   "properties": {
     "classifier_version": {
       "default": "rules-1",

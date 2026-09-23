@@ -1,5 +1,4 @@
 {
-  "additionalProperties": false,
   "properties": {
     "allowed_applications": {
       "items": {
@@ -43,13 +42,17 @@
       "type": "string"
     },
     "environment": {
-      "const": "local",
       "default": "local",
+      "enum": [
+        "local",
+        "development",
+        "staging",
+        "production"
+      ],
       "title": "Environment",
       "type": "string"
     },
     "index_id": {
-      "default": "support-kb",
       "maxLength": 100,
       "minLength": 1,
       "pattern": "^[\\w.-]+$",
@@ -67,8 +70,10 @@
       "type": "string"
     },
     "region": {
-      "const": "local",
       "default": "local",
+      "maxLength": 32,
+      "minLength": 1,
+      "pattern": "^[a-z0-9-]+$",
       "title": "Region",
       "type": "string"
     },
@@ -89,6 +94,7 @@
   "required": [
     "tenant_id",
     "allowed_applications",
+    "index_id",
     "document_id",
     "document_version",
     "document_family",
