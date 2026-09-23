@@ -14,6 +14,7 @@ Prerequisites: Python 3.12–3.14, [uv](https://docs.astral.sh/uv/) and Make.
 ```sh
 make dev         # installs locked dependencies; starts health-only API on 127.0.0.1:8000
 make check       # formatting, lint, strict typing, unit and contract tests
+make ci          # every gate: check, integration, sbom, security, load, drills, smoke
 make integration # application startup/health integration test
 make contracts   # regenerate initial JSON Schemas and current OpenAPI
 ```
@@ -24,7 +25,8 @@ The application is deliberately bound to loopback. Stop it with Ctrl-C.
 
 ## What exists
 
-- Installable Python package, dependency lock, Make commands and CI with a CycloneDX SBOM.
+- Installable Python package, dependency lock, Make commands and a local verification gate
+  (`make ci`) that runs lint, typing, all test suites, drills and a CycloneDX SBOM audit.
 - Pydantic contracts for inference, policy decisions, RAG evidence, routing, attempts,
   interactions, usage, feedback, deletion, dataset/training/evaluation/deployment events and
   the event envelope; generated JSON Schemas. Ingress is strict, records tolerate additions.
