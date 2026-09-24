@@ -1,5 +1,17 @@
 {
   "properties": {
+    "confidence": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Confidence"
+    },
     "eligible": {
       "title": "Eligible",
       "type": "boolean"

@@ -179,11 +179,12 @@
           "held_out",
           "safety",
           "retrieval",
-          "performance"
+          "performance",
+          "routing"
         ],
         "type": "string"
       },
-      "maxItems": 5,
+      "maxItems": 6,
       "minItems": 1,
       "title": "Suites",
       "type": "array"

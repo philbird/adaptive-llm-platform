@@ -1,4 +1,4 @@
-# Slices 1a–1c and 4a: serving, durable delivery and optional shadow execution
+# Slices 1a–1c and 4a–4b: serving, durable delivery, shadow and live routing
 
 This walkthrough uses only the synthetic keys, policies, prices and documents checked into
 the repository. All serving components run in the application process, with one SQLite file
@@ -90,8 +90,15 @@ curl http://127.0.0.1:8000/v1/inference \
    `cost_limit_exceeded`. Processing denial returns 403 `processing_forbidden` (normally before
    routing). These are constraint failures, not transient availability errors. No router 503
    case existed in slice 1a. Slice 4a excludes deployments with open circuit breakers; no healthy
-   deployment returns 503. Active route policies use an independent control pointer. Public
-   specialist mode selects foundation with reason `live_specialists_disabled`. These prices
+   deployment returns 503. Active route policies use an independent control pointer. Without
+   live permission, specialist mode selects foundation with `live_specialists_disabled`.
+   Slice 4b's `LivePlanner` checks trusted tenant/task controls, registry state, residency,
+   modality, context capacity, breakers and deterministic canary assignment. It loads the
+   approved router's signed logistic artifact, records all candidates' calibrated suitability,
+   confidence and OOD, then picks the cheapest qualifying candidate. A novel task returns
+   foundation with `out_of_distribution`. Only canary/production specialists can serve live;
+   shadow versions remain on the post-response worker. Foundation mode always retains the
+   foundation route. A cheaper specialist may fit a budget excluding foundation. All prices
    are synthetic integer USD micros, rounded up after calculation.
 5. **Generate and validate.** The injected `Provider` receives only canonical messages, supplied
    chunks, response format and output limit. `FakeProvider` returns deterministic content
@@ -110,9 +117,12 @@ curl http://127.0.0.1:8000/v1/inference \
    Truncation is advisory by default: nonempty text at the requested token budget returns 200
    with finish reason `length`. Malformed JSON remains a hard failure. Each application's
    validation configuration can override a known check's severity. A hard failure on the public
-   foundation route returns 502 `validation_failed`. The bounded chain also supports injected
-   live candidates for testing, with per-attempt records, deadline estimates, maximum attempts
-   and hard fallback reasons.
+   foundation route returns 502 `validation_failed`. A failed live specialist falls back using
+   the same canonical input and approved context, within the remaining deadline and cumulative
+   cost budget. Failed output is suppressed. Every invoked attempt has a separate record;
+   `route.specialist_served` identifies the response provider, and `fallback_used` retains the
+   existing rejection/fallback semantics. The response and interaction cost include all live
+   attempts; asynchronous shadow cost is recorded separately on the interaction.
 6. **Prepare the response.** The gateway produces `InferenceResponse` with the same interaction/trace ids,
    content, citations, usage, estimated cost and finish reason. Operational events contain
    versions, ids, counts, decisions and keyed input/output hashes, never prompt, response or
@@ -165,6 +175,15 @@ curl http://127.0.0.1:8000/v1/inference \
    Content-free comparison records and aggregate reports live in the control database. Queue
    saturation drops shadow work with a counter. See [shadow and kill switch](shadow-and-kill-switch.md)
    for activation, scoped disablement, reports, breaker thresholds and the measured recovery drill.
+
+10. **Canary reporting and automatic rollback (slice 4b).** After an interaction under an active
+    route policy, the control store records numeric features, validation/error/safety outcomes,
+    the chunk-overlap quality proxy and all-attempt cost. Replays add no observations. Reports
+    compare specialist-attempt and foundation-only cohorts, with separate actual-serving cohorts,
+    matched task/risk bins and bootstrap intervals. The lifespan monitor disables a breached
+    canary/production version persistently and emits a deployment event with its measurement.
+    It never promotes; production requires passing canary evidence and an operator note.
+    See [canary and rollback](canary-and-rollback.md) for the complete live path and limitations.
 
 The event order with RAG enabled and shadow disabled is:
 
@@ -329,5 +348,5 @@ acknowledgements. See [telemetry outage](telemetry-outage.md), [dead-letter reco
 [key rotation](key-rotation.md), [backup/restore](backup-restore.md) and
 [retention/deletion](retention-deletion.md) for commands and measured drill results.
 Feedback, optional local LoRA specialists and bounded fallback machinery are implemented by
-subsequent slices. Streaming, live specialist routing, external providers and exporters remain
-later work.
+subsequent slices, including opt-in live specialist routing in 4b. Streaming, external providers
+and exporters remain later work.

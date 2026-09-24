@@ -182,6 +182,15 @@ class SQLiteMetadataStore:
             ).fetchone()
         return cast(State, row["state"]) if row else None
 
+    def add_shadow_cost(self, tenant_id: str, interaction_id: str, cost_micros: int) -> None:
+        self.database.writable(tenant_id, interaction_id)
+        self.database.connection.execute(
+            "UPDATE interactions SET data=json_set(data, '$.shadow_cost_micros', "
+            "COALESCE(json_extract(data, '$.shadow_cost_micros'), 0)+?) "
+            "WHERE tenant_id=? AND record_id=?",
+            (cost_micros, tenant_id, interaction_id),
+        )
+
     def for_subject(self, tenant_id: str, pseudonym: str) -> list[Interaction]:
         with self.database.lock:
             rows = self.database.connection.execute(

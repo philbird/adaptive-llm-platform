@@ -331,6 +331,7 @@ class Persistence:
                 self.payloads.put(blob)
                 attempt = attempt.model_copy(update={"output_ref": blob.reference})
             self.metadata.put(tenant, attempt, expires)
+            self.metadata.add_shadow_cost(tenant, iid, attempt.estimated_cost_micros or 0)
             self.outbox.enqueue(
                 [
                     Event(

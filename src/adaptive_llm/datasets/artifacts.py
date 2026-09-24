@@ -19,7 +19,20 @@ def approval_mac(manifest: DatasetManifest, keyring: Keyring) -> str:
     unsigned = manifest.model_copy(
         update={"approval": manifest.approval.model_copy(update={"mac": None})}
     )
-    return keyring.manifest_mac(unsigned.model_dump_json())
+    # The optional source reference was added in 4b; old adapter approvals omit its null fields.
+    encoded = (
+        unsigned.model_dump_json(
+            exclude={
+                "specification": {
+                    "source_dataset_id",
+                    "source_dataset_version",
+                }
+            }
+        )
+        if unsigned.specification.source_dataset_id is None
+        else unsigned.model_dump_json()
+    )
+    return keyring.manifest_mac(encoded)
 
 
 def read_shards(

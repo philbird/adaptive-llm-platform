@@ -18,6 +18,9 @@ def test_metrics_are_thread_safe_and_labels_are_bounded() -> None:
     assert metrics.get("requests", status_class="4xx", method="POST") == 0
     metrics.increment("replay_hits", tenant_id="synthetic-a")
     assert metrics.get("replay_hits", tenant_id="synthetic-a") == 1
+    metrics.increment("fallback_reasons", reason="not_cheapest")
+    assert metrics.get("fallback_reasons", reason="not_cheapest") == 1
+    assert metrics.get("fallback_reasons", reason="other") == 0
     metrics.gauge("outbox_pending", 3)
     metrics.gauge("outbox_pending", 1)
     assert metrics.get("outbox_pending") == 1

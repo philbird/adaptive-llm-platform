@@ -140,6 +140,7 @@ class Citation(Contract):
 
 class RouteSummary(Contract):
     fallback_used: bool = False
+    specialist_served: bool = False
 
 
 class Usage(Record):
@@ -297,6 +298,7 @@ FallbackReason = Literal[
     "low_quality",
     "circuit_open",
     "live_specialists_disabled",
+    "not_cheapest",
 ]
 
 
@@ -309,6 +311,54 @@ def _hard_fallback_reasons() -> list[FallbackReason]:
         "unsupported_tool",
         "circuit_open",
     ]
+
+
+class CanaryConfig(Contract):
+    traffic_fraction: float = Field(default=0, ge=0, le=1)
+    tenant_allowlist: list[Identifier] = Field(default_factory=list, max_length=100)
+    assignment: Literal["sha256-interaction-policy-v1"] = "sha256-interaction-policy-v1"
+
+
+class RollbackThresholds(Contract):
+    interval_seconds: float = Field(default=1, gt=0, le=60)
+    window_seconds: float = Field(default=300, gt=0, le=86400)
+    minimum_samples: int = Field(default=4, ge=1)
+    non_inferiority_margin: float = Field(default=0.02, gt=0, lt=1)
+    validation_failure_rate_max: float = Field(default=0, ge=0, le=1)
+    error_rate_max: float = Field(default=0, ge=0, le=1)
+    p95_latency_ms_max: float = Field(default=5000, gt=0)
+    cost_ratio_max: float = Field(default=1, gt=0)
+
+
+class RoutingFeatures(Contract):
+    task: Identifier
+    language: Identifier = "en"
+    risk_tier: Literal["low", "medium", "high"] = "medium"
+    chunk_count: int = Field(default=0, ge=0)
+    top_score: float = Field(default=0, ge=0)
+    index_id: Identifier | None = None
+    input_tokens: int = Field(ge=0)
+    context_supplied: bool = False
+
+
+class RoutingObservation(Contract):
+    quality: float | None = Field(default=None, ge=0, le=1)
+    validation_pass: bool | None = None
+    cost_micros: int | None = Field(default=None, ge=0)
+    latency_ms: float | None = Field(default=None, ge=0)
+
+
+class RoutingRow(Contract):
+    interaction_id: Identifier
+    tenant_id: Identifier
+    features: RoutingFeatures
+    foundation_id: Identifier
+    candidates: dict[Identifier, RoutingObservation | None]
+    source_dataset_id: Identifier
+    source_dataset_version: Identifier
+    source_example_hash: Identifier | None = None
+    split: Literal["train", "validation", "test"] = "train"
+    transformation_code_revision: str = "unknown"
 
 
 class RoutePolicy(Contract):
@@ -326,13 +376,18 @@ class RoutePolicy(Contract):
     tenant_enabled: dict[Identifier, bool] = Field(default_factory=dict, max_length=100)
     task_enabled: dict[Identifier, bool] = Field(default_factory=dict, max_length=32)
     kill_switch: bool = False
-    live_specialists_allowed: Literal[False] = False
+    live_specialists_allowed: bool = False
+    router_version: Identifier | None = None
+    canary: CanaryConfig = Field(default_factory=CanaryConfig)
+    rollback: RollbackThresholds = Field(default_factory=RollbackThresholds)
     breaker: BreakerThresholds = Field(default_factory=BreakerThresholds)
 
     @model_validator(mode="after")
     def unique_specialists(self) -> RoutePolicy:
         if len(set(self.eligible_specialist_versions)) != len(self.eligible_specialist_versions):
             raise ValueError("duplicate_specialists")
+        if self.live_specialists_allowed and self.router_version is None:
+            raise ValueError("promoted_router_required")
         return self
 
 
@@ -344,6 +399,7 @@ class Candidate(Record):
     price_list_version: str
     estimated_latency_ms: float | None = None
     predicted_quality: float | None = None
+    confidence: float | None = None
     ood_score: float | None = None
     reason_codes: list[str]
 
@@ -367,6 +423,7 @@ class ValidationCheck(Record):
     name: str
     passed: bool
     severity: Literal["hard", "advisory"] = "hard"
+    critical_safety: bool = False
 
 
 class Validation(Record):
@@ -444,6 +501,8 @@ class Interaction(Record):
     generation_attempt_ids: list[str]
     final_attempt_id: str | None
     feedback_ids: list[str] = Field(default_factory=list)
+    total_cost_micros: int = Field(default=0, ge=0)
+    shadow_cost_micros: int = Field(default=0, ge=0)
     status: Literal["completed", "failed"]
     error_code: str | None = None
 
@@ -559,9 +618,15 @@ class DatasetSpecification(Record):
     minimum_examples: int = Field(default=1, ge=1)
     seed: int = Field(default=0, ge=0)
     near_duplicate_threshold: float = Field(default=0.8, ge=0, le=1)
+    source_dataset_id: Identifier | None = None
+    source_dataset_version: Identifier | None = None
 
     @model_validator(mode="after")
     def valid_specification(self) -> DatasetSpecification:
+        if self.purpose == "router_training" and (
+            self.source_dataset_id is None or self.source_dataset_version is None
+        ):
+            raise ValueError("routing_source_dataset_required")
         if self.dataset_id in {".", ".."} or any(t in {".", ".."} for t in self.tenant_ids):
             raise ValueError("invalid_dataset_identifier")
         if len(set(self.tenant_ids)) != len(self.tenant_ids):
@@ -594,10 +659,14 @@ class RouteControlNote(Contract):
     reason: str = Field(min_length=1, max_length=2000)
     tenant_id: Identifier | None = None
     task: Identifier | None = None
+    specialist_version: Identifier | None = None
 
     @model_validator(mode="after")
     def valid_scope(self) -> RouteControlNote:
-        if not self.reason.strip() or (self.tenant_id is not None and self.task is not None):
+        if (
+            not self.reason.strip()
+            or sum(v is not None for v in (self.tenant_id, self.task, self.specialist_version)) > 1
+        ):
             raise ValueError("invalid_route_control_note")
         return self
 
@@ -647,7 +716,7 @@ class AdapterConfig(Record):
 
 class TrainingJobSpecification(Record):
     job_id: Identifier = Field(default_factory=uid)
-    job_type: Literal["adapter"] = "adapter"
+    job_type: Literal["adapter", "router"] = "adapter"
     registry_id: Identifier = "synthetic-specialist"
     dataset_id: Identifier
     dataset_version: Identifier
@@ -665,6 +734,8 @@ class TrainingJobSpecification(Record):
     hardware_class: Identifier = "cpu"
     container_digest: str = "local"
     code_revision: str = "server"
+    input_micros_per_1000_tokens: int = Field(default=1000, ge=0)
+    output_micros_per_1000_tokens: int = Field(default=2000, ge=0)
 
     @model_validator(mode="after")
     def valid_training(self) -> TrainingJobSpecification:
@@ -751,6 +822,12 @@ class ModelManifest(Record):
     excluded_tasks: list[Identifier] = Field(default_factory=lambda: ["real-inference"])
     languages: list[Identifier] = Field(default_factory=lambda: ["en"])
     context_limit: int = Field(default=4096, ge=1)
+    capability_signature_version: Literal["1"] | None = None
+    processing_region: Region = "local"
+    modalities: list[Modality] = Field(default_factory=_text_only)
+    tools_supported: bool = False
+    input_micros_per_1000_tokens: int = Field(default=1000, ge=0)
+    output_micros_per_1000_tokens: int = Field(default=2000, ge=0)
     safety_notes: list[str] = Field(
         default_factory=lambda: ["Synthetic adapter; no learned weights."]
     )
@@ -781,7 +858,7 @@ class TrainingCompleted(Record):
     failure_code: Identifier | None = None
 
 
-SuiteName = Literal["golden", "held_out", "safety", "retrieval", "performance"]
+SuiteName = Literal["golden", "held_out", "safety", "retrieval", "performance", "routing"]
 EvaluationMetrics = Annotated[dict[Identifier, float], Field(max_length=40)]
 
 
@@ -791,7 +868,7 @@ class EvaluationSpecification(Record):
     baseline_deployment_id: Identifier | None
     dataset_id: Identifier
     dataset_version: Identifier
-    suites: list[SuiteName] = Field(min_length=1, max_length=5)
+    suites: list[SuiteName] = Field(min_length=1, max_length=6)
     rubric_version: Identifier | None = "synthetic-rubric-1"
     judge_version: Identifier | None = "deterministic-judge-1"
     seed: int = Field(default=23, ge=0)
@@ -838,6 +915,7 @@ class ItemScore(Record):
     item_id: Identifier
     score: float = Field(ge=0, le=1)
     segments: list[Identifier] = Field(default_factory=list, max_length=32)
+    observation: RoutingObservation | None = None
 
 
 class SuiteResult(Record):
@@ -911,6 +989,7 @@ class ShadowComparison(Record):
     input_token_delta: int
     output_token_delta: int
     cost_delta_micros: int
+    specialist_cost_micros: int | None = Field(default=None, ge=0)
     latency_delta_ms: float
     specialist_validation: Validation
 
@@ -935,6 +1014,63 @@ class ShadowReport(Record):
     since: AwareDatetime
     overall: ShadowAggregate
     critical_segments: dict[str, ShadowAggregate]
+    passed: bool = False
+
+
+class LiveObservation(Contract):
+    interaction_id: Identifier
+    policy_id: Identifier
+    tenant_id: Identifier
+    created_at: AwareDatetime = Field(default_factory=now)
+    features: RoutingFeatures
+    specialist_version: Identifier | None = None
+    specialist_served: bool = False
+    fallback_used: bool = False
+    success: bool
+    validation_failure: bool = False
+    error: bool = False
+    critical_safety_incidents: int = Field(default=0, ge=0)
+    quality: float = Field(ge=0, le=1)
+    total_cost_micros: int = Field(ge=0)
+    shadow_cost_micros: int = Field(default=0, ge=0)
+    latency_ms: float = Field(ge=0)
+
+
+class OutcomeAggregate(Record):
+    interactions: int
+    successes: int
+    total_cost_micros: int
+    cost_per_success_micros: int | None
+    validation_failure_rate: float | None
+    error_rate: float | None
+    p95_latency_ms: float | None
+    critical_safety_incidents: int
+
+
+class CanaryAggregate(Record):
+    specialist: OutcomeAggregate
+    foundation: OutcomeAggregate
+    specialist_served: OutcomeAggregate
+    foundation_served: OutcomeAggregate
+    quality_delta: PairedComparison
+    cost_delta_micros: PairedComparison
+    served_cost_delta_micros: PairedComparison
+    cost_reduction_fraction: float | None
+    served_cost_reduction_fraction: float | None
+    shadow_cost_micros: int
+    passed: bool
+    breach_reasons: list[Identifier]
+    trigger_segments: list[str] = Field(default_factory=list)
+
+
+class CanaryReport(Record):
+    policy_id: Identifier
+    since: AwareDatetime
+    until: AwareDatetime
+    overall: CanaryAggregate
+    critical_segments: dict[str, CanaryAggregate]
+    specialists: dict[str, CanaryAggregate]
+    passed: bool
 
 
 class EvaluationCompleted(Record):

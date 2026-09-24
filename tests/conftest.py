@@ -282,6 +282,162 @@ class EvaluationSeed:
     request: EvaluationInput
 
 
+@dataclass
+class RouterSeed:
+    seed: EvaluationSeed
+    specialist: str
+    router: str
+    dataset: DatasetManifest
+
+
+@pytest.fixture
+def router_seed(shadow_seed: tuple[EvaluationSeed, str]) -> RouterSeed:
+    from adaptive_llm.contracts import RoutePolicy, TrainingJobSpecification
+
+    seed, specialist = shadow_seed
+    operator = {"Authorization": "Bearer synthetic-operator-key"}
+    cheaper = TrainingJobSpecification(
+        registry_id="synthetic-live",
+        dataset_id=seed.manifest.dataset_id,
+        dataset_version=seed.manifest.version,
+        input_micros_per_1000_tokens=250,
+        output_micros_per_1000_tokens=500,
+    )
+    assert (
+        seed.client.post(
+            "/v1/training/jobs", headers=operator, json=cheaper.model_dump(mode="json")
+        ).status_code
+        == 200
+    )
+    trained = wait_training(seed.client, cheaper.job_id, operator)
+    assert trained.state == "succeeded"
+    specialist = trained.model_version
+    candidate = seed.request.model_copy(
+        update={"evaluation_id": uid(), "candidate_deployment_id": specialist}
+    )
+    assert seed.client.post(
+        "/v1/evaluations", headers=operator, json=candidate.model_dump(mode="json")
+    ).json()["passed"]
+    for state in ["approved", "shadow"]:
+        assert (
+            seed.client.post(
+                f"/v1/models/{specialist}/promotion-requests",
+                headers=operator,
+                json={
+                    "model_version": specialist,
+                    "target_state": state,
+                    "evaluation_id": candidate.evaluation_id,
+                    "reason": "SYNTHETIC cheaper live specialist",
+                },
+            ).status_code
+            == 200
+        )
+    policy = RoutePolicy(
+        eligible_specialist_versions=[specialist],
+        shadow_enabled=True,
+        tenant_enabled={"synthetic-a": True},
+        task_enabled={"general": True},
+    )
+    assert (
+        seed.client.post(
+            "/v1/route-policies", headers=operator, json=policy.model_dump(mode="json")
+        ).status_code
+        == 200
+    )
+    assert (
+        seed.client.post(
+            f"/v1/route-policies/{policy.policy_id}/activate",
+            headers=operator,
+            json={"reason": "SYNTHETIC router observations"},
+        ).status_code
+        == 200
+    )
+    start = now()
+    cutoffs = []
+    for index in range(60):
+        response = seed.client.post(
+            "/v1/inference",
+            headers={
+                "Authorization": "Bearer synthetic-key-a",
+                "X-Subject": f"synthetic-router-{index}",
+            },
+            json={
+                "request_id": uid(),
+                "application_id": "support-assistant",
+                "max_output_tokens": 32,
+                "messages": [{"role": "user", "content": f"SYNTHETIC routing example {index}"}],
+            },
+        )
+        assert response.status_code == 200
+        if index in {39, 49}:
+            cutoffs.append(now())
+    assert seed.client.portal is not None
+    seed.client.portal.call(seed.app.state.shadow.queue.join)
+    specification = DatasetSpecification(
+        dataset_id="synthetic-router",
+        purpose="router_training",
+        tenant_ids=seed.manifest.tenant_ids,
+        source_dataset_id=seed.manifest.dataset_id,
+        source_dataset_version=seed.manifest.version,
+        source_window=SourceWindow(start=start, end=now()),
+        eligibility_policy_version="synthetic-dataset-policy-1",
+        time_split=TimeSplit(train_end=cutoffs[0], validation_end=cutoffs[1]),
+    )
+    result = seed.client.post(
+        "/v1/datasets/builds", headers=operator, json=specification.model_dump(mode="json")
+    )
+    assert result.status_code == 200, result.json()
+    dataset = DatasetManifest.model_validate(result.json())
+    assert dataset.examples == {"train": 40, "validation": 10, "test": 10}
+    assert (
+        seed.client.post(
+            f"/v1/datasets/{dataset.dataset_id}/versions/{dataset.version}/approval",
+            headers=operator,
+            json={"reason": "SYNTHETIC routing dataset"},
+        ).status_code
+        == 200
+    )
+    specification_job = TrainingJobSpecification(
+        job_type="router",
+        registry_id="synthetic-router",
+        dataset_id=dataset.dataset_id,
+        dataset_version=dataset.version,
+    )
+    result = seed.client.post(
+        "/v1/training/jobs", headers=operator, json=specification_job.model_dump(mode="json")
+    )
+    assert result.status_code == 200, result.json()
+    job = wait_training(seed.client, specification_job.job_id, operator)
+    assert job.state == "succeeded", job.failure_code
+    evaluation = EvaluationInput(
+        candidate_deployment_id=job.model_version,
+        baseline_deployment_id=None,
+        dataset_id=dataset.dataset_id,
+        dataset_version=dataset.version,
+        suites=["routing"],
+        minimum_sample_size=4,
+    )
+    result = seed.client.post(
+        "/v1/evaluations", headers=operator, json=evaluation.model_dump(mode="json")
+    )
+    assert result.status_code == 200, result.json()
+    assert result.json()["passed"], result.json()["suite_results"]
+    assert (
+        seed.client.post(
+            f"/v1/models/{job.model_version}/promotion-requests",
+            headers=operator,
+            json={
+                "model_version": job.model_version,
+                "target_state": "approved",
+                "evaluation_id": evaluation.evaluation_id,
+                "reason": "SYNTHETIC calibrated router",
+            },
+        ).status_code
+        == 200
+    )
+    return RouterSeed(seed, specialist, job.model_version, dataset)
+
+
 @pytest.fixture
 def evaluation_seed(tmp_path: Path, request: pytest.FixtureRequest) -> Iterator[EvaluationSeed]:
     no_context = getattr(request, "param", None) == "no_context"

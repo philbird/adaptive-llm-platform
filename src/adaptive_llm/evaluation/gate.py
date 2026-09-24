@@ -1,11 +1,16 @@
 """Independent hard gates; lower cost cannot compensate for failed quality or safety."""
 
+import json
+from pathlib import Path
+
 from adaptive_llm.contracts import EvaluationReport, GateDecision, PairedComparison
 
 REQUIRED_SUITES = {"golden", "held_out", "safety", "retrieval", "performance"}
 
 
 def decisions(report: EvaluationReport) -> list[GateDecision]:
+    if report.specification.suites == ["routing"]:
+        return routing_decisions(report)
     spec = report.specification
     suites = {suite.suite: suite for suite in report.suite_results}
     baseline_suites = {suite.suite: suite for suite in report.baseline_suite_results}
@@ -106,3 +111,37 @@ def decisions(report: EvaluationReport) -> list[GateDecision]:
         "missing_ci_coverage_or_limitations",
     )
     return gates
+
+
+def routing_decisions(report: EvaluationReport) -> list[GateDecision]:
+    targets = json.loads(
+        (
+            Path(__file__).resolve().parents[3] / "configs/evaluation/initial-targets.json"
+        ).read_text()
+    )
+    suite = report.suite_results[0] if len(report.suite_results) == 1 else None
+    enough = bool(
+        suite
+        and suite.suite == "routing"
+        and suite.completed
+        and suite.items
+        >= max(
+            report.specification.minimum_sample_size or 0,
+            targets["minimum_sample_sizes"]["overall"],
+        )
+    )
+    return [
+        GateDecision(gate=name, passed=passed, reason="met" if passed else "routing_gate_failed")
+        for name, passed in (
+            ("routing_samples", enough),
+            (
+                "false_specialist_rate",
+                bool(
+                    suite
+                    and suite.metrics.get("false_specialist_rate", 1)
+                    <= targets["false_specialist_rate_max"]
+                ),
+            ),
+            ("calibration_error", bool(suite and suite.metrics.get("calibration_error", 1) <= 0.1)),
+        )
+    ]

@@ -30,6 +30,9 @@ class ExecutionCandidate:
     quality: float = 1
     confidence: float = 1
     ood_score: float = 0
+    rejection_reason: str | None = None
+    context_limit: int = 1_000_000
+    has_estimate: bool = True
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,7 @@ class ChainPlan:
     policy: RoutePolicy
     allow_live_specialists: bool = False
     fallback_reason: str | None = None
+    considered: tuple[ExecutionCandidate, ...] = ()
 
 
 class ChainPlanner(Protocol):
@@ -90,6 +94,10 @@ def rejection(
     policy: PolicyDecision,
     spent: int,
 ) -> str | None:
+    if candidate.rejection_reason is not None:
+        return candidate.rejection_reason
+    if request.input_tokens + request.max_output_tokens > candidate.context_limit:
+        return "context_length"
     if candidate.deployment.processing_region != policy.residency or not policy.processing_allowed:
         return "policy_uncertainty"
     if (
@@ -101,12 +109,12 @@ def rejection(
     if candidate.specialist:
         if not plan.allow_live_specialists:
             return "live_specialists_disabled"
+        if candidate.ood_score > plan.policy.ood_threshold_max:
+            return "out_of_distribution"
         if candidate.quality < plan.policy.quality_threshold:
             return "low_quality"
         if candidate.confidence < plan.policy.router_confidence_threshold:
             return "low_confidence"
-        if candidate.ood_score > plan.policy.ood_threshold_max:
-            return "out_of_distribution"
     return None
 
 

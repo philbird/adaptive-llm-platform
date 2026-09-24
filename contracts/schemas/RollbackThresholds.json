@@ -1,0 +1,66 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "cost_ratio_max": {
+      "default": 1,
+      "exclusiveMinimum": 0,
+      "title": "Cost Ratio Max",
+      "type": "number"
+    },
+    "error_rate_max": {
+      "default": 0,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Error Rate Max",
+      "type": "number"
+    },
+    "interval_seconds": {
+      "default": 1,
+      "exclusiveMinimum": 0,
+      "maximum": 60,
+      "title": "Interval Seconds",
+      "type": "number"
+    },
+    "minimum_samples": {
+      "default": 4,
+      "minimum": 1,
+      "title": "Minimum Samples",
+      "type": "integer"
+    },
+    "non_inferiority_margin": {
+      "default": 0.02,
+      "exclusiveMaximum": 1,
+      "exclusiveMinimum": 0,
+      "title": "Non Inferiority Margin",
+      "type": "number"
+    },
+    "p95_latency_ms_max": {
+      "default": 5000,
+      "exclusiveMinimum": 0,
+      "title": "P95 Latency Ms Max",
+      "type": "number"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "validation_failure_rate_max": {
+      "default": 0,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Validation Failure Rate Max",
+      "type": "number"
+    },
+    "window_seconds": {
+      "default": 300,
+      "exclusiveMinimum": 0,
+      "maximum": 86400,
+      "title": "Window Seconds",
+      "type": "number"
+    }
+  },
+  "title": "RollbackThresholds",
+  "type": "object"
+}

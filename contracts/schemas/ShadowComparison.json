@@ -34,6 +34,11 @@
     },
     "ValidationCheck": {
       "properties": {
+        "critical_safety": {
+          "default": false,
+          "title": "Critical Safety",
+          "type": "boolean"
+        },
         "name": {
           "title": "Name",
           "type": "string"
@@ -147,6 +152,19 @@
     "specialist_citation_recall": {
       "title": "Specialist Citation Recall",
       "type": "number"
+    },
+    "specialist_cost_micros": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Specialist Cost Micros"
     },
     "specialist_score": {
       "title": "Specialist Score",

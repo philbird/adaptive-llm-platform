@@ -3,7 +3,12 @@
 from collections import Counter
 from statistics import fmean
 
-from adaptive_llm.contracts import EvaluationSpecification, ItemScore, SuiteResult
+from adaptive_llm.contracts import (
+    EvaluationSpecification,
+    ItemScore,
+    RoutingObservation,
+    SuiteResult,
+)
 from adaptive_llm.evaluation.runner import Case, Runner
 from adaptive_llm.evaluation.suites.scoring import citations, segments, token_f1
 
@@ -33,6 +38,12 @@ class HeldOutSuite:
                     item_id=case.item_id,
                     score=min(f1, precision, recall),
                     segments=list(case.segments),
+                    observation=RoutingObservation(
+                        quality=min(f1, precision, recall),
+                        validation_pass=not outcome.error,
+                        cost_micros=outcome.cost_micros,
+                        latency_ms=outcome.latency_ms,
+                    ),
                 )
             )
         return SuiteResult(

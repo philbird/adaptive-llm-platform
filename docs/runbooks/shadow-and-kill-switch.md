@@ -1,6 +1,8 @@
-# Local shadow routing and emergency disablement (slice 4a)
+# Local shadow routing and emergency disablement (slices 4a–4b)
 
-Foundation output remains the only public serving route. A registered fake or tiny real adapter
+Foundation is the default public serving route. Slice 4b adds opt-in calibrated live routing;
+see [canary and rollback](canary-and-rollback.md) for dataset, router and deployment approvals.
+A registered fake or tiny real adapter
 in state `shadow` can run after the HTTP response body has been sent. First create and promote
 an adapter using [training and promotion](training-and-promotion.md), then start the gateway
 against that same data directory. No external provider or service is required.
@@ -35,8 +37,10 @@ curl -X POST http://127.0.0.1:8000/v1/route-policies/POLICY_ID/activate \
 ```
 
 Replace `MODEL_VERSION` and `POLICY_ID` with the returned identifiers. Creation and activation
-both require every listed model to be in `shadow`; candidate, approved, canary, production,
-deprecated and revoked models are refused in this slice. The loader also verifies current
+both require every listed specialist to be in `shadow`, `canary` or `production`; candidate,
+approved, deprecated and revoked specialists are refused. The shadow loader only executes
+`shadow` versions. The live loader only executes `canary`/`production` versions and requires an
+approved router, live policy and successful calibrated admission. Both verify current
 model state and tenant membership before each execution. Verified providers are cached by
 `(version, artifact_digest)` in an eight-entry least-recently-used cache; artifact files and
 the base/adapter are loaded on a cache miss. A changed state or digest evicts the old entry,
@@ -52,10 +56,11 @@ and switch changes commit their audit and `deployment.changed.v1` events togethe
 use deployment id `route_policy`. Global activation/disablement needs grants for all configured
 environment tenants; a tenant-specific switch needs that tenant's grant.
 
-`live_specialists_allowed` is a literal false in the public contract. Supplying true returns
-422. An inference request with `routing.mode="specialist"` uses the foundation with
-`live_specialists_disabled` in its route and metrics. The injected chain planner is a trusted
-Python test boundary. Its tests exercise ordered live candidates, quality/confidence/OOD
+`live_specialists_allowed` defaults to false. True requires `router_version` naming an approved
+`router-logistic-v1` model; otherwise creation fails. Without live permission, a request with
+`routing.mode="specialist"` uses foundation with `live_specialists_disabled` in its route and
+metrics. With live permission, `auto` and `specialist` both obey the fraction, allowlist and
+admission controls. The production chain planner and its injected test boundary exercise quality/confidence/OOD
 admission, residency and cumulative cost constraints, failed-output suppression, duplicate
 candidate removal, hard fallback reasons, deadlines and `max_attempts`. It is not an HTTP
 configuration option. A candidate's estimated latency must fit the remaining overall deadline;
@@ -99,7 +104,7 @@ Empty segments have no invented score or CI. Generation failures have score zero
 validation. Comparisons record `judge_version="shadow-chunk-overlap-1"`: supplied whole chunks
 are the expected facts, with blinded answer order. This coarse grounding proxy rewards echoing
 and can penalise legitimate paraphrases. It is not the evaluation rubric, a human quality judgment
-or promotion approval. The report's score deltas and intervals describe this proxy only.
+or offline promotion approval. The report's score deltas and intervals describe this proxy only.
 Comparisons retain every hard and advisory validation outcome; the report's validation pass
 rate counts only hard failures. No request/output/chunk text is stored in comparisons or reports.
 
@@ -153,6 +158,13 @@ scoped disablement/re-enablement. Omitting both targets the environment. The imm
 own `kill_switch=true` also disables specialists; changing that flag requires activating another
 version. Clearing an environment switch does not clear scoped switches.
 
+Slice 4b also accepts `"specialist_version":"MODEL_VERSION"` as an exclusive scope. Automatic
+rollback writes that environment-wide version disablement with its triggering measurement and
+event. Manual re-enablement requires a nonblank reason. Shadow reports now expose `passed` using
+the policy's minimum sample/non-inferiority thresholds, overall and per critical segment. The
+canary promotion gate checks the exact specialist under the active policy. A shadow-state
+specialist cannot serve live even when the policy has enabled live traffic.
+
 Every process uses a pointer cache lasting at most one second. Local mutations invalidate it
 immediately; the next request in another instance refreshes after that interval. Queued work
 also rechecks controls. Already running native tensor operations finish at their cooperative
@@ -198,8 +210,9 @@ uv run --locked pytest -m smoke -s
 make check-without-training
 ```
 
-Live specialist responses, canary percentages, learned/calibrated routing, bandits, automatic
-rollback and external/distributed transport remain slice 4b or later. No dependency was added.
+Slice 4b implements live specialist responses, canary fractions, learned/calibrated routing and
+automatic rollback; see [canary and rollback](canary-and-rollback.md). Bandits and external
+transport remain later work. No dependency was added.
 
 Initial local results and reviewer verification on 2026-09-24 (local commands used the two
 environment assignments above):

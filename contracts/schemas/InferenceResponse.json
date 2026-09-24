@@ -38,6 +38,11 @@
           "default": "1.0",
           "title": "Schema Version",
           "type": "string"
+        },
+        "specialist_served": {
+          "default": false,
+          "title": "Specialist Served",
+          "type": "boolean"
         }
       },
       "title": "RouteSummary",

@@ -119,6 +119,196 @@
         "title": "BreakerThresholds",
         "type": "object"
       },
+      "CanaryAggregate": {
+        "properties": {
+          "breach_reasons": {
+            "items": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            "title": "Breach Reasons",
+            "type": "array"
+          },
+          "cost_delta_micros": {
+            "$ref": "#/components/schemas/PairedComparison"
+          },
+          "cost_reduction_fraction": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Reduction Fraction"
+          },
+          "foundation": {
+            "$ref": "#/components/schemas/OutcomeAggregate"
+          },
+          "foundation_served": {
+            "$ref": "#/components/schemas/OutcomeAggregate"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "quality_delta": {
+            "$ref": "#/components/schemas/PairedComparison"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "served_cost_delta_micros": {
+            "$ref": "#/components/schemas/PairedComparison"
+          },
+          "served_cost_reduction_fraction": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Served Cost Reduction Fraction"
+          },
+          "shadow_cost_micros": {
+            "title": "Shadow Cost Micros",
+            "type": "integer"
+          },
+          "specialist": {
+            "$ref": "#/components/schemas/OutcomeAggregate"
+          },
+          "specialist_served": {
+            "$ref": "#/components/schemas/OutcomeAggregate"
+          },
+          "trigger_segments": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Trigger Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "specialist",
+          "foundation",
+          "specialist_served",
+          "foundation_served",
+          "quality_delta",
+          "cost_delta_micros",
+          "served_cost_delta_micros",
+          "cost_reduction_fraction",
+          "served_cost_reduction_fraction",
+          "shadow_cost_micros",
+          "passed",
+          "breach_reasons"
+        ],
+        "title": "CanaryAggregate",
+        "type": "object"
+      },
+      "CanaryConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment": {
+            "const": "sha256-interaction-policy-v1",
+            "default": "sha256-interaction-policy-v1",
+            "title": "Assignment",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_allowlist": {
+            "items": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Tenant Allowlist",
+            "type": "array"
+          },
+          "traffic_fraction": {
+            "default": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Traffic Fraction",
+            "type": "number"
+          }
+        },
+        "title": "CanaryConfig",
+        "type": "object"
+      },
+      "CanaryReport": {
+        "properties": {
+          "critical_segments": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CanaryAggregate"
+            },
+            "title": "Critical Segments",
+            "type": "object"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/CanaryAggregate"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "policy_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "specialists": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CanaryAggregate"
+            },
+            "title": "Specialists",
+            "type": "object"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_id",
+          "since",
+          "until",
+          "overall",
+          "critical_segments",
+          "specialists",
+          "passed"
+        ],
+        "title": "CanaryReport",
+        "type": "object"
+      },
       "Citation": {
         "additionalProperties": false,
         "properties": {
@@ -521,6 +711,34 @@
             "title": "Seed",
             "type": "integer"
           },
+          "source_dataset_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Dataset Id"
+          },
+          "source_dataset_version": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Dataset Version"
+          },
           "source_window": {
             "$ref": "#/components/schemas/SourceWindow"
           },
@@ -755,11 +973,12 @@
                 "held_out",
                 "safety",
                 "retrieval",
-                "performance"
+                "performance",
+                "routing"
               ],
               "type": "string"
             },
-            "maxItems": 5,
+            "maxItems": 6,
             "minItems": 1,
             "title": "Suites",
             "type": "array"
@@ -1117,11 +1336,12 @@
                 "held_out",
                 "safety",
                 "retrieval",
-                "performance"
+                "performance",
+                "routing"
               ],
               "type": "string"
             },
-            "maxItems": 5,
+            "maxItems": 6,
             "minItems": 1,
             "title": "Suites",
             "type": "array"
@@ -1441,6 +1661,11 @@
             "title": "Kill Switch",
             "type": "boolean"
           },
+          "live_planner_failures": {
+            "default": 0,
+            "title": "Live Planner Failures",
+            "type": "integer"
+          },
           "outbox_pending": {
             "default": 0,
             "title": "Outbox Pending",
@@ -1628,6 +1853,16 @@
             "pattern": "^[\\w.-]+$",
             "title": "Item Id",
             "type": "string"
+          },
+          "observation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoutingObservation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "schema_version": {
             "const": "1.0",
@@ -1823,6 +2058,18 @@
             "title": "Base Model Revision",
             "type": "string"
           },
+          "capability_signature_version": {
+            "anyOf": [
+              {
+                "const": "1",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Signature Version"
+          },
           "chat_template_version": {
             "maxLength": 100,
             "minLength": 1,
@@ -1890,6 +2137,12 @@
             "title": "Hardware Class",
             "type": "string"
           },
+          "input_micros_per_1000_tokens": {
+            "default": 1000,
+            "minimum": 0.0,
+            "title": "Input Micros Per 1000 Tokens",
+            "type": "integer"
+          },
           "intended_tasks": {
             "items": {
               "maxLength": 100,
@@ -1923,6 +2176,28 @@
             },
             "title": "Lifecycle History",
             "type": "array"
+          },
+          "modalities": {
+            "items": {
+              "const": "text",
+              "type": "string"
+            },
+            "title": "Modalities",
+            "type": "array"
+          },
+          "output_micros_per_1000_tokens": {
+            "default": 2000,
+            "minimum": 0.0,
+            "title": "Output Micros Per 1000 Tokens",
+            "type": "integer"
+          },
+          "processing_region": {
+            "default": "local",
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[a-z0-9-]+$",
+            "title": "Processing Region",
+            "type": "string"
           },
           "registry_id": {
             "maxLength": 100,
@@ -1986,6 +2261,11 @@
             "title": "Tokenizer Id",
             "type": "string"
           },
+          "tools_supported": {
+            "default": false,
+            "title": "Tools Supported",
+            "type": "boolean"
+          },
           "training_job_id": {
             "maxLength": 100,
             "minLength": 1,
@@ -2045,6 +2325,88 @@
           "reason"
         ],
         "title": "OperatorNote",
+        "type": "object"
+      },
+      "OutcomeAggregate": {
+        "properties": {
+          "cost_per_success_micros": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Success Micros"
+          },
+          "critical_safety_incidents": {
+            "title": "Critical Safety Incidents",
+            "type": "integer"
+          },
+          "error_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Rate"
+          },
+          "interactions": {
+            "title": "Interactions",
+            "type": "integer"
+          },
+          "p95_latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Latency Ms"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "successes": {
+            "title": "Successes",
+            "type": "integer"
+          },
+          "total_cost_micros": {
+            "title": "Total Cost Micros",
+            "type": "integer"
+          },
+          "validation_failure_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Failure Rate"
+          }
+        },
+        "required": [
+          "interactions",
+          "successes",
+          "total_cost_micros",
+          "cost_per_success_micros",
+          "validation_failure_rate",
+          "error_rate",
+          "p95_latency_ms",
+          "critical_safety_incidents"
+        ],
+        "title": "OutcomeAggregate",
         "type": "object"
       },
       "PairedComparison": {
@@ -2292,6 +2654,72 @@
         "title": "ResponseFormat",
         "type": "object"
       },
+      "RollbackThresholds": {
+        "additionalProperties": false,
+        "properties": {
+          "cost_ratio_max": {
+            "default": 1,
+            "exclusiveMinimum": 0.0,
+            "title": "Cost Ratio Max",
+            "type": "number"
+          },
+          "error_rate_max": {
+            "default": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Error Rate Max",
+            "type": "number"
+          },
+          "interval_seconds": {
+            "default": 1,
+            "exclusiveMinimum": 0.0,
+            "maximum": 60.0,
+            "title": "Interval Seconds",
+            "type": "number"
+          },
+          "minimum_samples": {
+            "default": 4,
+            "minimum": 1.0,
+            "title": "Minimum Samples",
+            "type": "integer"
+          },
+          "non_inferiority_margin": {
+            "default": 0.02,
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Non Inferiority Margin",
+            "type": "number"
+          },
+          "p95_latency_ms_max": {
+            "default": 5000,
+            "exclusiveMinimum": 0.0,
+            "title": "P95 Latency Ms Max",
+            "type": "number"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "validation_failure_rate_max": {
+            "default": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Validation Failure Rate Max",
+            "type": "number"
+          },
+          "window_seconds": {
+            "default": 300,
+            "exclusiveMinimum": 0.0,
+            "maximum": 86400.0,
+            "title": "Window Seconds",
+            "type": "number"
+          }
+        },
+        "title": "RollbackThresholds",
+        "type": "object"
+      },
       "RouteControlNote": {
         "additionalProperties": false,
         "properties": {
@@ -2306,6 +2734,20 @@
             "default": "1.0",
             "title": "Schema Version",
             "type": "string"
+          },
+          "specialist_version": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specialist Version"
           },
           "task": {
             "anyOf": [
@@ -2349,6 +2791,9 @@
           "breaker": {
             "$ref": "#/components/schemas/BreakerThresholds"
           },
+          "canary": {
+            "$ref": "#/components/schemas/CanaryConfig"
+          },
           "eligible_specialist_versions": {
             "items": {
               "maxLength": 100,
@@ -2380,7 +2825,8 @@
                 "out_of_distribution",
                 "low_quality",
                 "circuit_open",
-                "live_specialists_disabled"
+                "live_specialists_disabled",
+                "not_cheapest"
               ],
               "type": "string"
             },
@@ -2393,7 +2839,6 @@
             "type": "boolean"
           },
           "live_specialists_allowed": {
-            "const": false,
             "default": false,
             "title": "Live Specialists Allowed",
             "type": "boolean"
@@ -2426,12 +2871,29 @@
             "title": "Quality Threshold",
             "type": "number"
           },
+          "rollback": {
+            "$ref": "#/components/schemas/RollbackThresholds"
+          },
           "router_confidence_threshold": {
             "default": 0.85,
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Router Confidence Threshold",
             "type": "number"
+          },
+          "router_version": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Router Version"
           },
           "schema_version": {
             "const": "1.0",
@@ -2489,9 +2951,75 @@
             "default": "1.0",
             "title": "Schema Version",
             "type": "string"
+          },
+          "specialist_served": {
+            "default": false,
+            "title": "Specialist Served",
+            "type": "boolean"
           }
         },
         "title": "RouteSummary",
+        "type": "object"
+      },
+      "RoutingObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "cost_micros": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micros"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "validation_pass": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Pass"
+          }
+        },
+        "title": "RoutingObservation",
         "type": "object"
       },
       "RoutingOptions": {
@@ -2644,6 +3172,11 @@
           },
           "overall": {
             "$ref": "#/components/schemas/ShadowAggregate"
+          },
+          "passed": {
+            "default": false,
+            "title": "Passed",
+            "type": "boolean"
           },
           "policy_id": {
             "title": "Policy Id",
@@ -2827,7 +3360,8 @@
               "held_out",
               "safety",
               "retrieval",
-              "performance"
+              "performance",
+              "routing"
             ],
             "title": "Suite",
             "type": "string"
@@ -3089,6 +3623,12 @@
             "title": "Hardware Class",
             "type": "string"
           },
+          "input_micros_per_1000_tokens": {
+            "default": 1000,
+            "minimum": 0.0,
+            "title": "Input Micros Per 1000 Tokens",
+            "type": "integer"
+          },
           "job_id": {
             "maxLength": 100,
             "minLength": 1,
@@ -3097,8 +3637,11 @@
             "type": "string"
           },
           "job_type": {
-            "const": "adapter",
             "default": "adapter",
+            "enum": [
+              "adapter",
+              "router"
+            ],
             "title": "Job Type",
             "type": "string"
           },
@@ -3106,6 +3649,12 @@
             "default": 256,
             "minimum": 2.0,
             "title": "Max Sequence Length",
+            "type": "integer"
+          },
+          "output_micros_per_1000_tokens": {
+            "default": 2000,
+            "minimum": 0.0,
+            "title": "Output Micros Per 1000 Tokens",
             "type": "integer"
           },
           "registry_id": {
@@ -3282,6 +3831,87 @@
         "tags": [
           "operations"
         ]
+      }
+    },
+    "/v1/canary/reports": {
+      "get": {
+        "operationId": "canary_reports_v1_canary_reports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "policy",
+            "required": true,
+            "schema": {
+              "title": "Policy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanaryReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Canary Reports"
       }
     },
     "/v1/datasets/builds": {

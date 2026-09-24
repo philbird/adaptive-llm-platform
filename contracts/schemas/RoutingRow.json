@@ -1,0 +1,256 @@
+{
+  "$defs": {
+    "RoutingFeatures": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Chunk Count",
+          "type": "integer"
+        },
+        "context_supplied": {
+          "default": false,
+          "title": "Context Supplied",
+          "type": "boolean"
+        },
+        "index_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index Id"
+        },
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "language": {
+          "default": "en",
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Language",
+          "type": "string"
+        },
+        "risk_tier": {
+          "default": "medium",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "task": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Task",
+          "type": "string"
+        },
+        "top_score": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Top Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "task",
+        "input_tokens"
+      ],
+      "title": "RoutingFeatures",
+      "type": "object"
+    },
+    "RoutingObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "cost_micros": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Micros"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "quality": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quality"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "validation_pass": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Validation Pass"
+        }
+      },
+      "title": "RoutingObservation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "candidates": {
+      "patternProperties": {
+        "^[\\w.-]+$": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RoutingObservation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "propertyNames": {
+        "maxLength": 100,
+        "minLength": 1
+      },
+      "title": "Candidates",
+      "type": "object"
+    },
+    "features": {
+      "$ref": "#/$defs/RoutingFeatures"
+    },
+    "foundation_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Foundation Id",
+      "type": "string"
+    },
+    "interaction_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Interaction Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_dataset_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Source Dataset Id",
+      "type": "string"
+    },
+    "source_dataset_version": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Source Dataset Version",
+      "type": "string"
+    },
+    "source_example_hash": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Example Hash"
+    },
+    "split": {
+      "default": "train",
+      "enum": [
+        "train",
+        "validation",
+        "test"
+      ],
+      "title": "Split",
+      "type": "string"
+    },
+    "tenant_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "transformation_code_revision": {
+      "default": "unknown",
+      "title": "Transformation Code Revision",
+      "type": "string"
+    }
+  },
+  "required": [
+    "interaction_id",
+    "tenant_id",
+    "features",
+    "foundation_id",
+    "candidates",
+    "source_dataset_id",
+    "source_dataset_version"
+  ],
+  "title": "RoutingRow",
+  "type": "object"
+}

@@ -12,6 +12,7 @@ from adaptive_llm.contracts import (
     Message,
     RagOptions,
     ResponseFormat,
+    RoutingRow,
     uid,
 )
 from adaptive_llm.datasets.artifacts import read_shards
@@ -26,6 +27,10 @@ class DatasetReader(Protocol):
     def read(
         self, spec: EvaluationSpecification, identity: Identity
     ) -> tuple[DatasetManifest, list[Case]]: ...
+
+    def read_routing(
+        self, spec: EvaluationSpecification, identity: Identity
+    ) -> tuple[DatasetManifest, list[RoutingRow]]: ...
 
 
 class Inputs(BaseModel):
@@ -63,6 +68,18 @@ class LocalDatasetReader:
         self, builder: DatasetBuilder, data_dir: Path, cipher: PayloadCipher, keyring: Keyring
     ) -> None:
         self.builder, self.data_dir, self.cipher, self.keyring = builder, data_dir, cipher, keyring
+
+    def read_routing(
+        self,
+        spec: EvaluationSpecification,
+        identity: Identity,
+    ) -> tuple[DatasetManifest, list[RoutingRow]]:
+        manifest = self.builder.get(spec.dataset_id, spec.dataset_version, identity)
+        rows = read_shards(manifest, self.data_dir, self.cipher, self.keyring)
+        try:
+            return manifest, [RoutingRow.model_validate_json(row) for row in rows["test"]]
+        except Exception:
+            raise GatewayError(409, "invalid_dataset_artifact") from None
 
     def read(
         self, spec: EvaluationSpecification, identity: Identity

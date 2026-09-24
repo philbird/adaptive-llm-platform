@@ -10,6 +10,7 @@ from typing import Protocol
 from adaptive_llm.contracts import (
     GenerationAttempt,
     Interaction,
+    LifecycleState,
     RoutePolicy,
     ShadowComparison,
     Validation,
@@ -22,7 +23,7 @@ from adaptive_llm.policy import PolicyEngine
 from adaptive_llm.providers import CITATION_PATTERN, ProviderRequest, ProviderResult
 from adaptive_llm.providers.specialist import SpecialistProvider
 from adaptive_llm.registry import ModelRegistry
-from adaptive_llm.routing import Deployment
+from adaptive_llm.routing import Deployment, PriceList
 from adaptive_llm.routing.breakers import CircuitBreakers
 from adaptive_llm.routing.chain import ExecutionCandidate, execute_attempt
 from adaptive_llm.routing.control import RoutePolicyStore
@@ -53,9 +54,11 @@ class RegistrySpecialists:
         keyring: Keyring,
         data_dir: Path,
         tenants: frozenset[str],
+        allowed_states: frozenset[LifecycleState] = frozenset({"shadow"}),
     ) -> None:
         self.registry, self.foundation, self.keyring = registry, foundation, keyring
         self.data_dir, self.tenants = data_dir, tenants
+        self.allowed_states = allowed_states
         self._cache: OrderedDict[tuple[str, str], ExecutionCandidate] = OrderedDict()
         self._lock = Lock()
 
@@ -77,9 +80,11 @@ class RegistrySpecialists:
             raise
         key = (version, model.artifact_digest)
         for existing in list(self._cache):
-            if existing[0] == version and (existing != key or model.state != "shadow"):
+            if existing[0] == version and (
+                existing != key or model.state not in self.allowed_states
+            ):
                 del self._cache[existing]
-        if model.state != "shadow" or identity.tenant_id not in model.tenant_ids:
+        if model.state not in self.allowed_states or identity.tenant_id not in model.tenant_ids:
             raise GatewayError(409, "shadow_model_ineligible")
         cached = self._cache.get(key)
         if cached is not None:
@@ -96,7 +101,10 @@ class RegistrySpecialists:
         except Exception:
             self._evict(version)
             raise
-        if latest.state != "shadow" or latest.artifact_digest != model.artifact_digest:
+        if (
+            latest.state not in self.allowed_states
+            or latest.artifact_digest != model.artifact_digest
+        ):
             self._evict(version)
             raise GatewayError(409, "shadow_model_ineligible")
         if identity.tenant_id not in latest.tenant_ids:
@@ -107,9 +115,17 @@ class RegistrySpecialists:
                 "model_id": model.base_model_id,
                 "model_version": provider.model_version,
                 "model_provider": "local-specialist",
+                "processing_region": model.processing_region,
+                "price_list": PriceList(
+                    version=f"model-{model.version}",
+                    input_micros_per_1000_tokens=model.input_micros_per_1000_tokens,
+                    output_micros_per_1000_tokens=model.output_micros_per_1000_tokens,
+                ),
             }
         )
-        candidate = ExecutionCandidate(deployment, provider, specialist=True)
+        candidate = ExecutionCandidate(
+            deployment, provider, specialist=True, context_limit=model.context_limit
+        )
         self._cache[key] = candidate
         if len(self._cache) > 8:
             self._cache.popitem(last=False)
@@ -247,6 +263,8 @@ class ShadowWorker:
             self.metrics.increment("shadow_drops", reason="disabled")
             return
         for version in p.eligible_specialist_versions:
+            if version in snapshot.disabled_specialists:
+                continue
             if not self.breakers.available(version, p.breaker):
                 continue
             try:
@@ -259,6 +277,7 @@ class ShadowWorker:
                 latest.policy is None
                 or latest.policy.policy_id != p.policy_id
                 or not latest.enabled(work.identity.tenant_id, work.interaction.task.label)
+                or version in latest.disabled_specialists
             ):
                 self.metrics.increment("shadow_drops", reason="disabled")
                 return
@@ -319,6 +338,25 @@ def citation_scores(request: ProviderRequest, result: ProviderResult | None) -> 
     )
 
 
+def quality_proxy(request: ProviderRequest, result: ProviderResult) -> float:
+    precision, _ = citation_scores(request, result)
+    return (
+        blinded_scores(
+            DeterministicJudge(),
+            [
+                JudgeInput(
+                    result.content,
+                    tuple(c.content for c in request.context),
+                    (),
+                    precision == 1,
+                )
+            ],
+            seed=23,
+        )[0]
+        / 5
+    )
+
+
 def comparison(
     work: ShadowWork,
     policy: RoutePolicy,
@@ -362,6 +400,7 @@ def comparison(
         - work.foundation.usage.output_tokens,
         cost_delta_micros=(attempt.estimated_cost_micros or 0)
         - (work.attempt.estimated_cost_micros or 0),
+        specialist_cost_micros=attempt.estimated_cost_micros,
         latency_delta_ms=attempt.total_latency_ms - work.attempt.total_latency_ms,
         specialist_validation=validation,
     )

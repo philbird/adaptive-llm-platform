@@ -239,6 +239,19 @@
       "title": "Base Model Revision",
       "type": "string"
     },
+    "capability_signature_version": {
+      "anyOf": [
+        {
+          "const": "1",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Capability Signature Version"
+    },
     "chat_template_version": {
       "maxLength": 100,
       "minLength": 1,
@@ -306,6 +319,12 @@
       "title": "Hardware Class",
       "type": "string"
     },
+    "input_micros_per_1000_tokens": {
+      "default": 1000,
+      "minimum": 0,
+      "title": "Input Micros Per 1000 Tokens",
+      "type": "integer"
+    },
     "intended_tasks": {
       "items": {
         "maxLength": 100,
@@ -339,6 +358,28 @@
       },
       "title": "Lifecycle History",
       "type": "array"
+    },
+    "modalities": {
+      "items": {
+        "const": "text",
+        "type": "string"
+      },
+      "title": "Modalities",
+      "type": "array"
+    },
+    "output_micros_per_1000_tokens": {
+      "default": 2000,
+      "minimum": 0,
+      "title": "Output Micros Per 1000 Tokens",
+      "type": "integer"
+    },
+    "processing_region": {
+      "default": "local",
+      "maxLength": 32,
+      "minLength": 1,
+      "pattern": "^[a-z0-9-]+$",
+      "title": "Processing Region",
+      "type": "string"
     },
     "registry_id": {
       "maxLength": 100,
@@ -401,6 +442,11 @@
       "pattern": "^[\\w.-]+$",
       "title": "Tokenizer Id",
       "type": "string"
+    },
+    "tools_supported": {
+      "default": false,
+      "title": "Tools Supported",
+      "type": "boolean"
     },
     "training_job_id": {
       "maxLength": 100,

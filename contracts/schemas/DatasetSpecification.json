@@ -115,6 +115,36 @@
       "title": "Seed",
       "type": "integer"
     },
+    "source_dataset_id": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Dataset Id"
+    },
+    "source_dataset_version": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Dataset Version"
+    },
     "source_window": {
       "$ref": "#/$defs/SourceWindow"
     },

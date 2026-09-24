@@ -19,6 +19,7 @@ from opentelemetry.trace import Tracer
 from pydantic import BaseModel
 
 from adaptive_llm.contracts import (
+    CanaryReport,
     CorrectionInput,
     DatasetManifest,
     DatasetSpecification,
@@ -65,14 +66,17 @@ from adaptive_llm.rag import LocalRetriever, Retriever
 from adaptive_llm.registry import ModelRegistry
 from adaptive_llm.registry.sqlite import SQLiteModelRegistry
 from adaptive_llm.routing import FoundationRouter, Router
-from adaptive_llm.routing.chain import ChainPlanner, FoundationPlanner
+from adaptive_llm.routing.canary import CanaryMonitor
+from adaptive_llm.routing.chain import ChainPlanner
 from adaptive_llm.routing.control import SQLiteRoutePolicies
+from adaptive_llm.routing.live import LivePlanner
 from adaptive_llm.routing.shadow import (
     RegistrySpecialists,
     ShadowWork,
     ShadowWorker,
     SpecialistLoader,
 )
+from adaptive_llm.routing.train import CounterfactualRows
 from adaptive_llm.storage import MetadataStore, PayloadStore, StorageError
 from adaptive_llm.storage.crypto import PayloadCipher, load_keyring
 from adaptive_llm.storage.outbox import SQLiteOutboxStore
@@ -196,6 +200,7 @@ class Health(BaseModel):
     dead_letters: int = 0
     circuit_breakers: dict[str, str] = {}
     kill_switch: bool = False
+    live_planner_failures: int = 0
     shadow_queue_depth: int = 0
 
 
@@ -340,12 +345,51 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
         settings.environment,
         foundation.model_deployment_id,
         tenants,
+        keyring,
     )
     application.state.route_policies = routes
-    service.chain_planner = settings.chain_planner or FoundationPlanner(
+    if isinstance(registry, SQLiteModelRegistry):
+        registry.progression_gate = routes.progression_gate
+    if isinstance(application.state.datasets, LocalDatasetBuilder):
+        application.state.datasets.routing_examples = CounterfactualRows(
+            application.state.datasets,
+            evaluation_database,
+            evaluation_store,
+            settings.data_dir,
+            persistence.cipher,
+            keyring,
+            foundation.model_deployment_id,
+        )
+    service.live_outcomes = routes
+    application.state.canary_monitor = CanaryMonitor(
+        routes,
+        Identity(
+            tenant_id="control",
+            application_ids=frozenset(),
+            environment=settings.environment,
+            subject_id_pseudonymous="automatic-rollback",
+            key_class="operator",
+            dataset_tenants=tenants,
+        ),
+    )
+    service.chain_planner = settings.chain_planner or LivePlanner(
         routes,
         settings.provider if settings.provider is not None else FakeProvider(),
         metrics,
+        registry,
+        settings.specialist_loader
+        or RegistrySpecialists(
+            registry,
+            foundation,
+            keyring,
+            settings.data_dir,
+            tenants,
+            allowed_states=frozenset({"canary", "production"}),
+        ),
+        keyring,
+        settings.data_dir,
+        tenants,
+        service.breakers,
     )
     application.state.shadow = ShadowWorker(
         routes,
@@ -428,11 +472,13 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     evaluation_dispatcher_task: asyncio.Task[None] | None = None
     training_task: asyncio.Task[None] | None = None
     shadow_task: asyncio.Task[None] | None = None
+    canary_task: asyncio.Task[None] | None = None
     try:
         if settings.inference_enabled:
             _start_inference(application, settings)
             training_task = asyncio.create_task(application.state.training.worker())
             shadow_task = asyncio.create_task(application.state.shadow.run())
+            canary_task = asyncio.create_task(application.state.canary_monitor.run())
             if settings.outbox_dispatch_enabled:
                 dispatcher_task = asyncio.create_task(application.state.dispatcher.run())
                 if hasattr(application.state, "evaluation_dispatcher"):
@@ -443,6 +489,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         application.state.ready = False
+        if canary_task is not None:
+            application.state.canary_monitor.stop()
+            await canary_task
         if shadow_task is not None:
             application.state.shadow.stop()
             await shadow_task
@@ -511,6 +560,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if settings.inference_enabled and hasattr(application.state, "inference")
             else {},
             kill_switch=killed,
+            live_planner_failures=int(metrics.get("live_planner_failures")),
             shadow_queue_depth=int(metrics.get("shadow_queue_depth")),
         )
 
@@ -582,6 +632,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ) -> ShadowReport:
             routes: SQLiteRoutePolicies = application.state.route_policies
             return await asyncio.to_thread(routes.report, policy, since, identity)
+
+        @application.get("/v1/canary/reports", response_model=CanaryReport)
+        async def canary_reports(
+            policy: str,
+            since: datetime,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> CanaryReport:
+            routes: SQLiteRoutePolicies = application.state.route_policies
+            return await asyncio.to_thread(routes.canary_report, policy, since, identity)
 
         @application.post("/v1/interactions/{interaction_id}/feedback", response_model=Feedback)
         async def feedback(

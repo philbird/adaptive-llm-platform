@@ -1,6 +1,7 @@
 """Control-plane registry: state, deployment pointers and events commit together."""
 
 import json
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 
@@ -39,6 +40,9 @@ class SQLiteModelRegistry:
     ) -> None:
         self.database, self.outbox, self.keyring = database, outbox, keyring
         self.evaluations, self.data_dir, self.pending_limit = evaluations, data_dir, pending_limit
+        self.progression_gate: (
+            Callable[[ModelManifest, PromotionRequest, Identity], None] | None
+        ) = None
 
     def get(self, version: str, identity: Identity) -> ModelManifest:
         LocalDatasetBuilder._authorize(identity, [])
@@ -104,7 +108,7 @@ class SQLiteModelRegistry:
                         trace_id=trace_id,
                         data=TrainingCompleted(
                             job_id=job.specification.job_id,
-                            job_type="adapter",
+                            job_type=job.specification.job_type,
                             dataset_refs=[
                                 f"{job.specification.dataset_id}/{job.specification.dataset_version}"
                             ],
@@ -249,7 +253,7 @@ class SQLiteModelRegistry:
                         trace_id=trace_id,
                         data=TrainingCompleted(
                             job_id=job.specification.job_id,
-                            job_type="adapter",
+                            job_type=job.specification.job_type,
                             dataset_refs=[f"{d.dataset_id}/{d.version}" for d in manifest.datasets],
                             model_version=manifest.version,
                             status="succeeded",
@@ -285,6 +289,19 @@ class SQLiteModelRegistry:
         if evaluation_id is None:
             return False
         report = self.evaluations.get(evaluation_id, identity)
+        if manifest.adapter_architecture == "router-logistic-v1":
+            return bool(
+                report
+                and report.passed
+                and report.specification.suites == ["routing"]
+                and all(g.passed for g in decisions(report))
+                and report.specification.candidate_deployment_id == manifest.version
+                and report.candidate_manifest_version == manifest.version
+                and report.candidate_artifact_digest == manifest.artifact_digest
+                and report.specification.dataset_id == dataset.dataset_id
+                and report.specification.dataset_version == dataset.version
+                and report.dataset_content_digest == dataset.content_digest
+            )
         if report is None or report.specification.baseline_deployment_id is None:
             return False
         baseline = self.evaluations.baseline(
@@ -356,6 +373,10 @@ class SQLiteModelRegistry:
             evaluation_passed=passed,
             rollback=rollback,
         )
+        if not rollback and request.target_state in {"canary", "production"}:
+            if self.progression_gate is None:
+                raise GatewayError(409, "deployment_report_required")
+            self.progression_gate(manifest, request, identity)
         if request.target_state not in {"revoked", "deprecated"}:
             verify_artifact(manifest, self.data_dir / manifest.storage_location, self.keyring)
         assert identity.subject_id_pseudonymous is not None

@@ -1,0 +1,293 @@
+{
+  "$defs": {
+    "CanaryAggregate": {
+      "properties": {
+        "breach_reasons": {
+          "items": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "type": "string"
+          },
+          "title": "Breach Reasons",
+          "type": "array"
+        },
+        "cost_delta_micros": {
+          "$ref": "#/$defs/PairedComparison"
+        },
+        "cost_reduction_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cost Reduction Fraction"
+        },
+        "foundation": {
+          "$ref": "#/$defs/OutcomeAggregate"
+        },
+        "foundation_served": {
+          "$ref": "#/$defs/OutcomeAggregate"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "quality_delta": {
+          "$ref": "#/$defs/PairedComparison"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "served_cost_delta_micros": {
+          "$ref": "#/$defs/PairedComparison"
+        },
+        "served_cost_reduction_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Served Cost Reduction Fraction"
+        },
+        "shadow_cost_micros": {
+          "title": "Shadow Cost Micros",
+          "type": "integer"
+        },
+        "specialist": {
+          "$ref": "#/$defs/OutcomeAggregate"
+        },
+        "specialist_served": {
+          "$ref": "#/$defs/OutcomeAggregate"
+        },
+        "trigger_segments": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Trigger Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "specialist",
+        "foundation",
+        "specialist_served",
+        "foundation_served",
+        "quality_delta",
+        "cost_delta_micros",
+        "served_cost_delta_micros",
+        "cost_reduction_fraction",
+        "served_cost_reduction_fraction",
+        "shadow_cost_micros",
+        "passed",
+        "breach_reasons"
+      ],
+      "title": "CanaryAggregate",
+      "type": "object"
+    },
+    "OutcomeAggregate": {
+      "properties": {
+        "cost_per_success_micros": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cost Per Success Micros"
+        },
+        "critical_safety_incidents": {
+          "title": "Critical Safety Incidents",
+          "type": "integer"
+        },
+        "error_rate": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error Rate"
+        },
+        "interactions": {
+          "title": "Interactions",
+          "type": "integer"
+        },
+        "p95_latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "P95 Latency Ms"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "successes": {
+          "title": "Successes",
+          "type": "integer"
+        },
+        "total_cost_micros": {
+          "title": "Total Cost Micros",
+          "type": "integer"
+        },
+        "validation_failure_rate": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Validation Failure Rate"
+        }
+      },
+      "required": [
+        "interactions",
+        "successes",
+        "total_cost_micros",
+        "cost_per_success_micros",
+        "validation_failure_rate",
+        "error_rate",
+        "p95_latency_ms",
+        "critical_safety_incidents"
+      ],
+      "title": "OutcomeAggregate",
+      "type": "object"
+    },
+    "PairedComparison": {
+      "properties": {
+        "ci_lower": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Lower"
+        },
+        "ci_upper": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Upper"
+        },
+        "mean_delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mean Delta"
+        },
+        "sample_size": {
+          "minimum": 0,
+          "title": "Sample Size",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample_size"
+      ],
+      "title": "PairedComparison",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "critical_segments": {
+      "additionalProperties": {
+        "$ref": "#/$defs/CanaryAggregate"
+      },
+      "title": "Critical Segments",
+      "type": "object"
+    },
+    "overall": {
+      "$ref": "#/$defs/CanaryAggregate"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "policy_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "since": {
+      "format": "date-time",
+      "title": "Since",
+      "type": "string"
+    },
+    "specialists": {
+      "additionalProperties": {
+        "$ref": "#/$defs/CanaryAggregate"
+      },
+      "title": "Specialists",
+      "type": "object"
+    },
+    "until": {
+      "format": "date-time",
+      "title": "Until",
+      "type": "string"
+    }
+  },
+  "required": [
+    "policy_id",
+    "since",
+    "until",
+    "overall",
+    "critical_segments",
+    "specialists",
+    "passed"
+  ],
+  "title": "CanaryReport",
+  "type": "object"
+}
