@@ -12,6 +12,17 @@ dependencies = [
   "cryptography>=50,<51",
 ]
 
+[project.optional-dependencies]
+training = ["torch>=2.6,<3", "transformers>=4.50,<5", "peft>=0.15,<1", "safetensors>=0.5,<1"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [dependency-groups]
 dev = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2", "ruff>=0.11,<1", "mypy>=1.15,<2", "pip-audit>=2.8,<3", "httpx>=0.28,<1"]
 
@@ -25,7 +36,11 @@ packages = ["src/adaptive_llm"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-markers = ["load: bounded local load and failure drills", "accelerator: reserved for future GPU training tests"]
+markers = [
+  "load: bounded local load and failure drills",
+  "accelerator: GPU training tests, skipped without an accelerator",
+  "accelerator_free: needs the optional training group but no accelerator",
+]
 
 [tool.ruff]
 target-version = "py312"
