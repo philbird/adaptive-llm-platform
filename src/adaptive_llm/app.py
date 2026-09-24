@@ -7,10 +7,11 @@ import os
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, Header, Request, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
@@ -31,6 +32,9 @@ from adaptive_llm.contracts import (
     ModelManifest,
     OperatorNote,
     PromotionRequest,
+    RouteControlNote,
+    RoutePolicy,
+    ShadowReport,
     SubjectDeletionInput,
     TrainingJob,
     TrainingJobSpecification,
@@ -61,6 +65,14 @@ from adaptive_llm.rag import LocalRetriever, Retriever
 from adaptive_llm.registry import ModelRegistry
 from adaptive_llm.registry.sqlite import SQLiteModelRegistry
 from adaptive_llm.routing import FoundationRouter, Router
+from adaptive_llm.routing.chain import ChainPlanner, FoundationPlanner
+from adaptive_llm.routing.control import SQLiteRoutePolicies
+from adaptive_llm.routing.shadow import (
+    RegistrySpecialists,
+    ShadowWork,
+    ShadowWorker,
+    SpecialistLoader,
+)
 from adaptive_llm.storage import MetadataStore, PayloadStore, StorageError
 from adaptive_llm.storage.crypto import PayloadCipher, load_keyring
 from adaptive_llm.storage.outbox import SQLiteOutboxStore
@@ -132,6 +144,10 @@ class Settings:
     redactor: ProcessingRedactor | None = None
     retriever: Retriever | None = None
     router: Router | None = None
+    chain_planner: ChainPlanner | None = None
+    specialist_loader: SpecialistLoader | None = None
+    shadow_queue_capacity: int = 32
+    shadow_timeout_seconds: float = 30
     provider: Provider | None = None
     validator: Validator | None = None
     events: EventSink | None = None
@@ -178,6 +194,9 @@ class Health(BaseModel):
     inference_enabled: bool
     outbox_pending: int = 0
     dead_letters: int = 0
+    circuit_breakers: dict[str, str] = {}
+    kill_switch: bool = False
+    shadow_queue_depth: int = 0
 
 
 def _start_inference(application: FastAPI, settings: Settings) -> None:
@@ -303,6 +322,49 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
         settings.outbox_pending_limit,
     )
     application.state.registry = registry
+    foundation = FoundationRouter(settings.routing_path).deployment
+    tenants = (
+        frozenset(
+            entry.tenant_id
+            for entry in IdentityConfig.model_validate_json(
+                settings.identity_path.read_text()
+            ).keys.values()
+        )
+        if settings.authenticator is None
+        else frozenset()
+    )
+    routes = SQLiteRoutePolicies(
+        evaluation_database,
+        evaluation_outbox,
+        registry,
+        settings.environment,
+        foundation.model_deployment_id,
+        tenants,
+    )
+    application.state.route_policies = routes
+    service.chain_planner = settings.chain_planner or FoundationPlanner(
+        routes,
+        settings.provider if settings.provider is not None else FakeProvider(),
+        metrics,
+    )
+    application.state.shadow = ShadowWorker(
+        routes,
+        settings.specialist_loader
+        or RegistrySpecialists(
+            registry,
+            foundation,
+            keyring,
+            settings.data_dir,
+            tenants,
+        ),
+        policy,
+        settings.validator if settings.validator is not None else LocalValidator(),
+        persistence,
+        service.breakers,
+        metrics,
+        capacity=settings.shadow_queue_capacity,
+        timeout_seconds=settings.shadow_timeout_seconds,
+    )
     if isinstance(evaluation_store, SQLiteEvaluationStore) and isinstance(
         registry, SQLiteModelRegistry
     ):
@@ -365,10 +427,12 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     dispatcher_task: asyncio.Task[None] | None = None
     evaluation_dispatcher_task: asyncio.Task[None] | None = None
     training_task: asyncio.Task[None] | None = None
+    shadow_task: asyncio.Task[None] | None = None
     try:
         if settings.inference_enabled:
             _start_inference(application, settings)
             training_task = asyncio.create_task(application.state.training.worker())
+            shadow_task = asyncio.create_task(application.state.shadow.run())
             if settings.outbox_dispatch_enabled:
                 dispatcher_task = asyncio.create_task(application.state.dispatcher.run())
                 if hasattr(application.state, "evaluation_dispatcher"):
@@ -379,6 +443,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         application.state.ready = False
+        if shadow_task is not None:
+            application.state.shadow.stop()
+            await shadow_task
         if training_task is not None:
             application.state.training.stop()
             await training_task
@@ -425,12 +492,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/healthz", response_model=Health, tags=["operations"])
     async def health() -> Health:
-        # Cached gauges keep health responsive while a storage transaction is busy.
+        # Operational gauges are cached; route controls share the one-second pointer cache.
         metrics: Metrics = application.state.metrics
+        killed = False
+        if hasattr(application.state, "route_policies"):
+            routes: SQLiteRoutePolicies = application.state.route_policies
+            try:
+                snapshot = await asyncio.to_thread(routes.snapshot)
+                killed = snapshot.killed or bool(snapshot.policy and snapshot.policy.kill_switch)
+            except Exception:
+                killed = True
+            metrics.gauge("kill_switch", int(killed))
         return Health(
             inference_enabled=settings.inference_enabled,
             outbox_pending=int(metrics.get("outbox_pending")),
             dead_letters=int(metrics.get("outbox_dead")),
+            circuit_breakers=application.state.inference.breakers.states()
+            if settings.inference_enabled and hasattr(application.state, "inference")
+            else {},
+            kill_switch=killed,
+            shadow_queue_depth=int(metrics.get("shadow_queue_depth")),
         )
 
     if settings.inference_enabled:
@@ -448,10 +529,59 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         @application.post("/v1/inference", response_model=InferenceResponse, tags=["inference"])
         async def inference(
             body: InferenceRequest,
+            background_tasks: BackgroundTasks,
             identity: Annotated[Identity, Depends(authenticate)],
         ) -> InferenceResponse:
             service: InferenceService = application.state.inference
-            return await service.infer(body, identity)
+
+            def schedule(work: ShadowWork) -> None:
+                background_tasks.add_task(application.state.shadow.submit, work)
+
+            return await service.infer(body, identity, schedule)
+
+        @application.post("/v1/route-policies", response_model=RoutePolicy)
+        async def create_route_policy(
+            body: RoutePolicy,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> RoutePolicy:
+            routes: SQLiteRoutePolicies = application.state.route_policies
+            return await asyncio.to_thread(routes.create, body, identity)
+
+        @application.post("/v1/route-policies/{policy_id}/activate", response_model=RoutePolicy)
+        async def activate_route_policy(
+            policy_id: str,
+            body: RouteControlNote,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> RoutePolicy:
+            routes: SQLiteRoutePolicies = application.state.route_policies
+            return await asyncio.to_thread(routes.activate, policy_id, identity, body)
+
+        @application.post("/v1/route-policies/kill-switch")
+        async def engage_kill_switch(
+            body: RouteControlNote,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> dict[str, bool]:
+            routes: SQLiteRoutePolicies = application.state.route_policies
+            await asyncio.to_thread(routes.switch, True, identity, body)
+            return {"disabled": True}
+
+        @application.delete("/v1/route-policies/kill-switch")
+        async def release_kill_switch(
+            body: RouteControlNote,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> dict[str, bool]:
+            routes: SQLiteRoutePolicies = application.state.route_policies
+            await asyncio.to_thread(routes.switch, False, identity, body)
+            return {"disabled": False}
+
+        @application.get("/v1/shadow/reports", response_model=ShadowReport)
+        async def shadow_reports(
+            policy: str,
+            since: datetime,
+            identity: Annotated[Identity, Depends(authenticate)],
+        ) -> ShadowReport:
+            routes: SQLiteRoutePolicies = application.state.route_policies
+            return await asyncio.to_thread(routes.report, policy, since, identity)
 
         @application.post("/v1/interactions/{interaction_id}/feedback", response_model=Feedback)
         async def feedback(

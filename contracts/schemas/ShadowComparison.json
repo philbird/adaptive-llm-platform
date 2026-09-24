@@ -1,0 +1,187 @@
+{
+  "$defs": {
+    "Validation": {
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/ValidationCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "validator_version": {
+          "default": "baseline-validator-1",
+          "title": "Validator Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "passed",
+        "checks"
+      ],
+      "title": "Validation",
+      "type": "object"
+    },
+    "ValidationCheck": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "severity": {
+          "default": "hard",
+          "enum": [
+            "hard",
+            "advisory"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "version": {
+          "default": "deterministic-1",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "passed"
+      ],
+      "title": "ValidationCheck",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "comparison_id": {
+      "title": "Comparison Id",
+      "type": "string"
+    },
+    "cost_delta_micros": {
+      "title": "Cost Delta Micros",
+      "type": "integer"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "foundation_citation_precision": {
+      "title": "Foundation Citation Precision",
+      "type": "number"
+    },
+    "foundation_citation_recall": {
+      "title": "Foundation Citation Recall",
+      "type": "number"
+    },
+    "foundation_score": {
+      "title": "Foundation Score",
+      "type": "number"
+    },
+    "input_token_delta": {
+      "title": "Input Token Delta",
+      "type": "integer"
+    },
+    "interaction_id": {
+      "title": "Interaction Id",
+      "type": "string"
+    },
+    "judge_version": {
+      "default": "shadow-chunk-overlap-1",
+      "title": "Judge Version",
+      "type": "string"
+    },
+    "latency_delta_ms": {
+      "title": "Latency Delta Ms",
+      "type": "number"
+    },
+    "output_token_delta": {
+      "title": "Output Token Delta",
+      "type": "integer"
+    },
+    "policy_id": {
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "rubric_version": {
+      "default": "synthetic-rubric-1",
+      "title": "Rubric Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "segments": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Segments",
+      "type": "array"
+    },
+    "specialist_citation_precision": {
+      "title": "Specialist Citation Precision",
+      "type": "number"
+    },
+    "specialist_citation_recall": {
+      "title": "Specialist Citation Recall",
+      "type": "number"
+    },
+    "specialist_score": {
+      "title": "Specialist Score",
+      "type": "number"
+    },
+    "specialist_validation": {
+      "$ref": "#/$defs/Validation"
+    },
+    "specialist_version": {
+      "title": "Specialist Version",
+      "type": "string"
+    },
+    "tenant_id": {
+      "title": "Tenant Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "interaction_id",
+    "policy_id",
+    "tenant_id",
+    "specialist_version",
+    "segments",
+    "foundation_score",
+    "specialist_score",
+    "foundation_citation_precision",
+    "foundation_citation_recall",
+    "specialist_citation_precision",
+    "specialist_citation_recall",
+    "input_token_delta",
+    "output_token_delta",
+    "cost_delta_micros",
+    "latency_delta_ms",
+    "specialist_validation"
+  ],
+  "title": "ShadowComparison",
+  "type": "object"
+}

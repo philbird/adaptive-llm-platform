@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from collections.abc import Callable
 from datetime import datetime
 from threading import Lock
 from time import perf_counter
@@ -9,6 +10,7 @@ from time import perf_counter
 from opentelemetry.trace import Tracer
 
 from adaptive_llm.contracts import (
+    Candidate,
     Chunk,
     GenerationAttempt,
     InferenceRequest,
@@ -16,9 +18,10 @@ from adaptive_llm.contracts import (
     InputSummary,
     Interaction,
     PolicyDecision,
-    RequestParameters,
     RetrievalRun,
     RouteDecision,
+    RoutePolicy,
+    RouteSummary,
     Started,
     Task,
     now,
@@ -28,10 +31,19 @@ from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
 from adaptive_llm.policy import PolicyEngine, ProcessingRedactor
 from adaptive_llm.providers import TOKENIZER, Provider, ProviderRequest, token_count
 from adaptive_llm.rag import Retriever
-from adaptive_llm.routing import Router, RouteSelection
+from adaptive_llm.routing import Router
+from adaptive_llm.routing.breakers import CircuitBreakers
+from adaptive_llm.routing.chain import (
+    ChainPlan,
+    ChainPlanner,
+    ExecutionCandidate,
+    rejection,
+    run_chain,
+)
+from adaptive_llm.routing.shadow import ShadowWork
 from adaptive_llm.storage import ReplayRecord
 from adaptive_llm.storage.persistence import InteractionGraph, Persistence, PersistenceContent
-from adaptive_llm.validation import Validator
+from adaptive_llm.validation import TracedValidator, Validator
 
 
 class InferenceService:
@@ -48,6 +60,8 @@ class InferenceService:
         validator: Validator,
         tracer: Tracer,
         persistence: Persistence,
+        chain_planner: ChainPlanner | None = None,
+        breakers: CircuitBreakers | None = None,
     ) -> None:
         if replay_capacity < 1:
             raise ValueError("invalid_replay_capacity")
@@ -61,10 +75,17 @@ class InferenceService:
         self._validator = validator
         self._tracer = tracer
         self.persistence = persistence
+        self.chain_planner = chain_planner
+        self.breakers = breakers or CircuitBreakers(persistence.metrics)
         self._replays: dict[tuple[str, str, str], str] = {}
         self._replay_lock = Lock()
 
-    async def infer(self, request: InferenceRequest, identity: Identity) -> InferenceResponse:
+    async def infer(
+        self,
+        request: InferenceRequest,
+        identity: Identity,
+        schedule_shadow: Callable[[ShadowWork], None] | None = None,
+    ) -> InferenceResponse:
         if request.application_id not in identity.application_ids:
             raise GatewayError(403, "application_forbidden")
         if request.stream:
@@ -94,7 +115,9 @@ class InferenceService:
                 record_exception=False,
                 set_status_on_exception=False,
             ):
-                response, _ = await self._execute(request, identity, fingerprint, at)
+                response, _ = await self._execute(
+                    request, identity, fingerprint, at, schedule_shadow
+                )
             return response
         except GatewayError:
             raise
@@ -114,7 +137,12 @@ class InferenceService:
         return self.persistence.replay(stored)
 
     async def _execute(
-        self, request: InferenceRequest, identity: Identity, fingerprint: str, reserved_at: datetime
+        self,
+        request: InferenceRequest,
+        identity: Identity,
+        fingerprint: str,
+        reserved_at: datetime,
+        schedule_shadow: Callable[[ShadowWork], None] | None = None,
     ) -> tuple[InferenceResponse, ReplayRecord | None]:
         started_at = now()
         started = perf_counter()
@@ -174,6 +202,7 @@ class InferenceService:
                 context=supplied_chunks,
                 response_format=request.response_format,
                 max_output_tokens=request.max_output_tokens,
+                application_id=request.application_id,
             )
             with self._tracer.start_as_current_span(
                 "routing",
@@ -200,14 +229,72 @@ class InferenceService:
                 if "cost_limit_exceeded" in reasons:
                     raise GatewayError(422, "cost_limit_exceeded")
                 raise GatewayError(500, "invalid_route_decision")
-            remaining = request.routing.deadline_ms / 1000 - (perf_counter() - started)
+            plan = (
+                await asyncio.to_thread(
+                    self.chain_planner.plan,
+                    selection,
+                    request.routing,
+                    identity,
+                    "question_answering" if request.rag.enabled else "general",
+                )
+                if self.chain_planner
+                else ChainPlan(
+                    candidates=(ExecutionCandidate(selection.deployment, self._provider),),
+                    policy=RoutePolicy(
+                        foundation_fallback=selection.deployment.model_deployment_id
+                    ),
+                    fallback_reason="live_specialists_disabled"
+                    if request.routing.mode == "specialist"
+                    else None,
+                )
+            )
+            candidates = []
+            for candidate in plan.candidates:
+                reason = rejection(candidate, plan, provider_request, request.routing, policy, 0)
+                if reason is None and not self.breakers.available(
+                    candidate.deployment.model_deployment_id,
+                    plan.policy.breaker,
+                ):
+                    reason = "circuit_open"
+                candidates.append(
+                    Candidate(
+                        model_deployment_id=candidate.deployment.model_deployment_id,
+                        eligible=reason is None,
+                        processing_region=candidate.deployment.processing_region,
+                        estimated_cost_micros=candidate.deployment.price_list.estimate(
+                            provider_request.input_tokens,
+                            provider_request.max_output_tokens,
+                        ),
+                        price_list_version=candidate.deployment.price_list.version,
+                        estimated_latency_ms=candidate.estimated_latency_ms,
+                        predicted_quality=candidate.quality if candidate.specialist else None,
+                        ood_score=candidate.ood_score if candidate.specialist else None,
+                        reason_codes=[reason]
+                        if reason
+                        else [
+                            "specialist_candidate" if candidate.specialist else "foundation_only"
+                        ],
+                    )
+                )
+            eligible = [c.model_deployment_id for c in candidates if c.eligible]
+            route = route.model_copy(
+                update={
+                    "route_policy_id": plan.policy.policy_id
+                    if self.chain_planner and plan.policy.policy_id != "foundation-only"
+                    else None,
+                    "fallback_reasons": [plan.fallback_reason] if plan.fallback_reason else [],
+                    "candidates": candidates,
+                    "selected_model_deployment_id": eligible[0] if eligible else None,
+                    "fallback_deployment_ids": eligible[1:],
+                }
+            )
             response = await self._generate(
                 provider_request,
-                selection,
-                identity,
                 interaction_id,
                 trace_id,
-                remaining,
+                started + request.routing.deadline_ms / 1000,
+                request,
+                plan,
                 attempts,
                 policy,
                 content,
@@ -222,6 +309,23 @@ class InferenceService:
             failure = "pipeline_failed"
             raise GatewayError(502, failure) from None
         finally:
+            if route is not None:
+                route = route.model_copy(
+                    update={
+                        "fallback_reasons": list(
+                            dict.fromkeys(
+                                [
+                                    *route.fallback_reasons,
+                                    *(
+                                        a.fallback_reason
+                                        for a in attempts
+                                        if a.fallback_reason is not None
+                                    ),
+                                ]
+                            )
+                        ),
+                    }
+                )
             interaction = Interaction(
                 interaction_id=interaction_id,
                 trace_id=trace_id,
@@ -273,6 +377,26 @@ class InferenceService:
             if cancelled_during_save:
                 raise asyncio.CancelledError
         assert response is not None
+        if schedule_shadow is not None:
+            from adaptive_llm.providers import ProviderResult
+
+            schedule_shadow(
+                ShadowWork(
+                    request=provider_request,
+                    foundation=ProviderResult(
+                        content=response.content,
+                        citations=tuple(response.citations),
+                        usage=response.usage,
+                        finish_reason=response.finish_reason,
+                        latency_ms=attempts[-1].total_latency_ms,
+                    ),
+                    attempt=attempts[-1],
+                    interaction=interaction,
+                    identity=identity,
+                    input_redaction_failed=content.failed,
+                    policy_id=plan.policy.policy_id,
+                )
+            )
         return response, replay
 
     def _input_summary(
@@ -287,107 +411,47 @@ class InferenceService:
     async def _generate(
         self,
         request: ProviderRequest,
-        selection: RouteSelection,
-        identity: Identity,
         interaction_id: str,
         trace_id: str,
-        remaining: float,
+        deadline: float,
+        ingress: InferenceRequest,
+        plan: ChainPlan,
         attempts: list[GenerationAttempt],
         policy: PolicyDecision,
         content: PersistenceContent,
     ) -> InferenceResponse:
-        self.persistence.metrics.increment("fallback_free_attempts")
-        deployment = selection.deployment
-        attributes = {
-            "interaction_id": interaction_id,
-            "trace_id": trace_id,
-            "model_version": deployment.model_version,
-        }
-        attempt = GenerationAttempt(
+        attributes = {"interaction_id": interaction_id, "trace_id": trace_id}
+        with self._tracer.start_as_current_span(
+            "generation",
+            attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
+        ):
+            result, attempt = await run_chain(
+                plan,
+                request,
+                ingress.routing,
+                policy,
+                interaction_id,
+                deadline,
+                attempts,
+                TracedValidator(self._validator, self._tracer, attributes),
+                self.breakers,
+                self.persistence.metrics,
+            )
+        self.persistence.prepare_output(result.content, policy, content)
+        attempts[-1] = attempt.model_copy(update={"output_hash": content.output_hash})
+        assert result.finish_reason in ("stop", "length", "content_filter")
+        return InferenceResponse(
             interaction_id=interaction_id,
-            model_provider=deployment.model_provider,
-            model_id=deployment.model_id,
-            model_version=deployment.model_version,
-            deployment_id=deployment.model_deployment_id,
-            request_parameters=RequestParameters(max_output_tokens=request.max_output_tokens),
-            total_latency_ms=0,
-            price_list_version=deployment.price_list.version,
-            finish_reason="error",
+            trace_id=trace_id,
+            model_deployment_id=attempt.deployment_id,
+            content=result.content,
+            citations=list(result.citations),
+            usage=result.usage,
+            estimated_cost_micros=sum(a.estimated_cost_micros or 0 for a in attempts),
+            route=RouteSummary(
+                fallback_used=len(attempts) > 1 or attempt.fallback_reason is not None
+            ),
+            finish_reason=result.finish_reason,
         )
-        error_code: str | None = None
-        generation_started = perf_counter()
-        try:
-            with self._tracer.start_as_current_span(
-                "generation",
-                attributes=attributes,
-                record_exception=False,
-                set_status_on_exception=False,
-            ):
-                if remaining <= 0:
-                    raise TimeoutError
-                async with asyncio.timeout(remaining):
-                    result = await self._provider.generate(request)
-                attempt = attempt.model_copy(
-                    update={
-                        "usage": result.usage,
-                        "finish_reason": result.finish_reason,
-                        "total_latency_ms": (perf_counter() - generation_started) * 1000,
-                        "estimated_cost_micros": deployment.price_list.estimate(
-                            result.usage.input_tokens, result.usage.output_tokens
-                        ),
-                    }
-                )
-            if result.finish_reason == "deadline_exceeded":
-                raise GatewayError(504, "provider_deadline_exceeded")
-            if result.finish_reason not in ("stop", "length", "content_filter"):
-                raise GatewayError(502, "provider_failed")
-            self.persistence.prepare_output(result.content, policy, content)
-            attempt = attempt.model_copy(update={"output_hash": content.output_hash})
-            with self._tracer.start_as_current_span(
-                "validation",
-                attributes=attributes,
-                record_exception=False,
-                set_status_on_exception=False,
-            ) as span:
-                validation = self._validator.validate(request, result)
-                span.set_attribute("validator_version", validation.validator_version)
-            attempt = attempt.model_copy(
-                update={
-                    "validation": validation,
-                }
-            )
-            if not validation.passed:
-                raise GatewayError(502, "validation_failed")
-            return InferenceResponse(
-                interaction_id=interaction_id,
-                trace_id=trace_id,
-                model_deployment_id=deployment.model_deployment_id,
-                content=result.content,
-                citations=list(result.citations),
-                usage=result.usage,
-                estimated_cost_micros=attempt.estimated_cost_micros or 0,
-                finish_reason=result.finish_reason,
-            )
-        except TimeoutError:
-            error_code = "provider_deadline_exceeded"
-            attempt = attempt.model_copy(update={"finish_reason": "deadline_exceeded"})
-            raise GatewayError(504, error_code) from None
-        except GatewayError as error:
-            error_code = error.code
-            raise
-        except asyncio.CancelledError:
-            error_code = "request_cancelled"
-            attempt = attempt.model_copy(update={"finish_reason": "cancelled"})
-            raise
-        except Exception:
-            error_code = "provider_failed"
-            raise GatewayError(502, error_code) from None
-        finally:
-            attempt = attempt.model_copy(
-                update={
-                    "error_code": error_code,
-                    "total_latency_ms": attempt.total_latency_ms
-                    or (perf_counter() - generation_started) * 1000,
-                }
-            )
-            attempts.append(attempt)

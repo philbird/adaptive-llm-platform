@@ -1,8 +1,10 @@
 # Local training and promotion (slices 3a–3b)
 
 The deterministic fake CPU trainer produces authenticated artifacts and proves approval,
-lineage, checkpoint recovery, evaluation gates and registry transitions. It creates no tensors
-and enables no specialist traffic. Slice 3b adds offline CPU LoRA through the injected `Trainer`
+lineage, checkpoint recovery, evaluation gates and registry transitions. It creates no tensors.
+Promotion alone enables no specialist traffic; slice 4a can opt a shadow version into
+post-response comparisons through a separately activated [route policy](shadow-and-kill-switch.md).
+Slice 3b adds offline CPU LoRA through the injected `Trainer`
 interface. The default backend remains `fake`, allowing the platform to run without the optional
 `training` extra. Select `Settings(training_backend="lora")` or CLI `--backend lora` explicitly.
 Only `training/lora.py` imports the optional stack, lazily; absent dependencies fail a real job
@@ -215,8 +217,9 @@ actual transition, including initial candidate registration, emits one `deployme
 per dataset tenant, including empty shards. Training terminal outcomes similarly emit
 `training.completed.v1` per tenant; failed attempts retain fixed failure codes and checkpoints.
 
-These are control states only: shadow execution, canary routing and production specialist
-serving remain milestone 4. Promoting a second version under the same registry id to production
+These registry states do not themselves route traffic. Slice 4a enables shadow execution only
+through a separate route policy; live canary/production specialist serving remains slice 4b.
+Promoting a second version under the same registry id to production
 atomically deprecates the incumbent and preserves it as the previous version. The registry id
 is also the local deployment id.
 

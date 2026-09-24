@@ -38,9 +38,13 @@ class LoggingPolicy:
 
 class PiiProvider(FakeProvider):
     async def generate(self, request: ProviderRequest) -> ProviderResult:
+        # Keep the privacy fixture grounded under the expanded validator.
+        prefix = (
+            " ".join(request.context[0].content.split()[:6]) if request.context else "SYNTHETIC"
+        )
         return replace(
             await super().generate(request),
-            content="SYNTHETIC OUTPUT: contact response@example.test +1 (202) 555-0101",
+            content=f"{prefix} contact response@example.test +1 (202) 555-0101",
         )
 
 

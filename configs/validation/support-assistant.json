@@ -1,0 +1,11 @@
+{
+  "language": "en",
+  "tests": [
+    {
+      "name": "synthetic_domain_marker",
+      "version": "synthetic-domain-1",
+      "kind": "forbidden_text",
+      "value": "SYNTHETIC_INVALID_DOMAIN"
+    }
+  ]
+}

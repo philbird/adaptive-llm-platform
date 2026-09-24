@@ -1,0 +1,54 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "cooldown_seconds": {
+      "default": 30,
+      "exclusiveMinimum": 0,
+      "maximum": 3600,
+      "title": "Cooldown Seconds",
+      "type": "number"
+    },
+    "error_rate": {
+      "default": 0.5,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Error Rate",
+      "type": "number"
+    },
+    "minimum_samples": {
+      "default": 5,
+      "maximum": 1000,
+      "minimum": 1,
+      "title": "Minimum Samples",
+      "type": "integer"
+    },
+    "p95_latency_ms": {
+      "default": 5000,
+      "exclusiveMinimum": 0,
+      "title": "P95 Latency Ms",
+      "type": "number"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "validation_failure_rate": {
+      "default": 0.5,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Validation Failure Rate",
+      "type": "number"
+    },
+    "window_seconds": {
+      "default": 60,
+      "exclusiveMinimum": 0,
+      "maximum": 3600,
+      "title": "Window Seconds",
+      "type": "number"
+    }
+  },
+  "title": "BreakerThresholds",
+  "type": "object"
+}

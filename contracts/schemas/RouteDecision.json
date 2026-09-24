@@ -118,6 +118,13 @@
       "title": "Fallback Deployment Ids",
       "type": "array"
     },
+    "fallback_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Fallback Reasons",
+      "type": "array"
+    },
     "interaction_id": {
       "title": "Interaction Id",
       "type": "string"
@@ -132,6 +139,18 @@
     "route_decision_id": {
       "title": "Route Decision Id",
       "type": "string"
+    },
+    "route_policy_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Route Policy Id"
     },
     "router_version": {
       "default": "foundation-only-1",

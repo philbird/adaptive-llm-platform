@@ -1,7 +1,11 @@
 # Status and gap analysis
 
 The engineering specification v1.0 was supplied on 2026-09-23. Milestone 1 slices 1a–1c
-and milestone 2 slices 2a–2b plus milestone 3 slices 3a–3b are implemented and tested locally with synthetic data. The reviewer runs `make ci` on the host; every gate passed on 2026-09-24 with the training group installed, including the SBOM audit. Staging and production
+and milestone 2 slices 2a–2b plus milestone 3 slices 3a–3b and milestone 4 slice 4a are implemented
+and tested locally with synthetic data. The reviewer runs `make ci` on the host; the slice 3b
+checkpoint passed every gate on 2026-09-24 with the training group installed, including the SBOM
+audit. The reviewer also ran full `make ci` for slice 4a on the host on 2026-09-24 and every
+gate passed, including the SBOM audit; measurements are recorded below. Staging and production
 acceptance remain separate; no external provider, transport or exporter is configured.
 
 Initial inspection found no existing repository, instructions, CI, deployment configuration,
@@ -19,7 +23,7 @@ Python project uses uv/FastAPI; it provides tooling precedent, not shared infras
 | Evaluation (milestone 2, slice 2b, delivered 2026-09-23 on branch `slice-2b`) | Five in-process suites; blinded deterministic judge; paired bootstrap and segmented hard gates; local MACs and transactional foundation baseline lock | Real-provider baseline, human review, asymmetric signing and production promotion approvals |
 | Datasets (milestone 2, slices 2a–2b) | Authenticated feedback/corrections; current-policy eligibility; exact source provenance; indexed exact/5-gram deduplication and golden decontamination; joint family/subject splits; encrypted shards, pending manifests with local MACs and data cards; operator API/CLI; deletion/reproducibility/concurrency tests; evaluation interactions excluded | Asymmetric signing, external artifact lifecycle |
 | Training/registry (milestone 3, slices 3a–3b, delivered 2026-09-24 on branch `slice-3b`) | Signed approval; durable asynchronous queue/cancellation/restart; optional offline CPU LoRA; deterministic safetensors checkpoints and merged/unmerged exports; verified specialist generation; resource limits; exact-artifact evaluation and audited promotion/rollback | GPU/distributed training, external artifact lifecycle, production approvals, traffic routing (milestone 4) |
-| Routing/deployment | Foundation-only routing with residency and integer-micro cost constraints | Shadow, bounded fallback, canary, rollback |
+| Routing/deployment (milestone 4, slice 4a, delivered 2026-09-24 on branch `slice-4a`) | Immutable route policies, post-response shadow worker and aggregate comparisons, expanded validators, bounded fallback machinery, per-deployment breakers and persistent global/tenant/task disablement; public output remains foundation-only | Live specialist/canary routing, calibrated routing, automated rollback (4b) |
 | Research | Disabled configuration intent | Isolated activation/pruning work after earlier milestones |
 
 ## Milestone 1, delivered as three reviewable slices
@@ -166,6 +170,44 @@ artifact digests across two fresh jobs and checkpoint resume. Publication recove
 restored checkpoint archives, and specialist loading is checked with a relocated export and an
 explicit base-model data directory.
 
-Future increments may broaden to milestone 4 routing,
+Slice 4a adds control migration 0009 for immutable route-policy versions, an independent
+active pointer, disablement controls, audit history, shadow coverage and content-free comparisons.
+A bounded post-response queue loads only verified tenant-eligible shadow adapters. Attempt 0
+is marked shadow, has its own optional encrypted output ref and outbox event, and cannot alter
+the response, replay, final attempt or billed live cost. Comparisons use the explicitly labelled
+`shadow-chunk-overlap-1` grounding proxy and paired bootstrap by critical segment; these scores
+are not the evaluation rubric. Validators add five-gram grounding, citation presence,
+English-script language, repetition/truncation, tool allowlist and application domain checks.
+Hard checks control acceptance; heuristic/advisory failures are recorded and counted, with
+validated per-application severity overrides. Token-budget completion remains a 200/`length`
+response. Verified specialists use an eight-entry version/digest cache, with registry eligibility
+rechecked on every access and state/digest changes evicting stale entries.
+
+Live specialist enablement is rejected by the public contract. An injected planner tests the
+bounded chain's ordering, budgets, deadlines, failure suppression and maximum attempts.
+Breakers use bounded process-local sliding windows and single half-open probes. Environment,
+tenant and task disablement survive restarts and propagate through a one-second pointer cache.
+The local two-instance kill-switch drill measured **1.006 s** (repeat **1.014 s**) with **100/100** successful requests
+under load and zero shadow starts on ten post-effect requests. These are synthetic local
+measurements, not production acceptance. See the
+[shadow and kill-switch runbook](runbooks/shadow-and-kill-switch.md).
+
+Slice 4a verification on 2026-09-24: formatting, Ruff, strict mypy (63 source files),
+162 unit/contract tests (one existing GPU skip), 118 integration tests, 43 security/load tests,
+six drills and both smoke tests passed. Event correlation remained 1,000/1,000 with 5,000 events;
+normal p95 overhead was 2.110 ms. Real CPU smoke completed in 2.970 s. The required optional-stack
+absence gate passed 321 tests with nine skips. The reviewer ran `make ci` on the host and every
+gate passed on 2026-09-24, including the SBOM audit: 330 tests, six drills, kill-switch effect
+1.01 s. Dependency files and the specification were unchanged.
+
+The slice 4a pass-1 corrections also passed full `make ci` on 2026-09-24, including the
+SBOM audit (no known vulnerabilities). The updated suite collected 345 tests: 176 unit/contract
+passed with one existing GPU skip, 119 integration passed, 43 security/load passed and six
+drills passed; both smoke tests passed again. Kill-switch effect was 1.010 s. The optional-stack
+absence gate passed 336 tests with nine expected skips. The new coverage checks advisory
+severities and application overrides, preserved budget-limited responses, provider cache reuse
+and revocation/digest eviction, and the distinct shadow proxy version.
+
+Future increments may broaden to milestone 4 live/canary routing (4b),
 milestone 5 distillation, and optional milestone 6 research. Each remains a separate reviewable
 increment. No production acceptance criterion is claimed satisfied at this checkpoint.

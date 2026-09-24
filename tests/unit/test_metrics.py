@@ -32,3 +32,15 @@ def test_metrics_are_thread_safe_and_labels_are_bounded() -> None:
         metrics.increment("requests", path="/v1/privacy/interactions/synthetic-forbidden")
     with pytest.raises(ValueError, match="invalid_metric"):
         metrics.increment("requests", method="synthetic-forbidden")
+
+
+def test_advisory_check_labels_are_bounded() -> None:
+    metrics = InProcessMetrics()
+    metrics.increment("validation_advisory_failures", check_name="groundedness")
+    assert metrics.get("validation_advisory_failures", check_name="groundedness") == 1
+    for i in range(100):
+        metrics.increment("validation_advisory_failures", check_name=f"domain.synthetic-{i}")
+    metrics.increment("validation_advisory_failures", check_name="SYNTHETIC PRIVATE CONTENT")
+    assert len(metrics._domain_checks) == 32
+    assert metrics.get("validation_advisory_failures", check_name="other") == 69
+    assert "SYNTHETIC PRIVATE CONTENT" not in repr(metrics._values)

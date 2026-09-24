@@ -214,6 +214,65 @@ def documents_path(settings: Settings, tmp_path: Path) -> Path:
     return path
 
 
+@pytest.fixture
+def shadow_seed(evaluation_seed: "EvaluationSeed") -> tuple["EvaluationSeed", str]:
+    seed = evaluation_seed
+    headers = {"Authorization": "Bearer synthetic-operator-key"}
+    seed.app.state.training.policy.training["synthetic-b"] = True
+    assert (
+        seed.client.post(
+            f"/v1/datasets/{seed.manifest.dataset_id}/versions/{seed.manifest.version}/approval",
+            headers=headers,
+            json={"reason": "SYNTHETIC shadow test"},
+        ).status_code
+        == 200
+    )
+    from adaptive_llm.contracts import TrainingJobSpecification
+
+    response = seed.client.post(
+        "/v1/training/jobs",
+        headers=headers,
+        json=TrainingJobSpecification(
+            dataset_id=seed.manifest.dataset_id,
+            dataset_version=seed.manifest.version,
+        ).model_dump(mode="json"),
+    )
+    job = wait_training(seed.client, response.json()["specification"]["job_id"], headers)
+    assert job.state == "succeeded"
+    assert seed.client.post(
+        "/v1/evaluations",
+        headers=headers,
+        json=seed.request.model_dump(mode="json"),
+    ).json()["passed"]
+    candidate = seed.request.model_copy(
+        update={
+            "evaluation_id": uid(),
+            "candidate_deployment_id": job.model_version,
+        }
+    )
+    report = seed.client.post(
+        "/v1/evaluations",
+        headers=headers,
+        json=candidate.model_dump(mode="json"),
+    )
+    assert report.status_code == 200 and report.json()["passed"]
+    for state in ["approved", "shadow"]:
+        assert (
+            seed.client.post(
+                f"/v1/models/{job.model_version}/promotion-requests",
+                headers=headers,
+                json={
+                    "model_version": job.model_version,
+                    "target_state": state,
+                    "reason": "SYNTHETIC shadow test",
+                    "evaluation_id": candidate.evaluation_id,
+                },
+            ).status_code
+            == 200
+        )
+    return seed, job.model_version
+
+
 @dataclass
 class EvaluationSeed:
     app: FastAPI

@@ -220,6 +220,20 @@
           "default": "1.0",
           "title": "Schema Version",
           "type": "string"
+        },
+        "severity": {
+          "default": "hard",
+          "enum": [
+            "hard",
+            "advisory"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "version": {
+          "default": "deterministic-1",
+          "title": "Version",
+          "type": "string"
         }
       },
       "required": [
@@ -249,6 +263,7 @@
     },
     "attempt_number": {
       "default": 1,
+      "minimum": 0,
       "title": "Attempt Number",
       "type": "integer"
     },
@@ -386,6 +401,11 @@
       "default": "1.0",
       "title": "Schema Version",
       "type": "string"
+    },
+    "shadow": {
+      "default": false,
+      "title": "Shadow",
+      "type": "boolean"
     },
     "tool_calls": {
       "items": {

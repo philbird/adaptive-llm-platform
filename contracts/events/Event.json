@@ -321,18 +321,31 @@
           "type": "string"
         },
         "new_state": {
-          "enum": [
-            "candidate",
-            "evaluating",
-            "approved",
-            "shadow",
-            "canary",
-            "production",
-            "deprecated",
-            "revoked"
+          "anyOf": [
+            {
+              "enum": [
+                "candidate",
+                "evaluating",
+                "approved",
+                "shadow",
+                "canary",
+                "production",
+                "deprecated",
+                "revoked"
+              ],
+              "type": "string"
+            },
+            {
+              "enum": [
+                "active",
+                "inactive",
+                "enabled",
+                "disabled"
+              ],
+              "type": "string"
+            }
           ],
-          "title": "New State",
-          "type": "string"
+          "title": "New State"
         },
         "previous_state": {
           "anyOf": [
@@ -346,6 +359,15 @@
                 "production",
                 "deprecated",
                 "revoked"
+              ],
+              "type": "string"
+            },
+            {
+              "enum": [
+                "active",
+                "inactive",
+                "enabled",
+                "disabled"
               ],
               "type": "string"
             },
@@ -628,6 +650,7 @@
         },
         "attempt_number": {
           "default": 1,
+          "minimum": 0,
           "title": "Attempt Number",
           "type": "integer"
         },
@@ -765,6 +788,11 @@
           "default": "1.0",
           "title": "Schema Version",
           "type": "string"
+        },
+        "shadow": {
+          "default": false,
+          "title": "Shadow",
+          "type": "boolean"
         },
         "tool_calls": {
           "items": {
@@ -1322,6 +1350,13 @@
           "title": "Fallback Deployment Ids",
           "type": "array"
         },
+        "fallback_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Reasons",
+          "type": "array"
+        },
         "interaction_id": {
           "title": "Interaction Id",
           "type": "string"
@@ -1336,6 +1371,18 @@
         "route_decision_id": {
           "title": "Route Decision Id",
           "type": "string"
+        },
+        "route_policy_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Route Policy Id"
         },
         "router_version": {
           "default": "foundation-only-1",
@@ -1713,6 +1760,20 @@
           "const": "1.0",
           "default": "1.0",
           "title": "Schema Version",
+          "type": "string"
+        },
+        "severity": {
+          "default": "hard",
+          "enum": [
+            "hard",
+            "advisory"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "version": {
+          "default": "deterministic-1",
+          "title": "Version",
           "type": "string"
         }
       },

@@ -1,0 +1,159 @@
+{
+  "$defs": {
+    "PairedComparison": {
+      "properties": {
+        "ci_lower": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Lower"
+        },
+        "ci_upper": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Upper"
+        },
+        "mean_delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mean Delta"
+        },
+        "sample_size": {
+          "minimum": 0,
+          "title": "Sample Size",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample_size"
+      ],
+      "title": "PairedComparison",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "citation_metrics": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Citation Metrics",
+      "type": "object"
+    },
+    "comparisons": {
+      "title": "Comparisons",
+      "type": "integer"
+    },
+    "coverage": {
+      "title": "Coverage",
+      "type": "number"
+    },
+    "mean_cost_delta_micros": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Mean Cost Delta Micros"
+    },
+    "mean_input_token_delta": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Mean Input Token Delta"
+    },
+    "mean_latency_delta_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Mean Latency Delta Ms"
+    },
+    "mean_output_token_delta": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Mean Output Token Delta"
+    },
+    "opportunities": {
+      "title": "Opportunities",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "score_delta": {
+      "$ref": "#/$defs/PairedComparison"
+    },
+    "specialist_validation_pass_rate": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Specialist Validation Pass Rate"
+    }
+  },
+  "required": [
+    "opportunities",
+    "comparisons",
+    "coverage",
+    "specialist_validation_pass_rate",
+    "score_delta",
+    "mean_cost_delta_micros",
+    "mean_latency_delta_ms",
+    "mean_input_token_delta",
+    "mean_output_token_delta",
+    "citation_metrics"
+  ],
+  "title": "ShadowAggregate",
+  "type": "object"
+}

@@ -291,6 +291,62 @@ class Persistence:
         except Exception:
             self.metrics.increment("dispatcher_failures")
 
+    def save_shadow(
+        self,
+        interaction: Interaction,
+        attempt: GenerationAttempt,
+        output: str | None,
+        policy: PolicyDecision,
+        *,
+        input_redaction_failed: bool,
+    ) -> bool:
+        """Separate attempt/event transaction. Never update the graph's final attempt or replay."""
+        tenant, iid = interaction.tenant_id, interaction.interaction_id
+        expires = (interaction.completed_at or interaction.started_at) + timedelta(
+            seconds=self.retention_seconds or interaction.policy.retention_seconds
+        )
+        expires = min(expires, self.clock() + timedelta(seconds=policy.retention_seconds))
+        if expires <= self.clock():
+            return False
+        content = PersistenceContent(failed=input_redaction_failed)
+        if output is not None:
+            self.prepare_output(output, policy, content)
+        attempt = attempt.model_copy(update={"output_hash": content.output_hash})
+        with self.metadata.transaction():
+            if self.metadata.state(tenant, iid) != "active":
+                return False
+            if (
+                not content.failed
+                and content.output is not None
+                and policy.content_logging_allowed
+                and interaction.policy.content_logging_allowed
+            ):
+                blob = self.cipher.encrypt(
+                    content.output.encode(),
+                    tenant,
+                    iid,
+                    f"shadow_output.{attempt.attempt_id}",
+                    expires,
+                )
+                self.payloads.put(blob)
+                attempt = attempt.model_copy(update={"output_ref": blob.reference})
+            self.metadata.put(tenant, attempt, expires)
+            self.outbox.enqueue(
+                [
+                    Event(
+                        event_type="generation.failed.v1"
+                        if attempt.error_code
+                        else "generation.completed.v1",
+                        tenant_id=tenant,
+                        trace_id=interaction.trace_id,
+                        data=attempt,
+                    )
+                ],
+                self.outbox_pending_limit,
+            )
+        self.refresh_metrics()
+        return True
+
     def record_failure(self) -> None:
         self.failures += 1
         self.metrics.increment("persistence_failures")

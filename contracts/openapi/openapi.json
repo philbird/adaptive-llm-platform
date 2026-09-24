@@ -65,6 +65,60 @@
         "title": "AdapterConfig",
         "type": "object"
       },
+      "BreakerThresholds": {
+        "additionalProperties": false,
+        "properties": {
+          "cooldown_seconds": {
+            "default": 30,
+            "exclusiveMinimum": 0.0,
+            "maximum": 3600.0,
+            "title": "Cooldown Seconds",
+            "type": "number"
+          },
+          "error_rate": {
+            "default": 0.5,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Error Rate",
+            "type": "number"
+          },
+          "minimum_samples": {
+            "default": 5,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Minimum Samples",
+            "type": "integer"
+          },
+          "p95_latency_ms": {
+            "default": 5000,
+            "exclusiveMinimum": 0.0,
+            "title": "P95 Latency Ms",
+            "type": "number"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "validation_failure_rate": {
+            "default": 0.5,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Validation Failure Rate",
+            "type": "number"
+          },
+          "window_seconds": {
+            "default": 60,
+            "exclusiveMinimum": 0.0,
+            "maximum": 3600.0,
+            "title": "Window Seconds",
+            "type": "number"
+          }
+        },
+        "title": "BreakerThresholds",
+        "type": "object"
+      },
       "Citation": {
         "additionalProperties": false,
         "properties": {
@@ -1365,6 +1419,14 @@
       },
       "Health": {
         "properties": {
+          "circuit_breakers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Circuit Breakers",
+            "type": "object"
+          },
           "dead_letters": {
             "default": 0,
             "title": "Dead Letters",
@@ -1374,9 +1436,19 @@
             "title": "Inference Enabled",
             "type": "boolean"
           },
+          "kill_switch": {
+            "default": false,
+            "title": "Kill Switch",
+            "type": "boolean"
+          },
           "outbox_pending": {
             "default": 0,
             "title": "Outbox Pending",
+            "type": "integer"
+          },
+          "shadow_queue_depth": {
+            "default": 0,
+            "title": "Shadow Queue Depth",
             "type": "integer"
           },
           "stage": {
@@ -2220,6 +2292,190 @@
         "title": "ResponseFormat",
         "type": "object"
       },
+      "RouteControlNote": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "task": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RouteControlNote",
+        "type": "object"
+      },
+      "RoutePolicy": {
+        "additionalProperties": false,
+        "description": "Each policy id names one immutable version; activation is a separate operation.",
+        "properties": {
+          "breaker": {
+            "$ref": "#/components/schemas/BreakerThresholds"
+          },
+          "eligible_specialist_versions": {
+            "items": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Eligible Specialist Versions",
+            "type": "array"
+          },
+          "foundation_fallback": {
+            "default": "fake-foundation-local-1",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Foundation Fallback",
+            "type": "string"
+          },
+          "hard_fallback_on": {
+            "items": {
+              "enum": [
+                "validation_failure",
+                "endpoint_error",
+                "deadline_risk",
+                "policy_uncertainty",
+                "unsupported_tool",
+                "low_confidence",
+                "out_of_distribution",
+                "low_quality",
+                "circuit_open",
+                "live_specialists_disabled"
+              ],
+              "type": "string"
+            },
+            "title": "Hard Fallback On",
+            "type": "array"
+          },
+          "kill_switch": {
+            "default": false,
+            "title": "Kill Switch",
+            "type": "boolean"
+          },
+          "live_specialists_allowed": {
+            "const": false,
+            "default": false,
+            "title": "Live Specialists Allowed",
+            "type": "boolean"
+          },
+          "max_attempts": {
+            "default": 2,
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "ood_threshold_max": {
+            "default": 0.15,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Ood Threshold Max",
+            "type": "number"
+          },
+          "policy_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "quality_threshold": {
+            "default": 0.9,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Quality Threshold",
+            "type": "number"
+          },
+          "router_confidence_threshold": {
+            "default": 0.85,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Router Confidence Threshold",
+            "type": "number"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "shadow_enabled": {
+            "default": false,
+            "title": "Shadow Enabled",
+            "type": "boolean"
+          },
+          "task_enabled": {
+            "maxProperties": 32,
+            "patternProperties": {
+              "^[\\w.-]+$": {
+                "type": "boolean"
+              }
+            },
+            "propertyNames": {
+              "maxLength": 100,
+              "minLength": 1
+            },
+            "title": "Task Enabled",
+            "type": "object"
+          },
+          "tenant_enabled": {
+            "maxProperties": 100,
+            "patternProperties": {
+              "^[\\w.-]+$": {
+                "type": "boolean"
+              }
+            },
+            "propertyNames": {
+              "maxLength": 100,
+              "minLength": 1
+            },
+            "title": "Tenant Enabled",
+            "type": "object"
+          }
+        },
+        "title": "RoutePolicy",
+        "type": "object"
+      },
       "RouteSummary": {
         "additionalProperties": false,
         "properties": {
@@ -2259,7 +2515,8 @@
             "default": "auto",
             "enum": [
               "auto",
-              "foundation"
+              "foundation",
+              "specialist"
             ],
             "title": "Mode",
             "type": "string"
@@ -2272,6 +2529,145 @@
           }
         },
         "title": "RoutingOptions",
+        "type": "object"
+      },
+      "ShadowAggregate": {
+        "properties": {
+          "citation_metrics": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Citation Metrics",
+            "type": "object"
+          },
+          "comparisons": {
+            "title": "Comparisons",
+            "type": "integer"
+          },
+          "coverage": {
+            "title": "Coverage",
+            "type": "number"
+          },
+          "mean_cost_delta_micros": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Cost Delta Micros"
+          },
+          "mean_input_token_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Input Token Delta"
+          },
+          "mean_latency_delta_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Latency Delta Ms"
+          },
+          "mean_output_token_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Output Token Delta"
+          },
+          "opportunities": {
+            "title": "Opportunities",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "score_delta": {
+            "$ref": "#/components/schemas/PairedComparison"
+          },
+          "specialist_validation_pass_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specialist Validation Pass Rate"
+          }
+        },
+        "required": [
+          "opportunities",
+          "comparisons",
+          "coverage",
+          "specialist_validation_pass_rate",
+          "score_delta",
+          "mean_cost_delta_micros",
+          "mean_latency_delta_ms",
+          "mean_input_token_delta",
+          "mean_output_token_delta",
+          "citation_metrics"
+        ],
+        "title": "ShadowAggregate",
+        "type": "object"
+      },
+      "ShadowReport": {
+        "description": "Aggregate shadow-chunk-overlap-1 scores: coarse grounding proxies, not evaluation rubrics.",
+        "properties": {
+          "critical_segments": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ShadowAggregate"
+            },
+            "title": "Critical Segments",
+            "type": "object"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/ShadowAggregate"
+          },
+          "policy_id": {
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_id",
+          "since",
+          "overall",
+          "critical_segments"
+        ],
+        "title": "ShadowReport",
         "type": "object"
       },
       "SourceWindow": {
@@ -3814,6 +4210,390 @@
           }
         },
         "summary": "Delete Subject"
+      }
+    },
+    "/v1/route-policies": {
+      "post": {
+        "operationId": "create_route_policy_v1_route_policies_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutePolicy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutePolicy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Route Policy"
+      }
+    },
+    "/v1/route-policies/kill-switch": {
+      "delete": {
+        "operationId": "release_kill_switch_v1_route_policies_kill_switch_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteControlNote"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Release Kill Switch V1 Route Policies Kill Switch Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Kill Switch"
+      },
+      "post": {
+        "operationId": "engage_kill_switch_v1_route_policies_kill_switch_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteControlNote"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Engage Kill Switch V1 Route Policies Kill Switch Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Engage Kill Switch"
+      }
+    },
+    "/v1/route-policies/{policy_id}/activate": {
+      "post": {
+        "operationId": "activate_route_policy_v1_route_policies__policy_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "title": "Policy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteControlNote"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutePolicy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Route Policy"
+      }
+    },
+    "/v1/shadow/reports": {
+      "get": {
+        "operationId": "shadow_reports_v1_shadow_reports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "policy",
+            "required": true,
+            "schema": {
+              "title": "Policy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShadowReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Shadow Reports"
       }
     },
     "/v1/training/jobs": {

@@ -395,7 +395,7 @@ def test_privacy_request_metrics_use_only_bounded_method_and_status_labels(
         assert metrics.get("requests", method="GET", status_class="4xx") == 1
         assert metrics.get("requests", method="OTHER", status_class="4xx") == 1
         assert metrics.get("requests", method="GET", status_class="2xx") == 0
-        assert set(metrics._values) >= {
+        assert {key[:4] for key in metrics._values} >= {
             ("requests", None, "2xx", "POST"),
             ("requests", None, "2xx", "DELETE"),
             ("requests", None, "4xx", "DELETE"),

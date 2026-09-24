@@ -1,4 +1,4 @@
-# Slices 1a–1c: one interaction, from serving to durable event delivery
+# Slices 1a–1c and 4a: serving, durable delivery and optional shadow execution
 
 This walkthrough uses only the synthetic keys, policies, prices and documents checked into
 the repository. All serving components run in the application process, with one SQLite file
@@ -8,9 +8,10 @@ external provider call or exporter. The
 health stage label is `milestone-1-local`; persistence and the outbox are enabled.
 
 Start the local gateway with `make dev`. `/healthz` reports
-`{"status":"ok","stage":"milestone-1-local","inference_enabled":true,"outbox_pending":0,"dead_letters":0}`
+`{"status":"ok","stage":"milestone-1-local","inference_enabled":true,"outbox_pending":0,"dead_letters":0,"circuit_breakers":{},"kill_switch":false,"shadow_queue_depth":0}`
 when the outbox is drained. Backlog and dead letters do not change readiness. The gauges are
-refreshed after commits and dispatcher batches; health reads them without waiting for SQLite. Setting
+refreshed after commits and dispatcher batches. Route controls share a one-second pointer cache;
+health also exposes process-local breakers and shadow queue depth. Setting
 `Settings(inference_enabled=False)` omits the inference route and reports false.
 
 Submit this synthetic request:
@@ -88,7 +89,9 @@ curl http://127.0.0.1:8000/v1/inference \
    mismatch returns 403 `residency_unavailable`; exceeding the cost limit returns 422
    `cost_limit_exceeded`. Processing denial returns 403 `processing_forbidden` (normally before
    routing). These are constraint failures, not transient availability errors. No router 503
-   case exists in this slice; capacity/health routing belongs to a later milestone. These prices
+   case existed in slice 1a. Slice 4a excludes deployments with open circuit breakers; no healthy
+   deployment returns 503. Active route policies use an independent control pointer. Public
+   specialist mode selects foundation with reason `live_specialists_disabled`. These prices
    are synthetic integer USD micros, rounded up after calculation.
 5. **Generate and validate.** The injected `Provider` receives only canonical messages, supplied
    chunks, response format and output limit. `FakeProvider` returns deterministic content
@@ -96,11 +99,20 @@ curl http://127.0.0.1:8000/v1/inference \
    citation ids. Usage is `locally_estimated`, tokenizer `fake-whitespace-v1` (each non-whitespace
    run is a token). At the output limit it truncates and reports `length`; citations refer only
    to markers retained in the output. Its simulated latency is zero; the gateway measures the
-   actual provider call duration for generation evidence and the load test. The response cost
+   provider call plus validation duration for generation evidence and the load test. The response cost
    uses actual estimated token counts with the same price list, so it may be lower than the
-   route quote. The validator checks non-empty content, canonical and inline citation ids
-   against supplied chunks, and an actual JSON object when requested. Truncated invalid JSON
-   fails validation. Validation failure returns 502 `validation_failed`; there is no fallback.
+   route quote. The expanded validator checks nonempty content, citation presence and ids,
+   JSON objects, five-gram groundedness, English-script language, repetition, truncation,
+   the empty tool-call allowlist and configured domain rules. Every check has a name, version
+   and severity. Only hard failures invalidate an answer; advisory failures remain in the checks
+   and increment the bounded `validation_advisory_failures` metric by check name.
+   The heuristics are described in the [shadow runbook](shadow-and-kill-switch.md).
+   Truncation is advisory by default: nonempty text at the requested token budget returns 200
+   with finish reason `length`. Malformed JSON remains a hard failure. Each application's
+   validation configuration can override a known check's severity. A hard failure on the public
+   foundation route returns 502 `validation_failed`. The bounded chain also supports injected
+   live candidates for testing, with per-attempt records, deadline estimates, maximum attempts
+   and hard fallback reasons.
 6. **Prepare the response.** The gateway produces `InferenceResponse` with the same interaction/trace ids,
    content, citations, usage, estimated cost and finish reason. Operational events contain
    versions, ids, counts, decisions and keyed input/output hashes, never prompt, response or
@@ -143,7 +155,18 @@ curl http://127.0.0.1:8000/v1/inference \
    Persistence itself is not retried and has no emergency content buffer. Event delivery retries
    separately after the transaction commits, as described below.
 
-The event order with RAG enabled is:
+9. **Optional post-response shadow (slice 4a).** After the response body is sent, a bounded queue
+   can run one approved `shadow` specialist on the same processing-redacted canonical input and
+   supplied chunks. Model tenant membership, current state/artifacts, controls, residency and
+   breaker health are rechecked. The worker runs off the serving event loop. A separate attempt
+   numbered 0 carries `shadow=true`, is persisted/emitted, and never changes the response, replay,
+   final attempt or response cost. Its output ref requires original/current logging permission
+   and successful persistence redaction; privacy deletion still wins over late writes.
+   Content-free comparison records and aggregate reports live in the control database. Queue
+   saturation drops shadow work with a counter. See [shadow and kill switch](shadow-and-kill-switch.md)
+   for activation, scoped disablement, reports, breaker thresholds and the measured recovery drill.
+
+The event order with RAG enabled and shadow disabled is:
 
 | Order | Event | Payload |
 | --- | --- | --- |
@@ -198,8 +221,10 @@ above the limit. Redelivered rows are retained. Content is never used as an outa
 `requests` for every `/v1/` path by `method` and `status_class` (2xx/3xx/4xx/5xx),
 `fallback_free_attempts`, `outbox_delivered`, `outbox_retried`, `dead_letter`, `dropped_events`, `persistence_failures`, `degraded_emissions`,
 `replay_hits` and `dispatcher_failures`. Gauges are `outbox_pending`, `outbox_dead` and
-`dispatcher_lag_seconds=max(0, now-oldest_pending_next_attempt_at)`. The only supported label
-dimensions are tenant, status class and HTTP method; request counters use method and status class only. Methods are bounded
+`dispatcher_lag_seconds=max(0, now-oldest_pending_next_attempt_at)`. Slice 4a adds route distribution,
+fallback reasons, shadow cost/coverage/queue/drop counters, kill-switch and breaker state.
+Supported label dimensions are tenant, status class, HTTP method, deployment (capped at 64 plus
+`other`) and fixed-vocabulary reason; request counters use method and status class only. Methods are bounded
 to GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, TRACE, CONNECT and OTHER. Unknown methods map
 to OTHER. Paths and request/interaction/trace ids are never labels. Counters reset on restart;
 gauges recover from SQL.
@@ -303,4 +328,6 @@ The 1,000-interaction flaky-sink load test checks full correlation after drainin
 acknowledgements. See [telemetry outage](telemetry-outage.md), [dead-letter recovery](dead-letter-recovery.md),
 [key rotation](key-rotation.md), [backup/restore](backup-restore.md) and
 [retention/deletion](retention-deletion.md) for commands and measured drill results.
-Streaming, fallback, the feedback endpoint, real providers and exporters remain later work.
+Feedback, optional local LoRA specialists and bounded fallback machinery are implemented by
+subsequent slices. Streaming, live specialist routing, external providers and exporters remain
+later work.

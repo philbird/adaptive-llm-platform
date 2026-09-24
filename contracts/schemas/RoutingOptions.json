@@ -19,7 +19,8 @@
       "default": "auto",
       "enum": [
         "auto",
-        "foundation"
+        "foundation",
+        "specialist"
       ],
       "title": "Mode",
       "type": "string"
