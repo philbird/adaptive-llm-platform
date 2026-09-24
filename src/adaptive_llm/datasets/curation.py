@@ -29,6 +29,8 @@ def similar(
 def golden_texts(directory: Path) -> list[str]:
     texts: list[str] = []
     for path in sorted(directory.glob("*.jsonl")):
+        if path.name == "distillation-training.jsonl":
+            continue  # Explicit training partition; never used by the evaluation suites.
         for line in path.read_text().splitlines():
             row = json.loads(line)
             texts.append(row["input"] + "\n" + row["target"])

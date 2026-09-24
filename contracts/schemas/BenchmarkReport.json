@@ -1,0 +1,300 @@
+{
+  "$defs": {
+    "BenchmarkMeasurement": {
+      "properties": {
+        "concurrency": {
+          "const": 4,
+          "default": 4,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "cost_per_success_micros": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cost Per Success Micros"
+        },
+        "input_micros_per_1000_tokens": {
+          "title": "Input Micros Per 1000 Tokens",
+          "type": "integer"
+        },
+        "output_micros_per_1000_tokens": {
+          "title": "Output Micros Per 1000 Tokens",
+          "type": "integer"
+        },
+        "p50_latency_ms": {
+          "minimum": 0,
+          "title": "P50 Latency Ms",
+          "type": "number"
+        },
+        "p95_latency_ms": {
+          "minimum": 0,
+          "title": "P95 Latency Ms",
+          "type": "number"
+        },
+        "peak_rss_bytes": {
+          "exclusiveMinimum": 0,
+          "title": "Peak Rss Bytes",
+          "type": "integer"
+        },
+        "requests": {
+          "title": "Requests",
+          "type": "integer"
+        },
+        "requests_per_second": {
+          "minimum": 0,
+          "title": "Requests Per Second",
+          "type": "number"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "successes": {
+          "title": "Successes",
+          "type": "integer"
+        },
+        "total_cost_micros": {
+          "minimum": 0,
+          "title": "Total Cost Micros",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "requests",
+        "successes",
+        "p50_latency_ms",
+        "p95_latency_ms",
+        "requests_per_second",
+        "peak_rss_bytes",
+        "total_cost_micros",
+        "cost_per_success_micros",
+        "input_micros_per_1000_tokens",
+        "output_micros_per_1000_tokens"
+      ],
+      "title": "BenchmarkMeasurement",
+      "type": "object"
+    },
+    "BenchmarkSpecification": {
+      "properties": {
+        "benchmark_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Benchmark Id",
+          "type": "string"
+        },
+        "candidate_version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Candidate Version",
+          "type": "string"
+        },
+        "evaluation_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Evaluation Id",
+          "type": "string"
+        },
+        "requests": {
+          "default": 40,
+          "maximum": 1000,
+          "minimum": 4,
+          "title": "Requests",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_version",
+        "evaluation_id"
+      ],
+      "title": "BenchmarkSpecification",
+      "type": "object"
+    },
+    "PairedComparison": {
+      "properties": {
+        "ci_lower": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Lower"
+        },
+        "ci_upper": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Upper"
+        },
+        "mean_delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mean Delta"
+        },
+        "sample_size": {
+          "minimum": 0,
+          "title": "Sample Size",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample_size"
+      ],
+      "title": "PairedComparison",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "candidate_artifact_digest": {
+      "title": "Candidate Artifact Digest",
+      "type": "string"
+    },
+    "cost_reduction_fraction": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Cost Reduction Fraction"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "dataset_content_digest": {
+      "title": "Dataset Content Digest",
+      "type": "string"
+    },
+    "known_limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Known Limitations",
+      "type": "array"
+    },
+    "latency_reduction_fraction": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Latency Reduction Fraction"
+    },
+    "mac": {
+      "default": "",
+      "title": "Mac",
+      "type": "string"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "quality_comparison": {
+      "$ref": "#/$defs/PairedComparison"
+    },
+    "request_mix_digest": {
+      "title": "Request Mix Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "specification": {
+      "$ref": "#/$defs/BenchmarkSpecification"
+    },
+    "student": {
+      "$ref": "#/$defs/BenchmarkMeasurement"
+    },
+    "teacher": {
+      "$ref": "#/$defs/BenchmarkMeasurement"
+    },
+    "teacher_artifact_digest": {
+      "title": "Teacher Artifact Digest",
+      "type": "string"
+    },
+    "teacher_version": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Teacher Version",
+      "type": "string"
+    },
+    "tenant_ids": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "title": "Tenant Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "specification",
+    "tenant_ids",
+    "candidate_artifact_digest",
+    "teacher_version",
+    "teacher_artifact_digest",
+    "dataset_content_digest",
+    "request_mix_digest",
+    "student",
+    "teacher",
+    "quality_comparison",
+    "latency_reduction_fraction",
+    "cost_reduction_fraction",
+    "passed",
+    "known_limitations"
+  ],
+  "title": "BenchmarkReport",
+  "type": "object"
+}

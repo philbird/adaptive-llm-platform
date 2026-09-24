@@ -1,0 +1,43 @@
+{
+  "properties": {
+    "example_hash": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Example Hash",
+      "type": "string"
+    },
+    "key_version": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Key Version",
+      "type": "string"
+    },
+    "plaintext_hash": {
+      "title": "Plaintext Hash",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tenant_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Tenant Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "example_hash",
+    "plaintext_hash",
+    "key_version"
+  ],
+  "title": "SoftTargetFile",
+  "type": "object"
+}

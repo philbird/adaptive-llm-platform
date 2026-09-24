@@ -32,5 +32,15 @@ The passing smoke uses a deliberately narrow no-context task; the ordinary five 
 against a tiny adapter and verify rejection of failed quality gates. See the runbook for measured
 timings, placement rules, formats and commands.
 
-Milestone 4 adds specialist/shadow/canary traffic; milestone 5 adds distillation. Registry
-production state alone does not enable specialist serving. No dependencies were added here.
+Slice 5a adds `src/adaptive_llm/distillation/`: approved-source teacher curation through isolated
+evaluation, an explicitly approved distilled dataset, and queued full/LoRA training of a one-layer,
+16-unit student. Synthetic general/safety training partitions remain separate from evaluation.
+Optional teacher log distributions use encrypted safetensors and target-position KL loss.
+The existing five suites gain a paired held-out teacher comparison. A MAC-authenticated deployment
+benchmark with non-inferior quality and material latency or cost improvement is also required for
+student approval. See the [distillation runbook](../../docs/runbooks/distillation.md) for commands,
+formats, thresholds and measurement limitations. The new smoke is marked `accelerator_free` and
+`smoke`, and must finish within ninety seconds. No dependencies were added.
+
+Milestone 4 controls specialist/shadow/canary traffic. Registry production state alone does not
+enable specialist serving; slice 5a leaves those controls unchanged.

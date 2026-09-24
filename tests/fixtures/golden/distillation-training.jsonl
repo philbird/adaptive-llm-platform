@@ -1,0 +1,2 @@
+{"input":"SYNTHETIC training arithmetic: add three and four.","target":"Seven.","category":"general","expect_citation":false}
+{"input":"SYNTHETIC training instruction: reply with the final letter of ABC.","target":"C","category":"general","expect_citation":false}

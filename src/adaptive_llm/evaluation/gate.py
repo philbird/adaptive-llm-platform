@@ -45,6 +45,26 @@ def decisions(report: EvaluationReport) -> list[GateDecision]:
 
     add("sample_size", enough(report.paired_comparison), "insufficient_samples")
     add("non_inferiority", noninferior(report.paired_comparison), "quality_or_coverage_failed")
+    if report.distillation is not None:
+        comparison = report.segment_comparisons.get("distillation", PairedComparison(sample_size=0))
+        add(
+            "distillation_non_inferiority",
+            noninferior(comparison),
+            "teacher_quality_or_coverage_failed",
+        )
+        for key in spec.critical_segments:
+            comparisons = [
+                value
+                for name, value in report.segment_comparisons.items()
+                if name.startswith(f"distillation.{key}.")
+            ]
+            add(
+                f"distillation.{key}",
+                bool(comparisons)
+                and sum(c.sample_size for c in comparisons) == comparison.sample_size
+                and all(noninferior(c) for c in comparisons),
+                "teacher_segment_failed",
+            )
     for key in spec.critical_segments:
         segments = {
             name: value

@@ -3,7 +3,7 @@
 import json
 import re
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal, Protocol, runtime_checkable
 
 from adaptive_llm.contracts import (
     Chunk,
@@ -50,6 +50,13 @@ class ProviderResult:
 
 class Provider(Protocol):
     async def generate(self, request: ProviderRequest) -> ProviderResult: ...
+
+
+@runtime_checkable
+class SoftTargetProvider(Protocol):
+    async def soft_targets(self, row: bytes) -> bytes | None:
+        """Optional target-token log distributions, serialized exclusively as safetensors."""
+        ...
 
 
 class FakeProvider:

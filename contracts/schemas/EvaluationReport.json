@@ -1,5 +1,177 @@
 {
   "$defs": {
+    "DistillationLineage": {
+      "properties": {
+        "chat_template_version": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chat Template Version"
+        },
+        "generation_parameters": {
+          "patternProperties": {
+            "^[\\w.-]+$": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          },
+          "propertyNames": {
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "title": "Generation Parameters",
+          "type": "object"
+        },
+        "judge_version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Judge Version",
+          "type": "string"
+        },
+        "minimum_score": {
+          "title": "Minimum Score",
+          "type": "number"
+        },
+        "mix_content_digest": {
+          "title": "Mix Content Digest",
+          "type": "string"
+        },
+        "mix_counts": {
+          "patternProperties": {
+            "^[\\w.-]+$": {
+              "type": "integer"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "title": "Mix Counts",
+          "type": "object"
+        },
+        "requested_mix_fraction": {
+          "title": "Requested Mix Fraction",
+          "type": "number"
+        },
+        "rubric_version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Rubric Version",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "soft_target_files": {
+          "items": {
+            "$ref": "#/$defs/SoftTargetFile"
+          },
+          "title": "Soft Target Files",
+          "type": "array"
+        },
+        "source_content_digest": {
+          "title": "Source Content Digest",
+          "type": "string"
+        },
+        "source_dataset_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Source Dataset Id",
+          "type": "string"
+        },
+        "source_dataset_version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Source Dataset Version",
+          "type": "string"
+        },
+        "teacher_artifact_digest": {
+          "title": "Teacher Artifact Digest",
+          "type": "string"
+        },
+        "teacher_deployment_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Teacher Deployment Id",
+          "type": "string"
+        },
+        "teacher_parameter_count": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Teacher Parameter Count"
+        },
+        "teacher_version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Teacher Version",
+          "type": "string"
+        },
+        "tokenizer_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tokenizer Id"
+        }
+      },
+      "required": [
+        "source_dataset_id",
+        "source_dataset_version",
+        "source_content_digest",
+        "teacher_deployment_id",
+        "teacher_version",
+        "teacher_artifact_digest",
+        "generation_parameters",
+        "judge_version",
+        "rubric_version",
+        "minimum_score",
+        "requested_mix_fraction",
+        "mix_counts",
+        "mix_content_digest"
+      ],
+      "title": "DistillationLineage",
+      "type": "object"
+    },
     "EvaluationSpecification": {
       "properties": {
         "baseline_deployment_id": {
@@ -389,6 +561,49 @@
       "title": "RoutingObservation",
       "type": "object"
     },
+    "SoftTargetFile": {
+      "properties": {
+        "example_hash": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Example Hash",
+          "type": "string"
+        },
+        "key_version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Key Version",
+          "type": "string"
+        },
+        "plaintext_hash": {
+          "title": "Plaintext Hash",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "tenant_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Tenant Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tenant_id",
+        "example_hash",
+        "plaintext_hash",
+        "key_version"
+      ],
+      "title": "SoftTargetFile",
+      "type": "object"
+    },
     "SuiteResult": {
       "properties": {
         "completed": {
@@ -623,6 +838,17 @@
       "minimum": 1,
       "title": "Derived Minimum Sample Size",
       "type": "integer"
+    },
+    "distillation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DistillationLineage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "gate_decisions": {
       "items": {

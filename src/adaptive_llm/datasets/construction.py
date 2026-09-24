@@ -39,7 +39,7 @@ class BuiltExample:
     subject: str | None
     families: tuple[str, ...]
     started_at: datetime
-    target_source: TargetSource
+    target_source: str
     language: str
     exact_hash: str
     text: str = field(repr=False)

@@ -1,11 +1,14 @@
 # Status and gap analysis
 
 The engineering specification v1.0 was supplied on 2026-09-23. Milestone 1 slices 1a–1c
-and milestone 2 slices 2a–2b plus milestone 3 slices 3a–3b and milestone 4 slices 4a–4b are implemented
+and milestone 2 slices 2a–2b plus milestone 3 slices 3a–3b, milestone 4 slices 4a–4b and
+milestone 5 slice 5a are implemented
 and tested locally with synthetic data. The reviewer runs `make ci` on the host; the slice 3b
 checkpoint passed every gate on 2026-09-24 with the training group installed, including the SBOM
 audit. The reviewer also ran full `make ci` for slice 4a on the host on 2026-09-24 and every
-gate passed, including the SBOM audit; measurements are recorded below. Staging and production
+gate passed, including the SBOM audit. The reviewer ran `make ci` for slice 5a on the host on
+2026-09-24: every gate passed, including the SBOM audit, with 396 tests, eight drills and three
+smoke paths (student approximately 3.5 s); measurements are recorded below. Staging and production
 acceptance remain separate; no external provider, transport or exporter is configured.
 
 Initial inspection found no existing repository, instructions, CI, deployment configuration,
@@ -23,6 +26,7 @@ Python project uses uv/FastAPI; it provides tooling precedent, not shared infras
 | Evaluation (milestone 2, slice 2b, delivered 2026-09-23 on branch `slice-2b`) | Five in-process suites; blinded deterministic judge; paired bootstrap and segmented hard gates; local MACs and transactional foundation baseline lock | Real-provider baseline, human review, asymmetric signing and production promotion approvals |
 | Datasets (milestone 2, slices 2a–2b) | Authenticated feedback/corrections; current-policy eligibility; exact source provenance; indexed exact/5-gram deduplication and golden decontamination; joint family/subject splits; encrypted shards, pending manifests with local MACs and data cards; operator API/CLI; deletion/reproducibility/concurrency tests; evaluation interactions excluded | Asymmetric signing, external artifact lifecycle |
 | Training/registry (milestone 3, slices 3a–3b; router jobs added in 4b) | Signed approval; durable asynchronous queue/cancellation/restart; optional offline CPU LoRA; deterministic exports; verified specialist generation; plain-Python calibrated router jobs; exact-artifact evaluation and audited promotion/rollback | GPU/distributed training, external artifact lifecycle, production approvals |
+| Distillation (milestone 5, slice 5a, delivered 2026-09-24 on branch `slice-5a`) | Isolated teacher curation, encrypted approved datasets, preserved evidence/folds, general/safety mix, full/LoRA tiny students, optional safetensors KL, teacher non-inferiority and signed deployment benchmarks | Real workload quality and hardware/cost acceptance; production approvals |
 | Routing/deployment (milestone 4, slices 4a–4b, delivered 2026-09-24 on branch `slice-4b`) | Immutable policies; shadow comparisons; numeric encrypted router datasets; calibrated logistic/OOD admission; opt-in canary/production responses; segmented outcome costs; persistent automatic rollback and kill controls | Real workload calibration, production approvals, external transport, later bandits |
 | Research | Disabled configuration intent | Isolated activation/pruning work after earlier milestones |
 
@@ -256,7 +260,7 @@ planner exceptions via `live_planner_failures` on `/healthz`. The internal price
 reason is `not_cheapest`; request-budget errors retain `cost_limit_exceeded`.
 See [canary and rollback](runbooks/canary-and-rollback.md) for commands and detailed limitations.
 
-Future increments are milestone 5 distillation and optional milestone 6 research. Bandits,
+Following slice 5a, the next optional increment is milestone 6 research. Bandits,
 real providers, streaming, semantic classification and production acceptance remain outside
 this slice. The specification, `pyproject.toml` and `uv.lock` are unchanged.
 
@@ -292,3 +296,81 @@ The focused planner, metric, live-routing, application and overhead tests also p
 This full-CI run measured automatic rollback **1.013 s**, kill-switch propagation **1.006 s**,
 and the live overhead numbers in the exit table. `git diff --check` and the protected-file
 diff check passed. No dependency changes or commits were made.
+
+## Milestone 5 slice 5a — local distillation and deployment benchmark
+
+Slice 5a adds teacher curation under `src/adaptive_llm/distillation/`, through the existing
+dataset build and isolated evaluation paths. The approved adapter source and generated
+distillation dataset receive separate explicit approvals. Only train inputs reach the teacher;
+held-out targets and grouping remain the original source's. The manifest pins teacher version,
+artifact, generation settings, judge, mix and optional encrypted safetensors. Student jobs reuse
+the durable queue and CPU trainer for full or LoRA updates, deterministic checkpoints and signed
+exports. Distilled promotion additionally requires held-out non-inferiority to the teacher and
+a MAC-verified benchmark. Control migration 0011 stores content-free benchmark records.
+
+| Milestone 5 local exit criterion | Measured result on 2026-09-24 |
+| --- | --- |
+| Smaller generated model | Student: **1 layer, 16 hidden units, 10,640 parameters**; tiny teacher fixture: **2 layers, 32 hidden units, 35,168 parameters**; shared **259-token** vocabulary |
+| Teacher filtering and mix | Generation/hard-validation, judge, golden overlap and redaction failures are counted and excluded. Mix test: **1 teacher + 2 general + 1 abstention + 1 escalation**, actual fraction **.8**; eight held-out targets unchanged |
+| Evidence and source governance | Evidence-bearing training inputs retain exact source blocks and provenance. Unapproved sources, unapproved teacher states, current-policy denial and source deletion block use |
+| Soft targets | Real approved tiny teacher produces one encrypted safetensors payload with target IDs and **259-way** per-token log distributions; full student trains with KL; altered payloads fail authentication; fake teacher has no soft output |
+| Deterministic full/LoRA training and resume | Both student modes produce identical full artifact digests across fresh four-step jobs and interruption/resume at step **2**; repeated KL jobs also match |
+| CPU train → five suites → teacher comparison → benchmark → approve | Final full-student smoke: **3.432 s**, **500** optimizer steps, under the **90 s** limit; eight held-out items, quality delta **0**, 95% CI **[0, 0]** |
+| Warm deployment benchmark at concurrency 4 | **16/16** successful outcomes per model; student p50/p95 **159.623 / 162.553 ms**, **24.915 requests/s**; fake foundation teacher **2.170 / 2.720 ms**, **1,668.579 requests/s** |
+| Peak process RSS | Final smoke: student measurement **413,089,792 bytes**, teacher measurement **413,171,712 bytes**; training **398,393,344 bytes**. These are process high-water marks, not separate model allocations |
+| Configured synthetic cost improvement | Student **1** versus teacher **16 USD micros/success**, **93.75%** reduction. Student prices **1/1**, fake teacher **1000/2000** micros per 1,000 input/output tokens; actual tokenizer counts used |
+| Independent quality and efficiency gates | Four-step inferior student fails teacher comparison and benchmark; a faster inferior numerical fixture fails. Missing or tampered benchmarks block approval; current thresholds are checked again at promotion |
+| Repeated benchmark | Identical request-mix digest, quality CI and integer costs across two runs; warm p95 within the documented factor-five scheduling tolerance |
+
+These numbers demonstrate a local synthetic lifecycle. The passing smoke deliberately uses
+one no-context target and sets its mix fraction to zero; separate tests cover the recorded
+general/safety mix and evidence retention. Its teacher is the fake foundation, so the tensor
+student is slower; it passes the configured cost criterion only. The registered real tiny
+teacher is separately exercised for soft targets. Production cost, broad quality and the
+specification's real-workload milestone exit remain unproven. The benchmark records this scope.
+See the [distillation runbook](runbooks/distillation.md) for exact endpoints, reproduction,
+approval sequencing, thresholds, loss and artifact formats.
+
+No dependencies, specification files, `pyproject.toml` or `uv.lock` were changed. GPU,
+downloads, external teachers, rollout changes and milestone 6 remain outside this task.
+
+Verification used the exact prefix
+`UV_NO_SYNC=1 UV_CACHE_DIR=/private/tmp/adaptive-llm-uv-cache` on every uv/make command:
+
+| Command after that prefix | Result |
+| --- | --- |
+| `make contracts` | Generated schemas and OpenAPI synchronized; schema consistency tests pass |
+| `make check integration` | Initial pass: formatting, Ruff, strict mypy, 202 unit/contract passes and one GPU skip, 136 integration passes; subsequent added coverage included below |
+| `make ci` | **Passed on the reviewer's host, 2026-09-24**, including the SBOM audit: **396** tests, **8** drills and **3** smoke paths (student approximately **3.5 s**). Formatting, Ruff, strict mypy on **71** source files; **205** unit/contract passes and one GPU skip; **138** integration passes |
+| `uv run --locked pytest tests/security tests/load -s` | **44 passed**; event correlation **1,000/1,000**, **5,000** events; normal/live p95 overhead **2.032 / 2.374 ms** |
+| `uv run --locked pytest tests/drills -m drill -s` | **8 passed**; rollback **1.025 s**, kill switch **1.002 s**; paired restore verifies control migration **0011** |
+| `uv run --locked pytest -m smoke -s` | **3 passed**; student **3.432 s**, existing real LoRA **2.867 s**, fake lifecycle **0.203 s** |
+| `make check-without-training` | **382 passed, 14 expected skips**, with all optional training imports blocked |
+| `uv run --locked pytest tests/integration/test_distillation.py -q --tb=short` | **12 passed** |
+| `uv run --locked pytest tests/unit/test_registry.py tests/integration/test_training.py -q --tb=short` | **30 passed** |
+| `uv run --locked ruff format src tests` | Formatting applied, final check clean |
+| `uv run --locked ruff check src tests` | Passed |
+| `uv run --locked mypy src/adaptive_llm` | Passed |
+
+`git diff --check` and `git diff --exit-code -- docs/spec pyproject.toml uv.lock` also passed.
+Early development failures in new approval serialization and duplicate pytest module naming were
+fixed; no gate was disabled. Final review also bound benchmark lookup to the signed candidate and
+evaluation IDs and made student resource limits independent of the ordinary adapter backend.
+No commits were made.
+
+The pass-1 corrections admit any supported student geometry, require a strictly smaller parameter
+count when the registered teacher's size is known, and record the verified student architecture
+and parameter count. Unknown teacher size is an explicit manifest limitation. Benchmark success
+counts completed requests without errors or hard validation failures; paired quality and evaluation
+gates remain independent. New dataset approvals and model manifests use explicit version-2 MACs
+over all immutable fields, while version-1 records retain historical verification rules. The
+runbook documents the minimum of 16 accepted teacher examples for the default 0.2 fixture mix.
+
+Pass-1 correction verification on 2026-09-24: `make contracts` regenerated the schemas;
+`make check integration` passed; full `make ci` passed every gate, including the SBOM audit
+(no known vulnerabilities). The suite now collects **405** tests: **207** unit/contract passes
+and **1** expected GPU skip, **145** integration passes, **44** security/load passes and **8**
+drills. All **3** smoke paths passed: student **3.995 s**, real LoRA **3.302 s**, fake lifecycle
+**0.193 s**. Strict mypy passed on **71** source files. The dependency-absence gate passed
+**390** tests with **15** expected skips; the focused distillation/MAC regression run passed
+**24** tests. The earlier reviewer measurements above are retained.

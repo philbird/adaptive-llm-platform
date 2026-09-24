@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from collections import Counter
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
@@ -16,6 +17,7 @@ from adaptive_llm.contracts import (
     DatasetManifest,
     DatasetQualitySummary,
     DatasetSpecification,
+    DistillationLineage,
     Event,
     now,
     uid,
@@ -40,6 +42,25 @@ class RoutingExamples(Protocol):
     def build(
         self, examples: list[Example], specification: DatasetSpecification, identity: Identity
     ) -> list[BuiltExample]: ...
+
+
+@dataclass
+class DistilledExamples:
+    examples: list[BuiltExample]
+    lineage: DistillationLineage
+    soft_targets: dict[str, bytes]
+
+
+class DistillationExamples(Protocol):
+    def build(
+        self,
+        examples: list[Example],
+        specification: DatasetSpecification,
+        identity: Identity,
+        exclusions: Counter[str],
+    ) -> DistilledExamples: ...
+
+    def validate(self, specification: DatasetSpecification, identity: Identity) -> None: ...
 
 
 def code_revision() -> str:
@@ -77,6 +98,7 @@ class LocalDatasetBuilder:
         self.data_dir, self.golden_dir, self.clock = data_dir, golden_dir, clock
         self.revision = revision
         self.routing_examples: RoutingExamples | None = None
+        self.distillation_examples: DistillationExamples | None = None
         self.constructor = Constructor(
             persistence.payloads,
             persistence.cipher,
@@ -107,7 +129,7 @@ class LocalDatasetBuilder:
         with self.persistence.metadata.read_transaction():
             at = self.clock()
             selection = select(self.persistence.metadata, self.policy, specification, at)
-            if specification.purpose == "router_training":
+            if specification.purpose in {"router_training", "distillation"}:
                 return at, selection, PayloadSnapshot(blobs)
             for candidate in selection.examples:
                 tenant = candidate.interaction.tenant_id
@@ -145,8 +167,13 @@ class LocalDatasetBuilder:
         staging = destination.with_name(f".{version}.building")
         examples: list[BuiltExample] = []
         exclusions = selection.exclusions.copy()
+        distilled: DistilledExamples | None = None
         # Phase 2: no database reads or locks during decryption, construction or curation.
-        for candidate in selection.examples if specification.purpose != "router_training" else []:
+        for candidate in (
+            selection.examples
+            if specification.purpose not in {"router_training", "distillation"}
+            else []
+        ):
             if candidate.interaction.environment != identity.environment:
                 exclusions["environment_forbidden"] += 1
                 continue
@@ -168,6 +195,20 @@ class LocalDatasetBuilder:
                 specification,
                 identity,
             )
+        if specification.purpose == "distillation":
+            if self.distillation_examples is None:
+                raise GatewayError(422, "distillation_unavailable")
+            distilled = self.distillation_examples.build(
+                [
+                    e
+                    for e in selection.examples
+                    if e.interaction.environment == identity.environment
+                ],
+                specification,
+                identity,
+                exclusions,
+            )
+            examples = distilled.examples
         golden = golden_texts(self.golden_dir)
         candidates = selection.examples
         created = False
@@ -185,6 +226,7 @@ class LocalDatasetBuilder:
                     exclusions,
                     golden,
                     staging,
+                    distilled,
                 )
                 digest = hashlib.sha256(manifest.model_dump_json(indent=2).encode()).hexdigest()
                 events = [
@@ -205,6 +247,8 @@ class LocalDatasetBuilder:
                 ]
                 # Phase 3: only tombstone reads, metadata/event writes and one directory rename.
                 with self.persistence.metadata.transaction():
+                    if distilled is not None and self.distillation_examples is not None:
+                        self.distillation_examples.validate(specification, identity)
                     deleted = self._deleted(candidates)
                     if not deleted:
                         if destination.exists():
@@ -245,14 +289,19 @@ class LocalDatasetBuilder:
         exclusions: Counter[str],
         golden: list[str],
         staging: Path,
+        distilled: DistilledExamples | None = None,
     ) -> DatasetManifest:
         counts = exclusions.copy()
         accepted = (
             examples
-            if specification.purpose == "router_training"
+            if specification.purpose in {"router_training", "distillation"}
             else curate(examples, golden, specification.near_duplicate_threshold, counts)
         )
-        splits = split_examples(accepted, specification)
+        splits = (
+            {s: [e for e in accepted if e.row["split"] == s] for s in SPLITS}
+            if distilled is not None
+            else split_examples(accepted, specification)
+        )
         if len(splits["train"]) < specification.minimum_examples:
             raise GatewayError(422, "insufficient_training_examples")
         plaintext_hashes: list[str] = []
@@ -290,6 +339,46 @@ class LocalDatasetBuilder:
                     "plaintext_hash": digest,
                 }
                 (staging / f"{tenant}.{split}.jsonl.enc").write_text(json.dumps(envelope))
+        lineage = None
+        if distilled is not None:
+            from adaptive_llm.contracts import SoftTargetFile
+
+            # Publication retries after a deletion must not retain orphan tensor payloads.
+            for stale in staging.glob("*.safetensors.enc"):
+                stale.unlink()
+            soft_files = []
+            for example in splits["train"]:
+                content = distilled.soft_targets.get(example.exact_hash)
+                if content is None:
+                    continue
+                name = f"{example.exact_hash}.safetensors.enc"
+                blob = self.persistence.cipher.encrypt(
+                    content,
+                    example.tenant_id,
+                    f"{specification.dataset_id}/{version}",
+                    "dataset",
+                    at,
+                    aad_field=name,
+                )
+                (staging / name).write_bytes(blob.nonce + blob.ciphertext)
+                soft_files.append(
+                    SoftTargetFile(
+                        tenant_id=example.tenant_id,
+                        example_hash=example.exact_hash,
+                        plaintext_hash=hashlib.sha256(content).hexdigest(),
+                        key_version=blob.key_version,
+                    )
+                )
+            lineage = distilled.lineage.model_copy(
+                update={
+                    "soft_target_files": soft_files,
+                    "mix_counts": dict(
+                        Counter(str(e.row["distillation_kind"]) for e in splits["train"])
+                    ),
+                }
+            )
+            plaintext_hashes.extend(f.plaintext_hash for f in soft_files)
+            considered += sum(e.row.get("distillation_kind") != "teacher" for e in splits["train"])
         manifest = DatasetManifest(
             dataset_id=specification.dataset_id,
             version=version,
@@ -314,6 +403,7 @@ class LocalDatasetBuilder:
                 languages=dict(sorted(Counter(e.language for e in accepted).items())),
             ),
             specification=specification,
+            distillation=lineage,
         )
         encoded = manifest.model_dump_json(indent=2)
         (staging / "manifest.json").write_text(encoded)

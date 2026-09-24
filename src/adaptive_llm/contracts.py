@@ -620,9 +620,20 @@ class DatasetSpecification(Record):
     near_duplicate_threshold: float = Field(default=0.8, ge=0, le=1)
     source_dataset_id: Identifier | None = None
     source_dataset_version: Identifier | None = None
+    teacher_deployment_id: Identifier | None = None
+    teacher_minimum_score: float = Field(default=0.9, ge=0, le=1)
+    teacher_max_output_tokens: int = Field(default=256, ge=1, le=2048)
+    general_safety_fraction: float = Field(default=0.2, ge=0, le=0.8)
+    soft_targets: bool = False
 
     @model_validator(mode="after")
     def valid_specification(self) -> DatasetSpecification:
+        if self.purpose == "distillation" and (
+            self.source_dataset_id is None
+            or self.source_dataset_version is None
+            or self.teacher_deployment_id is None
+        ):
+            raise ValueError("distillation_source_and_teacher_required")
         if self.purpose == "router_training" and (
             self.source_dataset_id is None or self.source_dataset_version is None
         ):
@@ -653,6 +664,7 @@ class DatasetApproval(Record):
     reason: str | None = None
     at: AwareDatetime | None = None
     mac: str | None = None
+    approval_mac_version: Literal["1", "2"] = "1"
 
 
 class RouteControlNote(Contract):
@@ -700,6 +712,34 @@ class DatasetManifest(Record):
     quality_summary: DatasetQualitySummary
     approval: DatasetApproval = Field(default_factory=DatasetApproval)
     specification: DatasetSpecification
+    distillation: DistillationLineage | None = None
+
+
+class SoftTargetFile(Record):
+    tenant_id: Identifier
+    example_hash: Identifier
+    plaintext_hash: str
+    key_version: Identifier
+
+
+class DistillationLineage(Record):
+    source_dataset_id: Identifier
+    source_dataset_version: Identifier
+    source_content_digest: str
+    teacher_deployment_id: Identifier
+    teacher_version: Identifier
+    teacher_artifact_digest: str
+    teacher_parameter_count: int | None = Field(default=None, gt=0)
+    tokenizer_id: Identifier | None = None
+    chat_template_version: Identifier | None = None
+    generation_parameters: dict[Identifier, int | bool]
+    judge_version: Identifier
+    rubric_version: Identifier
+    minimum_score: float
+    requested_mix_fraction: float
+    mix_counts: dict[Identifier, int]
+    mix_content_digest: str
+    soft_target_files: list[SoftTargetFile] = Field(default_factory=list)
 
 
 class AdapterConfig(Record):
@@ -716,7 +756,7 @@ class AdapterConfig(Record):
 
 class TrainingJobSpecification(Record):
     job_id: Identifier = Field(default_factory=uid)
-    job_type: Literal["adapter", "router"] = "adapter"
+    job_type: Literal["adapter", "router", "distillation"] = "adapter"
     registry_id: Identifier = "synthetic-specialist"
     dataset_id: Identifier
     dataset_version: Identifier
@@ -736,6 +776,8 @@ class TrainingJobSpecification(Record):
     code_revision: str = "server"
     input_micros_per_1000_tokens: int = Field(default=1000, ge=0)
     output_micros_per_1000_tokens: int = Field(default=2000, ge=0)
+    student_training: Literal["full", "lora"] = "full"
+    soft_target_weight: float = Field(default=0.5, ge=0, le=1)
 
     @model_validator(mode="after")
     def valid_training(self) -> TrainingJobSpecification:
@@ -839,6 +881,10 @@ class ModelManifest(Record):
     artifact_mac: str
     storage_location: Reference
     lifecycle_history: list[LifecycleTransition] = Field(default_factory=list)
+    student_architecture: Identifier | None = None
+    student_parameter_count: int | None = Field(default=None, gt=0)
+    distillation: DistillationLineage | None = None
+    manifest_mac_version: Literal["1", "2"] = "1"
 
 
 class PromotionRequest(OperatorNote):
@@ -968,6 +1014,55 @@ class EvaluationReport(Record):
     gate_decisions: list[GateDecision]
     passed: bool
     known_limitations: list[str]
+    distillation: DistillationLineage | None = None
+
+
+class BenchmarkSpecification(Record):
+    benchmark_id: Identifier = Field(default_factory=uid)
+    candidate_version: Identifier
+    evaluation_id: Identifier
+    requests: int = Field(default=40, ge=4, le=1000)
+
+    @field_validator("benchmark_id")
+    @classmethod
+    def valid_id(cls, value: str) -> str:
+        identifier = UUID(value)
+        if identifier.version != 7 or str(identifier) != value:
+            raise ValueError("invalid_benchmark_id")
+        return value
+
+
+class BenchmarkMeasurement(Record):
+    requests: int
+    successes: int
+    concurrency: Literal[4] = 4
+    p50_latency_ms: float = Field(ge=0)
+    p95_latency_ms: float = Field(ge=0)
+    requests_per_second: float = Field(ge=0)
+    peak_rss_bytes: int = Field(gt=0)
+    total_cost_micros: int = Field(ge=0)
+    cost_per_success_micros: int | None
+    input_micros_per_1000_tokens: int
+    output_micros_per_1000_tokens: int
+
+
+class BenchmarkReport(Record):
+    specification: BenchmarkSpecification
+    tenant_ids: list[Identifier]
+    candidate_artifact_digest: str
+    teacher_version: Identifier
+    teacher_artifact_digest: str
+    dataset_content_digest: str
+    request_mix_digest: str
+    created_at: AwareDatetime = Field(default_factory=now)
+    student: BenchmarkMeasurement
+    teacher: BenchmarkMeasurement
+    quality_comparison: PairedComparison
+    latency_reduction_fraction: float | None
+    cost_reduction_fraction: float | None
+    passed: bool
+    known_limitations: list[str]
+    mac: str = ""
 
 
 class ShadowComparison(Record):

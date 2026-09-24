@@ -19,6 +19,8 @@ from opentelemetry.trace import Tracer
 from pydantic import BaseModel
 
 from adaptive_llm.contracts import (
+    BenchmarkReport,
+    BenchmarkSpecification,
     CanaryReport,
     CorrectionInput,
     DatasetManifest,
@@ -43,6 +45,8 @@ from adaptive_llm.contracts import (
 from adaptive_llm.datasets.artifacts import DatasetApprovals
 from adaptive_llm.datasets.builder import DatasetBuilder, LocalDatasetBuilder, code_revision
 from adaptive_llm.datasets.sources import LocalSourceResolver, SourceResolver
+from adaptive_llm.distillation.benchmark import Benchmarker, LocalBenchmarker, SQLiteBenchmarkStore
+from adaptive_llm.distillation.data import TeacherExamples
 from adaptive_llm.evaluation.data import LocalDatasetReader
 from adaptive_llm.evaluation.service import EvaluationDeployment, Evaluator, LocalEvaluator
 from adaptive_llm.evaluation.storage import EvaluationStore, SQLiteEvaluationStore
@@ -436,6 +440,8 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
         persistence.cipher,
         keyring,
         revision,
+        student_memory_limit_bytes=settings.training_memory_limit_bytes,
+        student_time_limit_seconds=settings.training_time_limit_seconds,
     )
     if settings.evaluator is not None:
         application.state.evaluations = settings.evaluator
@@ -459,6 +465,24 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
             registry=registry,
             data_dir=settings.data_dir,
         )
+
+    evaluator = application.state.evaluations
+    if isinstance(evaluator, LocalEvaluator):
+        benchmarker = LocalBenchmarker(
+            evaluator, SQLiteBenchmarkStore(evaluation_database, keyring)
+        )
+        application.state.benchmarks = benchmarker
+        if isinstance(registry, SQLiteModelRegistry):
+            registry.benchmark_gate = benchmarker.allows
+        if isinstance(application.state.datasets, LocalDatasetBuilder):
+            teacher_examples = TeacherExamples(
+                application.state.datasets,
+                evaluator,
+            )
+            application.state.datasets.distillation_examples = teacher_examples
+            application.state.training.distillation_eligibility = teacher_examples.validate_dataset
+    else:
+        application.state.benchmarks = None
 
     application.state.authenticator = authenticator
     application.state.keyring = keyring
@@ -788,6 +812,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise
             except Exception:
                 raise GatewayError(503, "rollback_failed") from None
+
+        @application.post("/v1/benchmarks/jobs", response_model=BenchmarkReport)
+        async def benchmark(
+            body: BenchmarkSpecification, identity: Annotated[Identity, Depends(authenticate)]
+        ) -> BenchmarkReport:
+            LocalDatasetBuilder._authorize(identity, [])
+            service: Benchmarker | None = application.state.benchmarks
+            if service is None:
+                raise GatewayError(503, "benchmark_unavailable")
+            try:
+                return await asyncio.to_thread(service.run, body, identity)
+            except GatewayError:
+                raise
+            except Exception:
+                raise GatewayError(503, "benchmark_failed") from None
+
+        @application.get("/v1/benchmarks/jobs/{benchmark_id}", response_model=BenchmarkReport)
+        async def get_benchmark(
+            benchmark_id: str, identity: Annotated[Identity, Depends(authenticate)]
+        ) -> BenchmarkReport:
+            service: Benchmarker | None = application.state.benchmarks
+            if service is None:
+                raise GatewayError(503, "benchmark_unavailable")
+            return await asyncio.to_thread(service.get, benchmark_id, identity)
 
         @application.post("/v1/evaluations", response_model=EvaluationReport)
         async def evaluate(

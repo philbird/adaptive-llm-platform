@@ -12,6 +12,15 @@
       "default": null,
       "title": "Actor"
     },
+    "approval_mac_version": {
+      "default": "1",
+      "enum": [
+        "1",
+        "2"
+      ],
+      "title": "Approval Mac Version",
+      "type": "string"
+    },
     "at": {
       "anyOf": [
         {

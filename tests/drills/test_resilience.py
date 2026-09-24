@@ -230,6 +230,7 @@ def test_backup_restore_round_trip(
             8,
             9,
             10,
+            11,
         ]
         assert (
             control.execute("SELECT data FROM training_jobs").fetchone()[0]
@@ -237,7 +238,7 @@ def test_backup_restore_round_trip(
         )
         assert restarted.state.dispatcher.dispatch_once() == 5
     print(
-        "backup/restore: replay=matched tenant_migrations=1-5,7 control_migrations=3,6,7,8,9,10"
+        "backup/restore: replay=matched tenant_migrations=1-5,7 control_migrations=3,6,7,8,9,10,11"
         " restored_jobs=1 restored_events=5"
         f" elapsed_s={perf_counter() - started:.3f}"
     )

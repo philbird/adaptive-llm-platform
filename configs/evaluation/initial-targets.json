@@ -17,5 +17,11 @@
     "pilot": "synthetic planning pilot deltas [-0.01, 0, 0.01]; sample SD 0.01; not a real workload estimate"
   },
   "minimum_sample_size_rule": "derive from pilot variance: n per arm such that the CI half-width at confidence_level is below quality_non_inferiority_margin / 2; record the pilot and n in the evaluation report",
-  "human_review_policy": null
+  "human_review_policy": null,
+  "distillation": {
+    "non_inferiority_margin": 0.02,
+    "minimum_samples": 4,
+    "p95_latency_reduction_min": 0.20,
+    "cost_reduction_min": 0.30
+  }
 }

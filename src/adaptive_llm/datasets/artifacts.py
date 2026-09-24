@@ -19,18 +19,28 @@ def approval_mac(manifest: DatasetManifest, keyring: Keyring) -> str:
     unsigned = manifest.model_copy(
         update={"approval": manifest.approval.model_copy(update={"mac": None})}
     )
-    # The optional source reference was added in 4b; old adapter approvals omit its null fields.
-    encoded = (
-        unsigned.model_dump_json(
-            exclude={
-                "specification": {
-                    "source_dataset_id",
-                    "source_dataset_version",
-                }
+    if unsigned.approval.approval_mac_version == "2":
+        return keyring.manifest_mac(unsigned.model_dump_json())
+    # Frozen v1 encoding for records created before explicit MAC versioning.
+    omitted = set()
+    if unsigned.specification.source_dataset_id is None:
+        omitted.update({"source_dataset_id", "source_dataset_version"})
+    if unsigned.distillation is None:
+        omitted.update(
+            {
+                "teacher_deployment_id",
+                "teacher_minimum_score",
+                "teacher_max_output_tokens",
+                "general_safety_fraction",
+                "soft_targets",
             }
         )
-        if unsigned.specification.source_dataset_id is None
-        else unsigned.model_dump_json()
+    encoded = unsigned.model_dump_json(
+        exclude={
+            "approval": {"approval_mac_version"},
+            **({"distillation": True} if unsigned.distillation is None else {}),
+            "specification": omitted,
+        }
     )
     return keyring.manifest_mac(encoded)
 
@@ -91,11 +101,55 @@ def read_shards(
                     if row["tenant_id"] != tenant or row["split"] != split:
                         raise ValueError
                     rows[split].append(line)
+        if manifest.distillation is not None:
+            hashes.extend(f.plaintext_hash for f in manifest.distillation.soft_target_files)
+            read_soft_targets(manifest, data_dir, cipher)
         if {s: len(r) for s, r in rows.items()} != manifest.examples or hashlib.sha256(
             "".join(hashes).encode()
         ).hexdigest() != manifest.content_digest:
             raise ValueError
         return rows
+    except Exception:
+        raise GatewayError(409, "invalid_dataset_artifact") from None
+
+
+def read_soft_targets(
+    manifest: DatasetManifest,
+    data_dir: Path,
+    cipher: PayloadCipher,
+) -> dict[str, bytes]:
+    """Call only after manifest authentication; tensor bytes are never represented as JSON."""
+    if manifest.distillation is None:
+        return {}
+    try:
+        result = {}
+        directory = data_dir / "datasets" / manifest.dataset_id / manifest.version
+        for file in manifest.distillation.soft_target_files:
+            if len(file.example_hash) != 64 or any(
+                c not in "0123456789abcdef" for c in file.example_hash
+            ):
+                raise ValueError
+            name = f"{file.example_hash}.safetensors.enc"
+            path = directory / name
+            if path.is_symlink():
+                raise ValueError
+            content = path.read_bytes()
+            binding = f"{manifest.dataset_id}/{manifest.version}"
+            blob = EncryptedPayload(
+                reference=uid(),
+                tenant_id=file.tenant_id,
+                interaction_id=binding,
+                field="dataset",
+                nonce=content[:12],
+                ciphertext=content[12:],
+                key_version=file.key_version,
+                expires_at=now(),
+            )
+            raw = cipher.decrypt(blob, file.tenant_id, binding, "dataset", aad_field=name)
+            if hashlib.sha256(raw).hexdigest() != file.plaintext_hash:
+                raise ValueError
+            result[file.example_hash] = raw
+        return result
     except Exception:
         raise GatewayError(409, "invalid_dataset_artifact") from None
 
@@ -120,6 +174,7 @@ class DatasetApprovals:
                 return manifest
             approval = DatasetApproval(
                 status="approved",
+                approval_mac_version="2",
                 actor=identity.subject_id_pseudonymous,
                 reason=reason,
                 at=now(),

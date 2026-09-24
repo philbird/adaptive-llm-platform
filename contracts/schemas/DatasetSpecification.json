@@ -68,6 +68,13 @@
       "title": "Eligibility Policy Version",
       "type": "string"
     },
+    "general_safety_fraction": {
+      "default": 0.2,
+      "maximum": 0.8,
+      "minimum": 0,
+      "title": "General Safety Fraction",
+      "type": "number"
+    },
     "grouping_keys": {
       "items": {
         "enum": [
@@ -114,6 +121,11 @@
       "minimum": 0,
       "title": "Seed",
       "type": "integer"
+    },
+    "soft_targets": {
+      "default": false,
+      "title": "Soft Targets",
+      "type": "boolean"
     },
     "source_dataset_id": {
       "anyOf": [
@@ -167,6 +179,35 @@
       "minItems": 1,
       "title": "Target Preference Order",
       "type": "array"
+    },
+    "teacher_deployment_id": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Teacher Deployment Id"
+    },
+    "teacher_max_output_tokens": {
+      "default": 256,
+      "maximum": 2048,
+      "minimum": 1,
+      "title": "Teacher Max Output Tokens",
+      "type": "integer"
+    },
+    "teacher_minimum_score": {
+      "default": 0.9,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Teacher Minimum Score",
+      "type": "number"
     },
     "tenant_ids": {
       "items": {
