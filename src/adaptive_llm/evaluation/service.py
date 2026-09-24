@@ -116,7 +116,7 @@ class LocalEvaluator:
         if model.state in {"candidate", "deprecated", "revoked"}:
             raise GatewayError(409, "model_not_evaluating")
         provider = SpecialistProvider(
-            model, self.data_dir / model.storage_location, self.persistence.keyring
+            model, self.data_dir / model.storage_location, self.persistence.keyring, self.data_dir
         )
         foundation = self.deployments[self.foundation_id].manifest
         return EvaluationDeployment(

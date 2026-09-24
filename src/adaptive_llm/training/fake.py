@@ -43,6 +43,7 @@ class FakeTrainer:
         directory: Path,
         checkpoint_refs: list[str],
         checkpoint: Callable[[str], None],
+        check: Callable[[], None],
     ) -> ResourceUsage:
         rows = read_shards(dataset, self.data_dir, self.cipher, self.keyring)["train"]
         if not rows:
@@ -54,6 +55,7 @@ class FakeTrainer:
             examples_digest.encode() + config + str(specification.seed).encode()
         ).digest()
         for step in (1, 2):
+            check()
             name = f"checkpoint-{step}"
             if name in checkpoint_refs and not all(
                 (directory / name / filename).is_file()
@@ -83,6 +85,7 @@ class FakeTrainer:
             if name not in checkpoint_refs:
                 self.executed_steps.append(step)
                 checkpoint(name)
+                check()
                 if self.fail_after_checkpoint == step:
                     self.fail_after_checkpoint = None
                     raise GatewayError(503, "training_interrupted")

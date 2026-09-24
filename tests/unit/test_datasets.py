@@ -225,9 +225,9 @@ def test_code_revision_unknown_when_git_unavailable(monkeypatch: pytest.MonkeyPa
     assert code_revision() == "unknown"
 
 
-def test_golden_fixture_has_twenty_synthetic_items(settings: Settings) -> None:
+def test_golden_fixture_has_twenty_two_synthetic_items(settings: Settings) -> None:
     golden = golden_texts(settings.golden_dir)
-    assert len(golden) == 20
+    assert len(golden) == 22
     assert all(text.startswith("SYNTHETIC") for text in golden)
 
 

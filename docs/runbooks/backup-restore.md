@@ -32,7 +32,8 @@ back the first too. Success prints `database_restored`; invalid/mismatched pairs
 `restore_pair_failed` and preserve existing databases. The paired CLI requires slice-3a
 migration sets and does not accept legacy single-file backups.
 
-Tenant migrations are 1–5 and 7 (old ledgers may retain 6); control migrations are 3, 6 and 7.
+Tenant migrations are 1–5 and 7 (old ledgers may retain 6); control migrations are 3, 6, 7 and 8
+(slice 3b adds durable training submitters and the queue index).
 Use the original HMAC secret and all required payload key versions. Preserve artifact
 directories at the matching point; digest/MAC checks refuse missing or changed artifacts.
 Pending events resume independently in the two streams. The in-memory consumer does not

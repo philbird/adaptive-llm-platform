@@ -17,6 +17,7 @@ async def run(args: argparse.Namespace) -> None:
         data_dir=args.data_dir,
         environment=args.environment,
         outbox_dispatch_enabled=False,
+        training_backend=args.backend,
         **({"policy_path": args.policy} if args.policy else {}),
     )
     app = create_app(settings)
@@ -31,8 +32,15 @@ async def run(args: argparse.Namespace) -> None:
         if args.command == "train":
             spec = TrainingJobSpecification.model_validate_json(args.spec.read_text())
             trainer: TrainingOrchestrator = app.state.training
-            job = await asyncio.to_thread(trainer.run, spec, identity)
+            job = await asyncio.to_thread(trainer.submit, spec, identity)
+            while job.state in {"queued", "running"}:
+                await asyncio.sleep(0.05)
+                current = await asyncio.to_thread(registry.job, spec.job_id, identity)
+                assert current is not None
+                job = current
             print(job.model_dump_json(indent=2))
+            if job.state != "succeeded":
+                raise GatewayError(503, "training_control_failed")
         elif args.command == "promote":
             model = await asyncio.to_thread(
                 registry.promote,
@@ -70,6 +78,7 @@ async def run(args: argparse.Namespace) -> None:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["train", "promote", "rollback", "models"])
+    parser.add_argument("--backend", choices=["fake", "lora"], default="fake")
     parser.add_argument("--data-dir", type=Path, default=Path(".local"))
     parser.add_argument("--environment", choices=["local"], default="local")
     parser.add_argument("--policy", type=Path)

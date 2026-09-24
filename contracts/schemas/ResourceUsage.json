@@ -49,6 +49,19 @@
       "minimum": 0,
       "title": "Steps",
       "type": "integer"
+    },
+    "wall_seconds": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Wall Seconds"
     }
   },
   "title": "ResourceUsage",

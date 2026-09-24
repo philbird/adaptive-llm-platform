@@ -223,14 +223,19 @@ def test_backup_restore_round_trip(
             )
         ] == [1, 2, 3, 4, 5, 7]
         control = restarted.state.evaluation_database.connection
-        assert [r[0] for r in control.execute("SELECT version FROM schema_migrations")] == [3, 6, 7]
+        assert [r[0] for r in control.execute("SELECT version FROM schema_migrations")] == [
+            3,
+            6,
+            7,
+            8,
+        ]
         assert (
             control.execute("SELECT data FROM training_jobs").fetchone()[0]
             == control_job.model_dump_json()
         )
         assert restarted.state.dispatcher.dispatch_once() == 5
     print(
-        "backup/restore: replay=matched tenant_migrations=1-5,7 control_migrations=3,6,7"
+        "backup/restore: replay=matched tenant_migrations=1-5,7 control_migrations=3,6,7,8"
         " restored_jobs=1 restored_events=5"
         f" elapsed_s={perf_counter() - started:.3f}"
     )
