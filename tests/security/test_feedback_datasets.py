@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from fastapi.testclient import TestClient
+from postgres_support import stored_bytes
 
 from adaptive_llm.app import Settings, create_app
 from adaptive_llm.contracts import Feedback, Interaction, now
@@ -78,7 +79,7 @@ def test_feedback_isolation_encrypted_redacted_refs_and_tombstones(
     assert events[-1].event_type == "feedback.recorded.v1"
     assert events[-1].data == feedback
     assert "actor@example.test" not in events[-1].model_dump_json()
-    assert text.encode() not in seed.app.state.database.path.read_bytes()
+    assert text.encode() not in stored_bytes(seed.app.state.database)
     assert seed.client.delete(f"/v1/privacy/interactions/{iid}", headers=USER).status_code == 204
     assert seed.client.post(url, headers=USER, json=body).status_code == 409
     assert seed.app.state.payloads.get("synthetic-a", ref, now()) is None

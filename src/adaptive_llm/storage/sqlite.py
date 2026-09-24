@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
-from typing import cast
+from typing import Any, cast
 
 from adaptive_llm.contracts import (
     DatasetManifest,
@@ -28,6 +28,7 @@ from adaptive_llm.storage import (
     StorageError,
     StoredRecord,
 )
+from adaptive_llm.storage.database import Database
 from adaptive_llm.storage.migrations import CONTROL_MIGRATIONS, MIGRATIONS, migrate
 
 TABLES: dict[type[StoredRecord], tuple[str, str]] = {
@@ -123,7 +124,7 @@ def control_database(
 
 
 class SQLiteMetadataStore:
-    def __init__(self, database: SQLiteDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self.database = database
 
     @contextmanager
@@ -184,12 +185,15 @@ class SQLiteMetadataStore:
 
     def add_shadow_cost(self, tenant_id: str, interaction_id: str, cost_micros: int) -> None:
         self.database.writable(tenant_id, interaction_id)
-        self.database.connection.execute(
-            "UPDATE interactions SET data=json_set(data, '$.shadow_cost_micros', "
-            "COALESCE(json_extract(data, '$.shadow_cost_micros'), 0)+?) "
-            "WHERE tenant_id=? AND record_id=?",
-            (cost_micros, tenant_id, interaction_id),
-        )
+        record = self.get(tenant_id, Interaction, interaction_id)
+        if record is not None:
+            updated = record.model_copy(
+                update={"shadow_cost_micros": record.shadow_cost_micros + cost_micros}
+            )
+            self.database.connection.execute(
+                "UPDATE interactions SET data=? WHERE tenant_id=? AND record_id=?",
+                (updated.model_dump_json(), tenant_id, interaction_id),
+            )
 
     def for_subject(self, tenant_id: str, pseudonym: str) -> list[Interaction]:
         with self.database.lock:
@@ -295,10 +299,10 @@ class SQLiteMetadataStore:
         # The tenant index supplies reservation order without loading replay rows into Python.
         # Delete entries first (their FK references payloads), then just their replay blobs.
         evicted = self.database.connection.execute(
-            "DELETE FROM replay_entries WHERE tenant_id = ? AND rowid IN ("
-            "SELECT rowid FROM replay_entries WHERE tenant_id = ? "
-            "ORDER BY reserved_at, application_id, request_id LIMIT "
-            "MAX(0, (SELECT count(*) FROM replay_entries WHERE tenant_id = ?) - ?)) "
+            "DELETE FROM replay_entries WHERE tenant_id = ? AND (application_id, request_id) IN ("
+            "SELECT application_id, request_id FROM replay_entries WHERE tenant_id = ? "
+            "ORDER BY reserved_at DESC, application_id DESC, request_id DESC LIMIT "
+            "(SELECT count(*) FROM replay_entries WHERE tenant_id = ?) OFFSET ?) "
             "RETURNING response_ref",
             (replay.tenant_id, replay.tenant_id, replay.tenant_id, capacity),
         ).fetchall()
@@ -309,7 +313,7 @@ class SQLiteMetadataStore:
             )
 
     @staticmethod
-    def _replay(row: sqlite3.Row) -> ReplayRecord:
+    def _replay(row: Any) -> ReplayRecord:
         return ReplayRecord(
             tenant_id=row["tenant_id"],
             application_id=row["application_id"],
@@ -413,7 +417,7 @@ class SQLiteMetadataStore:
 
 
 class SQLitePayloadStore:
-    def __init__(self, database: SQLiteDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self.database = database
 
     def put(self, payload: EncryptedPayload) -> None:

@@ -9,7 +9,8 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from adaptive_llm.contracts import Environment, Identifier
+from adaptive_llm.contracts import Environment, Identifier, SignedRecord
+from adaptive_llm.signing import Signer, Verifier, sign_record, signed, verify_record
 
 
 class GatewayError(Exception):
@@ -24,7 +25,16 @@ class GatewayError(Exception):
 class Keyring:
     """Derive separate HMAC keys once; never use the master secret to hash caller content."""
 
-    def __init__(self, secret: bytes) -> None:
+    def __init__(
+        self,
+        secret: bytes,
+        *,
+        signer: Signer | None = None,
+        verifier: Verifier | None = None,
+        legacy_mac_records: bool = False,
+    ) -> None:
+        self.signer, self.verifier = signer, verifier
+        self.legacy_mac_records = legacy_mac_records
         self._keys = {
             purpose: hmac.new(secret, purpose.encode("utf-8"), hashlib.sha256).digest()
             for purpose in (
@@ -39,6 +49,35 @@ class Keyring:
                 "model-artifact-v1",
             )
         }
+
+    def require_signer(self) -> None:
+        if self.verifier is not None and self.signer is None:
+            raise GatewayError(503, "signing_key_required")
+
+    @property
+    def accepts_legacy_mac(self) -> bool:
+        return self.verifier is None or self.legacy_mac_records
+
+    def checkpoint_seal(self, payload: str) -> dict[str, str]:
+        self.require_signer()
+        if self.signer is None:
+            return {"mac": self.artifact_mac(payload)}
+        record = sign_record(SignedRecord(), self.signer, "training-checkpoint", payload)
+        return {
+            "signature": record.signature or "",
+            "signature_key_id": record.signature_key_id or "",
+            "signature_version": record.signature_version or "",
+            "mac": "",
+        }
+
+    def verify_checkpoint(self, seal: dict[str, str], payload: str) -> None:
+        record = SignedRecord.model_validate(seal)
+        if signed(record):
+            verify_record(record, self.verifier, "training-checkpoint", payload)
+        elif not self.accepts_legacy_mac or not hmac.compare_digest(
+            seal.get("mac", ""), self.artifact_mac(payload)
+        ):
+            raise ValueError("checkpoint_integrity_failed")
 
     def _hash(self, purpose: str, value: str) -> str:
         return hmac.new(self._keys[purpose], value.encode("utf-8"), hashlib.sha256).hexdigest()

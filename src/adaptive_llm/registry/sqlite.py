@@ -1,7 +1,9 @@
 """Control-plane registry: state, deployment pointers and events commit together."""
 
+import fcntl
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
 
@@ -23,15 +25,15 @@ from adaptive_llm.evaluation.gate import decisions
 from adaptive_llm.evaluation.storage import EvaluationStore
 from adaptive_llm.events.outbox import OutboxStore
 from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
-from adaptive_llm.registry.artifacts import verify_artifact
+from adaptive_llm.registry.artifacts import verify_artifact, verify_model_metadata
 from adaptive_llm.registry.state import validate_transition
-from adaptive_llm.storage.sqlite import SQLiteDatabase
+from adaptive_llm.storage.database import Database
 
 
 class SQLiteModelRegistry:
     def __init__(
         self,
-        database: SQLiteDatabase,
+        database: Database,
         outbox: OutboxStore,
         keyring: Keyring,
         evaluations: EvaluationStore,
@@ -58,6 +60,7 @@ class SQLiteModelRegistry:
         manifest = ModelManifest.model_validate_json(row[0])
         if not set(manifest.tenant_ids) <= identity.dataset_tenants:
             raise GatewayError(404, "model_not_found")
+        verify_model_metadata(manifest, self.keyring)
         return manifest
 
     def models(self, identity: Identity) -> list[ModelManifest]:
@@ -155,6 +158,20 @@ class SQLiteModelRegistry:
                 (job.specification.job_id, json.dumps(trusted)),
             )
             return job
+
+    @contextmanager
+    def worker_claim(
+        self, architectures: tuple[str, ...]
+    ) -> Iterator[list[tuple[TrainingJob, Identity]]]:
+        lock_dir = self.data_dir / "control" / "training-locks"
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        with (lock_dir / "worker.lock").open("a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                yield []
+                return
+            yield self.pending_jobs()
 
     def pending_jobs(self) -> list[tuple[TrainingJob, Identity]]:
         with self.database.lock:

@@ -26,7 +26,8 @@ from adaptive_llm.evaluation.service import EvaluationDeployment, LocalEvaluator
 from adaptive_llm.evaluation.stats import paired_bootstrap, percentile
 from adaptive_llm.evaluation.suites.scoring import citations, token_f1
 from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
-from adaptive_llm.storage.sqlite import SQLiteDatabase
+from adaptive_llm.signing import FIELDS, sign_record, signed, verify_record
+from adaptive_llm.storage.database import Database
 from adaptive_llm.training.lora import rss_bytes
 
 
@@ -73,7 +74,7 @@ class BenchmarkStore(Protocol):
 
 
 class SQLiteBenchmarkStore:
-    def __init__(self, database: SQLiteDatabase, keyring: Keyring) -> None:
+    def __init__(self, database: Database, keyring: Keyring) -> None:
         self.database, self.keyring = database, keyring
 
     def _mac(self, report: BenchmarkReport) -> str:
@@ -90,7 +91,16 @@ class SQLiteBenchmarkStore:
             return None
         try:
             report = BenchmarkReport.model_validate_json(row[0])
-            if report.specification.benchmark_id != benchmark_id or not hmac.compare_digest(
+            if report.specification.benchmark_id != benchmark_id:
+                raise ValueError
+            if signed(report):
+                verify_record(
+                    report,
+                    self.keyring.verifier,
+                    "benchmark-report",
+                    report.model_dump_json(exclude=FIELDS | {"mac"}),
+                )
+            elif not self.keyring.accepts_legacy_mac or not hmac.compare_digest(
                 report.mac, self._mac(report)
             ):
                 raise ValueError
@@ -102,7 +112,16 @@ class SQLiteBenchmarkStore:
 
     def publish(self, report: BenchmarkReport, identity: Identity) -> BenchmarkReport:
         LocalDatasetBuilder._authorize(identity, report.tenant_ids)
-        signed = report.model_copy(update={"mac": self._mac(report)})
+        self.keyring.require_signer()
+        if self.keyring.signer is not None:
+            signed = sign_record(
+                report,
+                self.keyring.signer,
+                "benchmark-report",
+                report.model_dump_json(exclude=FIELDS | {"mac"}),
+            )
+        else:
+            signed = report.model_copy(update={"mac": self._mac(report)})
         with self.database.transaction():
             if self.database.connection.execute(
                 "SELECT 1 FROM benchmark_reports WHERE benchmark_id=?",

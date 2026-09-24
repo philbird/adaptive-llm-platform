@@ -11,7 +11,9 @@ from adaptive_llm.contracts import EvaluationCompleted, EvaluationReport, Event,
 from adaptive_llm.datasets.builder import LocalDatasetBuilder
 from adaptive_llm.events.outbox import OutboxStore
 from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
-from adaptive_llm.storage.sqlite import SQLiteDatabase, timestamp
+from adaptive_llm.signing import FIELDS, sign_record, signed, verify_record
+from adaptive_llm.storage.database import Database
+from adaptive_llm.storage.sqlite import timestamp
 
 
 class EvaluationStore(Protocol):
@@ -36,7 +38,7 @@ class EvaluationStore(Protocol):
 class SQLiteEvaluationStore:
     def __init__(
         self,
-        database: SQLiteDatabase,
+        database: Database,
         outbox: OutboxStore,
         keyring: Keyring,
         data_dir: Path,
@@ -59,16 +61,27 @@ class SQLiteEvaluationStore:
             report = EvaluationReport.model_validate_json(row["report"])
             directory = self.data_dir / "evaluations" / report.specification.evaluation_id
             encoded = (directory / "report.json").read_text()
+            if signed(report):
+                verify_record(
+                    report,
+                    self.keyring.verifier,
+                    "evaluation-report",
+                    report.model_dump_json(exclude=FIELDS),
+                )
+                if encoded != row["report"]:
+                    raise ValueError
+                return report
             mac = self.keyring.report_mac(encoded)
             if (
-                encoded != row["report"]
+                not self.keyring.accepts_legacy_mac
+                or encoded != row["report"]
                 or not hmac.compare_digest(mac, row["report_mac"])
                 or not hmac.compare_digest(mac, (directory / "report.mac").read_text())
             ):
                 raise ValueError
             return report
         except Exception:
-            raise GatewayError(503, "evaluation_integrity_failed") from None
+            raise GatewayError(503, "report_integrity_failed") from None
 
     def baseline(
         self, deployment_id: str, dataset_version: str, identity: Identity
@@ -95,8 +108,16 @@ class SQLiteEvaluationStore:
         spec = report.specification
         destination = self.data_dir / "evaluations" / spec.evaluation_id
         staging = destination.with_name(f".{spec.evaluation_id}.{uid()}.building")
+        self.keyring.require_signer()
+        if self.keyring.signer is not None:
+            report = sign_record(
+                report,
+                self.keyring.signer,
+                "evaluation-report",
+                report.model_dump_json(exclude=FIELDS),
+            )
         encoded = report.model_dump_json(indent=2)
-        mac = self.keyring.report_mac(encoded)
+        mac = "" if report.signature else self.keyring.report_mac(encoded)
         created = published = False
         try:
             staging.mkdir(parents=True, mode=0o700)

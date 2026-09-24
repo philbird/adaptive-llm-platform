@@ -31,7 +31,7 @@ from adaptive_llm.evaluation.stats import paired_bootstrap
 from adaptive_llm.events.outbox import OutboxStore
 from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
 from adaptive_llm.registry import ModelRegistry
-from adaptive_llm.storage.sqlite import SQLiteDatabase
+from adaptive_llm.storage.database import Database
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ class RoutePolicyStore(Protocol):
 class SQLiteRoutePolicies:
     def __init__(
         self,
-        database: SQLiteDatabase,
+        database: Database,
         outbox: OutboxStore,
         registry: ModelRegistry,
         environment: Environment,
@@ -305,11 +305,17 @@ class SQLiteRoutePolicies:
                 (comparison.interaction_id, comparison.model_dump_json()),
             ).rowcount
             if inserted:
-                self.database.connection.execute(
-                    "UPDATE live_observations SET data=json_set(data, '$.shadow_cost_micros', ?) "
-                    "WHERE interaction_id=?",
-                    (comparison.specialist_cost_micros or 0, comparison.interaction_id),
-                )
+                row = self.database.connection.execute(
+                    "SELECT data FROM live_observations WHERE interaction_id=?",
+                    (comparison.interaction_id,),
+                ).fetchone()
+                if row:
+                    data = json.loads(row[0])
+                    data["shadow_cost_micros"] = comparison.specialist_cost_micros or 0
+                    self.database.connection.execute(
+                        "UPDATE live_observations SET data=? WHERE interaction_id=?",
+                        (json.dumps(data), comparison.interaction_id),
+                    )
 
     def report(self, policy_id: str, since: datetime, identity: Identity) -> ShadowReport:
         policy = self.get(policy_id, identity)

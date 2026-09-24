@@ -44,6 +44,7 @@ from adaptive_llm.research.models import (
 from adaptive_llm.research.store import LocalStudyStore, StudyStore, authorize, markdown
 from adaptive_llm.research.tensors import geometry, instrument, prune
 from adaptive_llm.routing import Deployment, PriceList
+from adaptive_llm.signing import sign_record
 from adaptive_llm.training.lora import (
     BaseFiles,
     LoraGenerator,
@@ -550,9 +551,16 @@ class ResearchService:
                         baseline_evaluation_id=summary.specification.baseline_evaluation_id,
                     ),
                 )
-                model = model.model_copy(
-                    update={"artifact_mac": self.keyring.artifact_mac(signed_metadata(model))}
-                )
+                self.keyring.require_signer()
+                if self.keyring.signer is not None:
+                    model = model.model_copy(update={"artifact_mac": ""})
+                    model = sign_record(
+                        model, self.keyring.signer, "model-manifest", signed_metadata(model)
+                    )
+                else:
+                    model = model.model_copy(
+                        update={"artifact_mac": self.keyring.artifact_mac(signed_metadata(model))}
+                    )
                 verify_artifact(model, working, self.keyring)
                 working.rename(destination)
                 try:

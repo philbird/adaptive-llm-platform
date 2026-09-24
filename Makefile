@@ -87,3 +87,7 @@ sbom:
 	mkdir -p reports
 	uv export --locked --no-dev --no-emit-project --format requirements-txt --output-file reports/sbom-requirements.txt
 	uv run --locked pip-audit --requirement reports/sbom-requirements.txt --no-deps --disable-pip --format cyclonedx-json --output sbom.json
+
+.PHONY: sign-rotate
+sign-rotate:
+	uv run --locked python -m adaptive_llm.signing --private-key "$(SIGNING_KEY_PATH)" --public-keys "$(SIGNING_PUBLIC_KEYS)" --key-id "$(SIGNING_KEY_ID)"

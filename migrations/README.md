@@ -1,4 +1,4 @@
-# SQLite migrations
+# SQLite and PostgreSQL migrations
 
 `0001_persistence.sql` creates tenant-scoped interactions, started records, retrieval runs,
 route decisions, generation attempts, feedback, deletion tombstones, replay entries and opaque
@@ -50,3 +50,12 @@ events. The runner receives a directory; it contains no special-case control tab
 Startup moves the old `evaluations/control/` directory when the new one is absent; ambiguous
 paths fail closed. Backups and restore validate both migration streams; see the
 [paired backup runbook](../docs/runbooks/backup-restore.md).
+
+
+P1 adds `postgres/` and `postgres/control/` dialect overrides. The PostgreSQL runner merges
+these by version with the corresponding root/control stream, reusing all compatible SQL.
+It uses one transaction and a schema-scoped advisory lock for the full pending batch, and
+records the same version/UTC timestamp ledger. BYTEA replaces BLOB, outbox sequences use
+BIGSERIAL, and PostgreSQL JSON expressions replace SQLite JSON functions/indexes. Tenant and
+control schemas share one PostgreSQL database for atomic paired snapshots and restore.
+See [ADR 0006](../docs/adr/0006-storage-backends.md) for transaction and deployment boundaries.

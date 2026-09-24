@@ -6,7 +6,6 @@ This is an admission estimate, not an OS memory cap. Peak RSS is process-wide.
 """
 
 import hashlib
-import hmac
 import importlib
 import json
 import math
@@ -452,7 +451,7 @@ class LoraTrainer:
             }
             hashes = {k: hashlib.sha256(v).hexdigest() for k, v in files.items()}
             files["checkpoint.json"] = encoded(
-                {"files": hashes, "mac": self.keyring.artifact_mac(encoded(hashes).decode())}
+                {"files": hashes, **self.keyring.checkpoint_seal(encoded(hashes).decode())}
             )
             temp = directory / f".checkpoint-{step}"
             if temp.exists():
@@ -574,10 +573,9 @@ class LoraTrainer:
             hashes = {
                 k: hashlib.sha256(v).hexdigest() for k, v in files.items() if k != "checkpoint.json"
             }
-            if seal["files"] != hashes or not hmac.compare_digest(
-                seal["mac"], self.keyring.artifact_mac(encoded(hashes).decode())
-            ):
+            if seal["files"] != hashes:
                 raise ValueError
+            self.keyring.verify_checkpoint(seal, encoded(hashes).decode())
             report: dict[str, Any] = json.loads(files["training_report.json"])
             if report["binding"] != binding or len(report["loss_curve"]) != report["steps"]:
                 raise ValueError

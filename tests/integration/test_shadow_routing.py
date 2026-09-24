@@ -517,9 +517,11 @@ def test_injected_live_chain_records_both_attempts_and_replays_only_foundation(
         attempts = [
             GenerationAttempt.model_validate_json(r[0])
             for r in app.state.database.connection.execute(
-                "SELECT data FROM attempts ORDER BY rowid"
+                "SELECT data FROM attempts ORDER BY record_id"
             )
         ]
+        # UUIDv7 ordering is random within one millisecond; sequence is explicit in the record.
+        attempts.sort(key=lambda attempt: attempt.attempt_number)
         assert [a.attempt_number for a in attempts] == [1, 2]
         assert attempts[0].error_code == "validation_failed"
         assert attempts[0].output_ref is None
@@ -636,8 +638,12 @@ def test_foundation_breaker_excludes_candidate_and_control_outage_preserves_serv
             json=inference_request.model_copy(update={"request_id": uid()}).model_dump(mode="json"),
         )
         assert second.status_code == 503
+        first_interaction = app.state.metadata.get(
+            "synthetic-a", Interaction, first["interaction_id"]
+        )
         last = app.state.database.connection.execute(
-            "SELECT data FROM route_decisions ORDER BY rowid DESC LIMIT 1"
+            "SELECT data FROM route_decisions WHERE record_id != ? ORDER BY record_id DESC LIMIT 1",
+            (first_interaction.route_decision_id,),
         ).fetchone()[0]
         route = RouteDecision.model_validate_json(last)
         assert route.selected_model_deployment_id is None

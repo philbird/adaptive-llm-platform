@@ -81,3 +81,78 @@ def test_research_request_bounds():
     ):
         with pytest.raises(ValidationError):
             ActivationSpecification(**args, **update)
+
+
+def test_study_signatures_public_verification_and_legacy_policy(tmp_path):
+    from adaptive_llm.contracts import DatasetLineage, SignedRecord
+    from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
+    from adaptive_llm.research.models import ActivationSpecification, StudySummary
+    from adaptive_llm.research.store import LocalStudyStore
+    from adaptive_llm.signing import FIELDS, local_keys, sign_record
+    from adaptive_llm.storage.crypto import PayloadCipher
+    from adaptive_llm.training.lora import encoded
+
+    signer, verifier = local_keys(tmp_path / "signing")
+    keyring = Keyring(b"synthetic-secret", signer=signer, verifier=verifier)
+    store = LocalStudyStore(tmp_path, PayloadCipher({"synthetic": b"x" * 32}, "synthetic"), keyring)
+    actor = Identity(
+        "synthetic",
+        frozenset(),
+        "local",
+        "synthetic-operator",
+        "operator",
+        frozenset({"synthetic"}),
+        frozenset({"research"}),
+    )
+    lineage = DatasetLineage(
+        dataset_id="synthetic", version="synthetic-v1", content_digest="synthetic"
+    )
+    summary = StudySummary(
+        specification=ActivationSpecification(
+            calibration_dataset_id=lineage.dataset_id,
+            calibration_dataset_version=lineage.version,
+            evaluation_dataset_id=lineage.dataset_id,
+            evaluation_dataset_version=lineage.version,
+            baseline_evaluation_id="synthetic-report",
+        ),
+        tenant_ids=["synthetic"],
+        base_digest="synthetic",
+        adapter_digest=None,
+        calibration_dataset=lineage,
+        evaluation_dataset=lineage,
+        sample_size=1,
+        wall_seconds=0,
+        shapes={},
+        rankings={},
+        parameter_count_before=1,
+    )
+    store.save(summary, b"SYNTHETIC AGGREGATES", actor)
+    path = store.path(summary.specification.study_id) / "summary.json"
+    envelope = json.loads(path.read_text())
+    assert envelope["signature_version"] == "ed25519-v1" and "mac" not in envelope
+    keyring.signer = None
+    (tmp_path / "signing/private.pem").unlink()
+    assert store.get(summary.specification.study_id, actor) == (summary, b"SYNTHETIC AGGREGATES")
+    unsigned = {k: v for k, v in envelope.items() if k not in FIELDS}
+    legacy = {**unsigned, "mac": store._mac(unsigned)}
+    path.write_text(json.dumps(legacy))
+    with pytest.raises(GatewayError, match="study_integrity_failed"):
+        store.get(summary.specification.study_id, actor)
+    keyring.legacy_mac_records = True
+    assert store.get(summary.specification.study_id, actor)[0] == summary
+    for change in (
+        {"signature": ""},
+        {"signature_key_id": signer.key_id},
+        {"signature": "invalid"},
+    ):
+        path.write_text(json.dumps({**legacy, **change}))
+        with pytest.raises(GatewayError, match="study_integrity_failed"):
+            store.get(summary.specification.study_id, actor)
+    wrong_purpose = sign_record(
+        SignedRecord(), signer, "training-checkpoint", encoded(unsigned).decode()
+    )
+    path.write_text(json.dumps({**unsigned, **wrong_purpose.model_dump(include=FIELDS)}))
+    with pytest.raises(GatewayError, match="study_integrity_failed"):
+        store.get(summary.specification.study_id, actor)
+    with pytest.raises(GatewayError, match="signing_key_required"):
+        store.save(summary, b"SYNTHETIC AGGREGATES", actor)

@@ -20,6 +20,7 @@ from adaptive_llm.contracts import (
     ModelManifest,
     PruningPlan,
     ResponseFormat,
+    SignedRecord,
     TrainingJob,
     uid,
 )
@@ -31,12 +32,19 @@ from adaptive_llm.research.models import (
     BaseSpecification,
     PruneSpecification,
 )
-from adaptive_llm.training.lora import LoraTrainer, generate_tiny_base, libraries
+from adaptive_llm.signing import FIELDS, sign_record
+from adaptive_llm.training.lora import LoraTrainer, encoded, generate_tiny_base, libraries
 
 pytestmark = [
     pytest.mark.accelerator_free,
     pytest.mark.parametrize("evaluation_seed", ["no_context"], indirect=True),
 ]
+
+
+def resign_study(envelope, signer):
+    envelope = {k: v for k, v in envelope.items() if k not in FIELDS | {"mac"}}
+    seal = sign_record(SignedRecord(), signer, "research-study", encoded(envelope).decode())
+    return {**envelope, **seal.model_dump(include=FIELDS)}
 
 
 @pytest.fixture
@@ -180,8 +188,7 @@ def test_study_aggregates_encryption_authentication_isolation_and_rankings(resea
     signed = json.loads(original)
     for name in ("nonce", "key_version", "digest"):
         envelope[name] = signed[name]
-    envelope.pop("mac")
-    envelope["mac"] = seed.app.state.research.store._mac(envelope)
+    envelope = resign_study(envelope, seed.app.state.keyring.signer)
     (other_path / "summary.json").write_text(json.dumps(envelope))
     (other_path / "aggregates.safetensors.enc").write_bytes(
         (path / "aggregates.safetensors.enc").read_bytes()
@@ -456,8 +463,10 @@ def test_post_work_and_summary_checks_authenticate_metadata_without_decrypting_s
         service.preconditions(spec, actor, verify_shards=False)
     with seed.app.state.metadata.database.transaction():
         seed.app.state.metadata.approve_manifest(manifest)
-    path = seed.directory / "datasets" / manifest.dataset_id / manifest.version / "manifest.mac"
-    path.write_text("synthetic-tamper")
+    path = seed.directory / "datasets" / manifest.dataset_id / manifest.version / "manifest.json"
+    data = json.loads(path.read_text())
+    data["signature"] = "synthetic-tamper"
+    path.write_text(json.dumps(data))
     assert (
         seed.client.get(url, headers=RESEARCH).json()["error"]["code"] == "invalid_dataset_artifact"
     )
@@ -472,8 +481,7 @@ def test_old_layer_statistics_require_a_new_study(research):
     path = store.path(spec.study_id) / "summary.json"
     envelope = json.loads(path.read_bytes())
     envelope["summary"]["hook_version"] = "aggregate-taylor-v1"
-    envelope.pop("mac")
-    envelope["mac"] = store._mac(envelope)
+    envelope = resign_study(envelope, store.keyring.signer)
     path.write_text(json.dumps(envelope))
     assert (
         seed.client.get(f"/v1/research/studies/{spec.study_id}", headers=RESEARCH).status_code

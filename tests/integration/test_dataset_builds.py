@@ -72,7 +72,7 @@ def test_factory_reproducible_targets_provenance_encryption_and_events(
     second = build(seed)
     assert first.version != second.version
     # Immutable version and build-clock watermark necessarily change on rebuild.
-    dynamic = {"version", "created_at", "deletions_applied_through"}
+    dynamic = {"signature", "version", "created_at", "deletions_applied_through"}
     assert first.model_dump(exclude=dynamic) == second.model_dump(exclude=dynamic)
     assert second.deletions_applied_through >= first.deletions_applied_through
     rows = read_rows(seed, first)
@@ -103,14 +103,18 @@ def test_factory_reproducible_targets_provenance_encryption_and_events(
             assert row["sources"][0]["index_version"] == "synthetic-index-1"
     base = seed.directory / "datasets" / first.dataset_id
     encoded = (base / first.version / "manifest.json").read_text()
-    assert (
-        base / first.version / "manifest.mac"
-    ).read_text() == seed.app.state.keyring.manifest_mac(encoded)
-    assert not (base / first.version / "manifest.sig").exists()
-    assert (
-        "signing key the builder does not hold"
-        in (base / first.version / "data-card.md").read_text()
+    from adaptive_llm.signing import FIELDS, verify_record
+
+    verify_record(
+        first,
+        seed.app.state.keyring.verifier,
+        "dataset-manifest",
+        first.model_dump_json(exclude=FIELDS | {"approval"}),
     )
+    assert json.loads(encoded)["signature_version"] == "ed25519-v1"
+    assert (base / first.version / "manifest.mac").read_text() == ""
+    assert "Ed25519" in (base / first.version / "data-card.md").read_text()
+
     assert "SYNTHETIC ANSWER" not in "".join(p.read_text() for p in base.rglob("*") if p.is_file())
     assert seed.client.get(
         f"/v1/datasets/{first.dataset_id}/versions/{first.version}", headers=OPERATOR

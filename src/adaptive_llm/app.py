@@ -9,14 +9,16 @@ from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
+from ipaddress import ip_address
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from opentelemetry.trace import Tracer
+from prometheus_client import CollectorRegistry, start_http_server
 from pydantic import BaseModel
 
 from adaptive_llm.contracts import (
@@ -64,6 +66,7 @@ from adaptive_llm.gateway.identity import (
 )
 from adaptive_llm.gateway.service import InferenceService
 from adaptive_llm.metrics import InProcessMetrics, Metrics, RequestMetrics
+from adaptive_llm.metrics.export import otlp_provider
 from adaptive_llm.policy import LocalPolicyEngine, PolicyEngine, ProcessingRedactor
 from adaptive_llm.policy.persistence import LocalPersistenceRedactor, PersistenceRedactor
 from adaptive_llm.providers import FakeProvider, Provider
@@ -82,10 +85,24 @@ from adaptive_llm.routing.shadow import (
     SpecialistLoader,
 )
 from adaptive_llm.routing.train import CounterfactualRows
+from adaptive_llm.signing import Ed25519Signer, Ed25519Verifier, Signer, Verifier, local_keys
 from adaptive_llm.storage import MetadataStore, PayloadStore, StorageError
 from adaptive_llm.storage.crypto import PayloadCipher, load_keyring
+from adaptive_llm.storage.database import Database
 from adaptive_llm.storage.outbox import SQLiteOutboxStore
 from adaptive_llm.storage.persistence import Persistence
+from adaptive_llm.storage.postgres import (
+    PostgresDatabase,
+    PostgresMetadataStore,
+    PostgresPayloadStore,
+)
+from adaptive_llm.storage.postgres_stores import (
+    PostgresBenchmarkStore,
+    PostgresEvaluationStore,
+    PostgresModelRegistry,
+    PostgresOutboxStore,
+    PostgresRoutePolicies,
+)
 from adaptive_llm.storage.sqlite import (
     SQLiteDatabase,
     SQLiteMetadataStore,
@@ -106,6 +123,35 @@ def _default_data_dir() -> Path:
 
 @dataclass(frozen=True)
 class Settings:
+    storage_backend: Literal["sqlite", "postgres"] = field(
+        default_factory=lambda: cast(
+            Literal["sqlite", "postgres"], os.environ.get("STORAGE_BACKEND", "sqlite")
+        )
+    )
+    database_url: str | None = field(
+        default_factory=lambda: os.environ.get("DATABASE_URL"), repr=False
+    )
+    signing_key_path: Path | None = field(
+        default_factory=lambda: (
+            Path(os.environ["SIGNING_KEY_PATH"]) if os.environ.get("SIGNING_KEY_PATH") else None
+        ),
+        repr=False,
+    )
+    signing_key_id: str = field(default_factory=lambda: os.environ.get("SIGNING_KEY_ID", "local-1"))
+    signing_public_keys_path: Path | None = field(
+        default_factory=lambda: (
+            Path(os.environ["SIGNING_PUBLIC_KEYS"])
+            if os.environ.get("SIGNING_PUBLIC_KEYS")
+            else None
+        )
+    )
+    signer: Signer | None = field(default=None, repr=False)
+    verifier: Verifier | None = None
+    # Resolve the omitted value against the environment in __post_init__.
+    legacy_mac_records: bool = field(default=cast(bool, None))
+    otlp_endpoint: str | None = field(default_factory=lambda: os.environ.get("OTLP_ENDPOINT"))
+    metrics_bind: str = "127.0.0.1"
+    metrics_port: int = 9464
     inference_enabled: bool = True
     pruning_research_enabled: bool = False
     research_licences_path: Path = ROOT / "configs/research/licences.json"
@@ -165,6 +211,41 @@ class Settings:
     tracer: Tracer | None = None
 
     def __post_init__(self) -> None:
+        if self.storage_backend not in {"sqlite", "postgres"} or (
+            self.storage_backend == "postgres" and not self.database_url
+        ):
+            raise ValueError("invalid_storage_configuration")
+        ip_address(self.metrics_bind)
+        if not 0 <= self.metrics_port <= 65535:
+            raise ValueError("invalid_metrics_port")
+        if self.legacy_mac_records is None:
+            legacy = os.environ.get("LEGACY_MAC_RECORDS")
+            if legacy is not None and legacy.lower() not in {"true", "false", "1", "0"}:
+                raise ValueError("invalid_legacy_mac_records")
+            object.__setattr__(
+                self,
+                "legacy_mac_records",
+                self.environment == "local" if legacy is None else legacy.lower() in {"true", "1"},
+            )
+        if self.signing_key_path is not None:
+            signer = Ed25519Signer(self.signing_key_path, self.signing_key_id)
+            object.__setattr__(self, "signer", signer)
+            object.__setattr__(self, "verifier", signer.verifier())
+        if self.signing_public_keys_path is not None:
+            object.__setattr__(
+                self, "verifier", Ed25519Verifier.load(self.signing_public_keys_path)
+            )
+        if self.signer is not None and self.signing_public_keys_path is not None:
+            ring = json.loads(self.signing_public_keys_path.read_text())
+            if ring["active_key_id"] != self.signer.key_id:
+                raise ValueError("inactive_signing_key")
+            assert self.verifier is not None
+            self.verifier.verify(
+                b"signing-key-check",
+                self.signer.sign(b"signing-key-check"),
+                self.signer.key_id,
+                "ed25519-v1",
+            )
         if self.payload_keyring_path is not None:
             keys, current = load_keyring(self.payload_keyring_path)
             object.__setattr__(self, "payload_keys", keys)
@@ -213,7 +294,17 @@ class Health(BaseModel):
 
 def _start_inference(application: FastAPI, settings: Settings) -> None:
     assert settings.secret is not None
-    keyring = Keyring(settings.secret)
+    signer, verifier = settings.signer, settings.verifier
+    if signer is None and verifier is None:
+        if settings.environment != "local":
+            raise ValueError("verification_keys_required")
+        signer, verifier = local_keys(settings.data_dir / "signing")
+    keyring = Keyring(
+        settings.secret,
+        signer=signer,
+        verifier=verifier,
+        legacy_mac_records=settings.legacy_mac_records,
+    )
     authenticator = (
         settings.authenticator
         if settings.authenticator is not None
@@ -226,18 +317,35 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
     )
     metadata, payloads = settings.metadata_store, settings.payload_store
     if metadata is None or payloads is None:
-        database = SQLiteDatabase(
-            settings.data_dir,
-            settings.environment,
-            migrate_on_startup=settings.migrate_on_startup,
-        )
+        database: Database
+        if settings.storage_backend == "postgres":
+            assert settings.database_url is not None
+            database = PostgresDatabase(
+                settings.database_url,
+                settings.environment,
+                migrate_on_startup=settings.migrate_on_startup,
+            )
+        else:
+            database = SQLiteDatabase(
+                settings.data_dir,
+                settings.environment,
+                migrate_on_startup=settings.migrate_on_startup,
+            )
         application.state.database = database
-        metadata, payloads = SQLiteMetadataStore(database), SQLitePayloadStore(database)
+        metadata, payloads = (
+            (PostgresMetadataStore(database), PostgresPayloadStore(database))
+            if isinstance(database, PostgresDatabase)
+            else (SQLiteMetadataStore(database), SQLitePayloadStore(database))
+        )
     outbox = settings.outbox_store
     if outbox is None:
         if not isinstance(metadata, SQLiteMetadataStore):
             raise ValueError("outbox_store_required")
-        outbox = SQLiteOutboxStore(metadata.database)
+        outbox = (
+            PostgresOutboxStore(metadata.database)
+            if isinstance(metadata.database, PostgresDatabase)
+            else SQLiteOutboxStore(metadata.database)
+        )
     metrics: Metrics = application.state.metrics
     key_material = (
         settings.payload_keys if settings.payload_keys is not None else settings.payload_key
@@ -301,13 +409,25 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
     application.state.dataset_approvals = DatasetApprovals(
         application.state.datasets, persistence, settings.data_dir
     )
-    evaluation_database = control_database(
-        settings.data_dir,
-        settings.environment,
-        migrate_on_startup=settings.migrate_on_startup,
-    )
+    evaluation_database: Database
+    if settings.storage_backend == "postgres":
+        assert settings.database_url is not None
+        evaluation_database = PostgresDatabase(
+            settings.database_url,
+            settings.environment,
+            role="control",
+            migrate_on_startup=settings.migrate_on_startup,
+        )
+    else:
+        evaluation_database = control_database(
+            settings.data_dir, settings.environment, migrate_on_startup=settings.migrate_on_startup
+        )
     application.state.evaluation_database = evaluation_database
-    evaluation_outbox = SQLiteOutboxStore(evaluation_database)
+    evaluation_outbox = (
+        PostgresOutboxStore(evaluation_database)
+        if isinstance(evaluation_database, PostgresDatabase)
+        else SQLiteOutboxStore(evaluation_database)
+    )
     evaluation_events = settings.evaluation_events or InMemoryEventSink(settings.event_capacity)
     application.state.evaluation_outbox = evaluation_outbox
     application.state.evaluation_events = evaluation_events
@@ -318,14 +438,18 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
         backoff=settings.outbox_backoff,
         tracer=settings.tracer,
     )
-    evaluation_store = settings.evaluation_store or SQLiteEvaluationStore(
+    evaluation_store = settings.evaluation_store or (
+        PostgresEvaluationStore if settings.storage_backend == "postgres" else SQLiteEvaluationStore
+    )(
         evaluation_database,
         evaluation_outbox,
         keyring,
         settings.data_dir,
         settings.outbox_pending_limit,
     )
-    registry = settings.registry or SQLiteModelRegistry(
+    registry = settings.registry or (
+        PostgresModelRegistry if settings.storage_backend == "postgres" else SQLiteModelRegistry
+    )(
         evaluation_database,
         evaluation_outbox,
         keyring,
@@ -345,7 +469,9 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
         if settings.authenticator is None
         else frozenset()
     )
-    routes = SQLiteRoutePolicies(
+    routes = (
+        PostgresRoutePolicies if settings.storage_backend == "postgres" else SQLiteRoutePolicies
+    )(
         evaluation_database,
         evaluation_outbox,
         registry,
@@ -472,7 +598,12 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
     evaluator = application.state.evaluations
     if isinstance(evaluator, LocalEvaluator):
         benchmarker = LocalBenchmarker(
-            evaluator, SQLiteBenchmarkStore(evaluation_database, keyring)
+            evaluator,
+            (
+                PostgresBenchmarkStore
+                if settings.storage_backend == "postgres"
+                else SQLiteBenchmarkStore
+            )(evaluation_database, keyring),
         )
         application.state.benchmarks = benchmarker
         if isinstance(registry, SQLiteModelRegistry):
@@ -518,12 +649,25 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     settings: Settings = application.state.settings
     application.state.ready = False
+    provider = otlp_provider(settings.otlp_endpoint) if settings.otlp_endpoint else None
+    if provider is not None and settings.tracer is None:
+        from dataclasses import replace
+
+        settings = replace(settings, tracer=provider.get_tracer("adaptive_llm", "1.0"))
     dispatcher_task: asyncio.Task[None] | None = None
     evaluation_dispatcher_task: asyncio.Task[None] | None = None
     training_task: asyncio.Task[None] | None = None
     shadow_task: asyncio.Task[None] | None = None
     canary_task: asyncio.Task[None] | None = None
+    metrics_server = None
+    metrics_thread = None
     try:
+        metrics_server, metrics_thread = start_http_server(
+            settings.metrics_port,
+            addr=settings.metrics_bind,
+            registry=application.state.metrics_registry,
+        )
+        application.state.metrics_server = metrics_server
         if settings.inference_enabled:
             _start_inference(application, settings)
             training_task = asyncio.create_task(application.state.training.worker())
@@ -558,6 +702,13 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             application.state.evaluation_database.close()
         if hasattr(application.state, "database"):
             application.state.database.close()
+        if provider is not None:
+            await asyncio.to_thread(provider.shutdown)
+        if metrics_server is not None:
+            await asyncio.to_thread(metrics_server.shutdown)
+            metrics_server.server_close()
+        if metrics_thread is not None:
+            await asyncio.to_thread(metrics_thread.join)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -573,6 +724,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.metrics = (
         settings.metrics if settings.metrics is not None else InProcessMetrics()
     )
+    application.state.metrics_registry = CollectorRegistry()
+    application.state.metrics_registry.register(application.state.metrics)
 
     application.add_middleware(RequestMetrics, metrics=application.state.metrics)
 

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from adaptive_llm.contracts import ModelManifest
 from adaptive_llm.gateway.identity import GatewayError, Keyring
+from adaptive_llm.signing import FIELDS, signed, verify_record
 
 
 def artifact_digest(hashes: dict[str, str]) -> str:
@@ -14,7 +15,7 @@ def artifact_digest(hashes: dict[str, str]) -> str:
 
 
 def signed_metadata(manifest: ModelManifest) -> str:
-    excluded = {"artifact_mac", "state", "evaluation_reports", "lifecycle_history"}
+    excluded = FIELDS | {"artifact_mac", "state", "evaluation_reports", "lifecycle_history"}
     if manifest.manifest_mac_version == "1":
         # Frozen legacy encoding. V2 signs every immutable field, including null/default values.
         if manifest.student_parameter_count is not None or manifest.pruning is not None:
@@ -42,8 +43,8 @@ def signed_metadata(manifest: ModelManifest) -> str:
     )
 
 
-def verify_artifact(manifest: ModelManifest, path: Path, keyring: Keyring) -> dict[str, bytes]:
-    """Return authenticated bytes so loaders never reread files after verification."""
+def verify_model_metadata(manifest: ModelManifest, keyring: Keyring) -> None:
+    """Authenticate lineage without loading files, allowing retirement of damaged artifacts."""
     try:
         if (
             manifest.manifest_mac_version == "1"
@@ -57,10 +58,20 @@ def verify_artifact(manifest: ModelManifest, path: Path, keyring: Keyring) -> di
             )
         ):
             raise ValueError
-        if not hmac.compare_digest(
+        if signed(manifest):
+            verify_record(manifest, keyring.verifier, "model-manifest", signed_metadata(manifest))
+        elif not keyring.accepts_legacy_mac or not hmac.compare_digest(
             manifest.artifact_mac, keyring.artifact_mac(signed_metadata(manifest))
         ):
             raise ValueError
+    except Exception:
+        raise GatewayError(409, "artifact_integrity_failed") from None
+
+
+def verify_artifact(manifest: ModelManifest, path: Path, keyring: Keyring) -> dict[str, bytes]:
+    """Return authenticated bytes so loaders never reread files after verification."""
+    try:
+        verify_model_metadata(manifest, keyring)
         if path.is_symlink() or not path.is_dir() or any(p.is_symlink() for p in path.rglob("*")):
             raise ValueError
         files = {p.relative_to(path).as_posix() for p in path.rglob("*") if p.is_file()}

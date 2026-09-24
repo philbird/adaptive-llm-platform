@@ -1,9 +1,12 @@
 """Small, thread-safe metric boundary with a closed set of names and label dimensions."""
 
 import re
+from collections.abc import Iterator
 from threading import Lock
-from typing import Literal, Protocol, cast
+from typing import Literal, Protocol, cast, get_args
 
+from prometheus_client import CollectorRegistry, generate_latest
+from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 Counter = Literal[
@@ -57,6 +60,10 @@ HTTP_METHODS: frozenset[HttpMethod] = frozenset(
 
 
 class Metrics(Protocol):
+    def collect(self) -> Iterator[CounterMetricFamily | GaugeMetricFamily]: ...
+
+    def render(self) -> bytes: ...
+
     def increment(
         self,
         name: Counter,
@@ -91,6 +98,7 @@ class InProcessMetrics:
         self._lock = Lock()
         self._deployments: set[str] = set()
         self._domain_checks: set[str] = set()
+        self._tenants: set[str] = set()
 
     def increment(
         self,
@@ -105,7 +113,8 @@ class InProcessMetrics:
         check_name: str | None = None,
     ) -> None:
         if (
-            value < 0
+            name not in get_args(Counter)
+            or value < 0
             or status_class not in (None, "2xx", "3xx", "4xx", "5xx")
             or (method is not None and method not in HTTP_METHODS)
         ):
@@ -113,7 +122,7 @@ class InProcessMetrics:
         with self._lock:
             key = (
                 name,
-                tenant_id,
+                self._tenant(tenant_id),
                 status_class,
                 method,
                 self._deployment(deployment_id),
@@ -123,6 +132,8 @@ class InProcessMetrics:
             self._values[key] = self._values.get(key, 0) + value
 
     def gauge(self, name: Gauge, value: float, *, deployment_id: str | None = None) -> None:
+        if name not in get_args(Gauge):
+            raise ValueError("invalid_metric")
         with self._lock:
             self._values[(name, None, None, None, self._deployment(deployment_id), None, None)] = (
                 value
@@ -143,7 +154,7 @@ class InProcessMetrics:
             return self._values.get(
                 (
                     name,
-                    tenant_id,
+                    self._tenant(tenant_id),
                     status_class,
                     method,
                     self._deployment(deployment_id),
@@ -152,6 +163,36 @@ class InProcessMetrics:
                 ),
                 0,
             )
+
+    def _tenant(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if value not in self._tenants and len(self._tenants) >= 64:
+            return "other"
+        self._tenants.add(value)
+        return value
+
+    def collect(self) -> Iterator[CounterMetricFamily | GaugeMetricFamily]:
+        with self._lock:
+            values = dict(self._values)
+        labels = ["tenant_id", "status_class", "method", "deployment_id", "reason", "check_name"]
+        for kind, names in (
+            (CounterMetricFamily, get_args(Counter)),
+            (GaugeMetricFamily, get_args(Gauge)),
+        ):
+            for name in names:
+                family = kind(name, name.replace("_", " "), labels=labels)
+                rows = [(key, value) for key, value in values.items() if key[0] == name]
+                if not rows:
+                    family.add_metric([""] * len(labels), 0)
+                for key, value in rows:
+                    family.add_metric([v or "" for v in key[1:]], value)
+                yield family
+
+    def render(self) -> bytes:
+        registry = CollectorRegistry()
+        registry.register(self)
+        return generate_latest(registry)
 
     def _deployment(self, value: str | None) -> str | None:
         if value is None:

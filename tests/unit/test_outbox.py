@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from postgres_support import stored_bytes
 
 from adaptive_llm.contracts import Event, Started, now, uid
 from adaptive_llm.events import InMemoryEventSink
@@ -104,9 +105,7 @@ def test_bounded_retry_dead_letter_recovery_and_lag(tmp_path: Path) -> None:
         assert dispatcher.dispatch_once() == 2
         assert dispatcher.sink.events == [first, second]
         assert store.stats(at).pending == store.stats(at).dead == 0
-        assert "SYNTHETIC-private-sink-body" not in database.path.read_bytes().decode(
-            errors="ignore"
-        )
+        assert "SYNTHETIC-private-sink-body" not in stored_bytes(database).decode(errors="ignore")
     finally:
         database.close()
 

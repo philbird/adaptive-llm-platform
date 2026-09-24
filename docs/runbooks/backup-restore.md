@@ -51,3 +51,9 @@ The drill restores the original replay, a control training job and five pending 
 and checks both migration ledgers. Unit tests cover mixed generations even with adjusted
 hashes, failure in the second restore, repeated backup/restore, separate migration streams
 and preservation of legacy evaluation records.
+
+For `STORAGE_BACKEND=postgres`, the same commands publish a matched tenant/control schema pair
+as one custom-format dump at an exported PostgreSQL snapshot. Restore validates a disposable
+copy before one atomic live transaction. See [PostgreSQL operation](postgresql.md) for client
+utilities, privileges, environment settings and the offline restore procedure. Signing public
+keys must also be preserved; see [signing rotation](signing-key-rotation.md).
