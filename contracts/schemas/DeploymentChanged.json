@@ -25,18 +25,31 @@
       "type": "string"
     },
     "new_state": {
-      "enum": [
-        "candidate",
-        "evaluating",
-        "approved",
-        "shadow",
-        "canary",
-        "production",
-        "deprecated",
-        "revoked"
+      "anyOf": [
+        {
+          "enum": [
+            "candidate",
+            "evaluating",
+            "approved",
+            "shadow",
+            "canary",
+            "production",
+            "deprecated",
+            "revoked"
+          ],
+          "type": "string"
+        },
+        {
+          "enum": [
+            "active",
+            "inactive",
+            "enabled",
+            "disabled"
+          ],
+          "type": "string"
+        }
       ],
-      "title": "New State",
-      "type": "string"
+      "title": "New State"
     },
     "previous_state": {
       "anyOf": [
@@ -50,6 +63,15 @@
             "production",
             "deprecated",
             "revoked"
+          ],
+          "type": "string"
+        },
+        {
+          "enum": [
+            "active",
+            "inactive",
+            "enabled",
+            "disabled"
           ],
           "type": "string"
         },

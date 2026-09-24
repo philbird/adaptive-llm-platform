@@ -1,0 +1,190 @@
+{
+  "$defs": {
+    "BreakerThresholds": {
+      "additionalProperties": false,
+      "properties": {
+        "cooldown_seconds": {
+          "default": 30,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Cooldown Seconds",
+          "type": "number"
+        },
+        "error_rate": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Error Rate",
+          "type": "number"
+        },
+        "minimum_samples": {
+          "default": 5,
+          "maximum": 1000,
+          "minimum": 1,
+          "title": "Minimum Samples",
+          "type": "integer"
+        },
+        "p95_latency_ms": {
+          "default": 5000,
+          "exclusiveMinimum": 0,
+          "title": "P95 Latency Ms",
+          "type": "number"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "validation_failure_rate": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Validation Failure Rate",
+          "type": "number"
+        },
+        "window_seconds": {
+          "default": 60,
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Window Seconds",
+          "type": "number"
+        }
+      },
+      "title": "BreakerThresholds",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Each policy id names one immutable version; activation is a separate operation.",
+  "properties": {
+    "breaker": {
+      "$ref": "#/$defs/BreakerThresholds"
+    },
+    "eligible_specialist_versions": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "title": "Eligible Specialist Versions",
+      "type": "array"
+    },
+    "foundation_fallback": {
+      "default": "fake-foundation-local-1",
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Foundation Fallback",
+      "type": "string"
+    },
+    "hard_fallback_on": {
+      "items": {
+        "enum": [
+          "validation_failure",
+          "endpoint_error",
+          "deadline_risk",
+          "policy_uncertainty",
+          "unsupported_tool",
+          "low_confidence",
+          "out_of_distribution",
+          "low_quality",
+          "circuit_open",
+          "live_specialists_disabled"
+        ],
+        "type": "string"
+      },
+      "title": "Hard Fallback On",
+      "type": "array"
+    },
+    "kill_switch": {
+      "default": false,
+      "title": "Kill Switch",
+      "type": "boolean"
+    },
+    "live_specialists_allowed": {
+      "const": false,
+      "default": false,
+      "title": "Live Specialists Allowed",
+      "type": "boolean"
+    },
+    "max_attempts": {
+      "default": 2,
+      "maximum": 8,
+      "minimum": 1,
+      "title": "Max Attempts",
+      "type": "integer"
+    },
+    "ood_threshold_max": {
+      "default": 0.15,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Ood Threshold Max",
+      "type": "number"
+    },
+    "policy_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "quality_threshold": {
+      "default": 0.9,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Quality Threshold",
+      "type": "number"
+    },
+    "router_confidence_threshold": {
+      "default": 0.85,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Router Confidence Threshold",
+      "type": "number"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "shadow_enabled": {
+      "default": false,
+      "title": "Shadow Enabled",
+      "type": "boolean"
+    },
+    "task_enabled": {
+      "maxProperties": 32,
+      "patternProperties": {
+        "^[\\w.-]+$": {
+          "type": "boolean"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 100,
+        "minLength": 1
+      },
+      "title": "Task Enabled",
+      "type": "object"
+    },
+    "tenant_enabled": {
+      "maxProperties": 100,
+      "patternProperties": {
+        "^[\\w.-]+$": {
+          "type": "boolean"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 100,
+        "minLength": 1
+      },
+      "title": "Tenant Enabled",
+      "type": "object"
+    }
+  },
+  "title": "RoutePolicy",
+  "type": "object"
+}

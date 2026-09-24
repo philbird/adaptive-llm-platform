@@ -15,6 +15,20 @@
           "default": "1.0",
           "title": "Schema Version",
           "type": "string"
+        },
+        "severity": {
+          "default": "hard",
+          "enum": [
+            "hard",
+            "advisory"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "version": {
+          "default": "deterministic-1",
+          "title": "Version",
+          "type": "string"
         }
       },
       "required": [

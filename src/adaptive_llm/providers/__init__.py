@@ -5,7 +5,15 @@ import re
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from adaptive_llm.contracts import Chunk, Citation, FinishReason, Message, ResponseFormat, Usage
+from adaptive_llm.contracts import (
+    Chunk,
+    Citation,
+    FinishReason,
+    Message,
+    ResponseFormat,
+    ToolCall,
+    Usage,
+)
 
 TOKENIZER = "fake-whitespace-v1"
 CITATION_PATTERN = re.compile(r"\[([\w.-]+)/([\w.-]+)\]")
@@ -21,6 +29,7 @@ class ProviderRequest:
     context: tuple[Chunk, ...]
     response_format: ResponseFormat
     max_output_tokens: int
+    application_id: str = ""
 
     @property
     def input_tokens(self) -> int:
@@ -36,6 +45,7 @@ class ProviderResult:
     usage: Usage
     finish_reason: FinishReason
     latency_ms: float
+    tool_calls: tuple[ToolCall, ...] = ()
 
 
 class Provider(Protocol):

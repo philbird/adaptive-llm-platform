@@ -101,7 +101,7 @@ class ResponseFormat(Contract):
 
 
 class RoutingOptions(Contract):
-    mode: Literal["auto", "foundation"] = "auto"
+    mode: Literal["auto", "foundation", "specialist"] = "auto"
     max_cost_micros: int = Field(default=20_000, ge=0, le=1_000_000)
     deadline_ms: int = Field(default=5_000, ge=50, le=30_000)
 
@@ -277,6 +277,65 @@ class RetrievalRun(Record):
     candidates: list[ChunkEvidence]
 
 
+class BreakerThresholds(Contract):
+    window_seconds: float = Field(default=60, gt=0, le=3600)
+    minimum_samples: int = Field(default=5, ge=1, le=1000)
+    error_rate: float = Field(default=0.5, gt=0, le=1)
+    validation_failure_rate: float = Field(default=0.5, gt=0, le=1)
+    p95_latency_ms: float = Field(default=5000, gt=0)
+    cooldown_seconds: float = Field(default=30, gt=0, le=3600)
+
+
+FallbackReason = Literal[
+    "validation_failure",
+    "endpoint_error",
+    "deadline_risk",
+    "policy_uncertainty",
+    "unsupported_tool",
+    "low_confidence",
+    "out_of_distribution",
+    "low_quality",
+    "circuit_open",
+    "live_specialists_disabled",
+]
+
+
+def _hard_fallback_reasons() -> list[FallbackReason]:
+    return [
+        "validation_failure",
+        "endpoint_error",
+        "deadline_risk",
+        "policy_uncertainty",
+        "unsupported_tool",
+        "circuit_open",
+    ]
+
+
+class RoutePolicy(Contract):
+    """Each policy id names one immutable version; activation is a separate operation."""
+
+    policy_id: Identifier = Field(default_factory=uid)
+    eligible_specialist_versions: list[Identifier] = Field(default_factory=list, max_length=16)
+    quality_threshold: float = Field(default=0.9, ge=0, le=1)
+    router_confidence_threshold: float = Field(default=0.85, ge=0, le=1)
+    ood_threshold_max: float = Field(default=0.15, ge=0, le=1)
+    max_attempts: int = Field(default=2, ge=1, le=8)
+    hard_fallback_on: list[FallbackReason] = Field(default_factory=_hard_fallback_reasons)
+    foundation_fallback: Identifier = "fake-foundation-local-1"
+    shadow_enabled: bool = False
+    tenant_enabled: dict[Identifier, bool] = Field(default_factory=dict, max_length=100)
+    task_enabled: dict[Identifier, bool] = Field(default_factory=dict, max_length=32)
+    kill_switch: bool = False
+    live_specialists_allowed: Literal[False] = False
+    breaker: BreakerThresholds = Field(default_factory=BreakerThresholds)
+
+    @model_validator(mode="after")
+    def unique_specialists(self) -> RoutePolicy:
+        if len(set(self.eligible_specialist_versions)) != len(self.eligible_specialist_versions):
+            raise ValueError("duplicate_specialists")
+        return self
+
+
 class Candidate(Record):
     model_deployment_id: str
     eligible: bool
@@ -294,6 +353,8 @@ class RouteDecision(Record):
     interaction_id: str
     router_version: str = "foundation-only-1"
     experiment_id: str | None = None
+    route_policy_id: str | None = None
+    fallback_reasons: list[str] = Field(default_factory=list)
     candidates: list[Candidate]
     selected_model_deployment_id: str | None
     fallback_deployment_ids: list[str] = Field(default_factory=list)
@@ -302,8 +363,10 @@ class RouteDecision(Record):
 
 
 class ValidationCheck(Record):
+    version: str = "deterministic-1"
     name: str
     passed: bool
+    severity: Literal["hard", "advisory"] = "hard"
 
 
 class Validation(Record):
@@ -331,7 +394,8 @@ class ToolCall(Record):
 class GenerationAttempt(Record):
     attempt_id: str = Field(default_factory=uid)
     interaction_id: str
-    attempt_number: int = 1
+    attempt_number: int = Field(default=1, ge=0)
+    shadow: bool = False
     model_provider: str
     model_id: str
     model_version: str
@@ -524,6 +588,18 @@ class DatasetApproval(Record):
     reason: str | None = None
     at: AwareDatetime | None = None
     mac: str | None = None
+
+
+class RouteControlNote(Contract):
+    reason: str = Field(min_length=1, max_length=2000)
+    tenant_id: Identifier | None = None
+    task: Identifier | None = None
+
+    @model_validator(mode="after")
+    def valid_scope(self) -> RouteControlNote:
+        if not self.reason.strip() or (self.tenant_id is not None and self.task is not None):
+            raise ValueError("invalid_route_control_note")
+        return self
 
 
 class OperatorNote(Record):
@@ -816,6 +892,51 @@ class EvaluationReport(Record):
     known_limitations: list[str]
 
 
+class ShadowComparison(Record):
+    comparison_id: str = Field(default_factory=uid)
+    interaction_id: str
+    policy_id: str
+    tenant_id: str
+    specialist_version: str
+    created_at: AwareDatetime = Field(default_factory=now)
+    segments: list[str]
+    judge_version: str = "shadow-chunk-overlap-1"
+    rubric_version: str = "synthetic-rubric-1"
+    foundation_score: float
+    specialist_score: float
+    foundation_citation_precision: float
+    foundation_citation_recall: float
+    specialist_citation_precision: float
+    specialist_citation_recall: float
+    input_token_delta: int
+    output_token_delta: int
+    cost_delta_micros: int
+    latency_delta_ms: float
+    specialist_validation: Validation
+
+
+class ShadowAggregate(Record):
+    opportunities: int
+    comparisons: int
+    coverage: float
+    specialist_validation_pass_rate: float | None
+    score_delta: PairedComparison
+    mean_cost_delta_micros: float | None
+    mean_latency_delta_ms: float | None
+    mean_input_token_delta: float | None
+    mean_output_token_delta: float | None
+    citation_metrics: dict[str, float]
+
+
+class ShadowReport(Record):
+    """Aggregate shadow-chunk-overlap-1 scores: coarse grounding proxies, not evaluation rubrics."""
+
+    policy_id: str
+    since: AwareDatetime
+    overall: ShadowAggregate
+    critical_segments: dict[str, ShadowAggregate]
+
+
 class EvaluationCompleted(Record):
     evaluation_id: str
     model_version: str
@@ -828,8 +949,8 @@ class EvaluationCompleted(Record):
 class DeploymentChanged(Record):
     deployment_id: str
     model_version: str
-    previous_state: LifecycleState | None
-    new_state: LifecycleState
+    previous_state: LifecycleState | Literal["active", "inactive", "enabled", "disabled"] | None
+    new_state: LifecycleState | Literal["active", "inactive", "enabled", "disabled"]
     actor_id: str
     reason: str
     evaluation_id: str | None = None

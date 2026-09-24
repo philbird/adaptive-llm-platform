@@ -272,6 +272,15 @@ def test_json_no_rag_and_length(inference_request: InferenceRequest) -> None:
         assert short.status_code == 200
         assert short.json()["finish_reason"] == "length"
         assert short.json()["usage"]["output_tokens"] == 1
+        metrics = client.app.state.metrics
+        assert metrics.get("validation_advisory_failures", check_name="truncation") == 1
+        replay = client.post(
+            "/v1/inference",
+            headers=HEADERS,
+            json={**inference_request.model_dump(), "request_id": "short", "max_output_tokens": 1},
+        )
+        assert replay.json()["replayed"]
+        assert metrics.get("validation_advisory_failures", check_name="truncation") == 1
 
 
 @pytest.mark.parametrize("constraint", ["processing", "residency", "budget"])
