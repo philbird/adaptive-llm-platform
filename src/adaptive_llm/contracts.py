@@ -839,6 +839,32 @@ class DatasetLineage(Record):
     weight: float = Field(default=1, gt=0, le=1)
 
 
+def _pruning_structures() -> list[Literal["attention_heads", "mlp_channels", "layers"]]:
+    return ["attention_heads"]
+
+
+class PruningPlan(Contract):
+    structures: list[Literal["attention_heads", "mlp_channels", "layers"]] = Field(
+        default_factory=_pruning_structures, min_length=1, max_length=3
+    )
+    maximum_fraction: float = Field(default=0.25, gt=0, le=0.5)
+    ranking_rule: Identifier = "ablation_sensitivity"
+
+
+class PruningLineage(Record):
+    study_id: Identifier
+    plan: PruningPlan
+    removed_indices: dict[str, list[int]]
+    parameter_count_before: int = Field(gt=0)
+    parameter_count_after: int = Field(gt=0)
+    base_digest: str
+    adapter_version: Identifier | None = None
+    adapter_digest: str | None = None
+    calibration_dataset: DatasetLineage
+    evaluation_dataset: DatasetLineage
+    baseline_evaluation_id: Identifier
+
+
 class ModelManifest(Record):
     registry_id: Identifier
     version: Identifier
@@ -885,6 +911,7 @@ class ModelManifest(Record):
     student_parameter_count: int | None = Field(default=None, gt=0)
     distillation: DistillationLineage | None = None
     manifest_mac_version: Literal["1", "2"] = "1"
+    pruning: PruningLineage | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class PromotionRequest(OperatorNote):
@@ -1044,6 +1071,7 @@ class BenchmarkMeasurement(Record):
     cost_per_success_micros: int | None
     input_micros_per_1000_tokens: int
     output_micros_per_1000_tokens: int
+    parameter_count: int | None = Field(default=None, gt=0, exclude_if=lambda v: v is None)
 
 
 class BenchmarkReport(Record):
@@ -1063,6 +1091,9 @@ class BenchmarkReport(Record):
     passed: bool
     known_limitations: list[str]
     mac: str = ""
+    pruning_study_id: Identifier | None = Field(default=None, exclude_if=lambda v: v is None)
+    peak_rss_reduction_fraction: float | None = Field(default=None, exclude_if=lambda v: v is None)
+    gate_reasons: list[Identifier] = Field(default_factory=list, exclude_if=lambda v: not v)
 
 
 class ShadowComparison(Record):

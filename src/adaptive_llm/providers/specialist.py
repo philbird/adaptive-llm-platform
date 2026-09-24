@@ -23,7 +23,7 @@ class SpecialistProvider:
         self.model_version = f"{manifest.base_model_revision}.{manifest.artifact_digest}"
         self.artifact_digest = manifest.artifact_digest
         self._real: LoraGenerator | None = None
-        if manifest.adapter_architecture in {"lora-peft-v1", "student-full-v1"}:
+        if manifest.adapter_architecture in {"lora-peft-v1", "student-full-v1", "pruned-full-v1"}:
             from adaptive_llm.training.lora import LoraGenerator
 
             self._real = LoraGenerator(manifest, data_dir, verified)

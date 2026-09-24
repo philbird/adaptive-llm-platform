@@ -129,6 +129,7 @@ class SQLiteModelRegistry:
         trusted = asdict(identity)
         trusted["application_ids"] = sorted(identity.application_ids)
         trusted["dataset_tenants"] = sorted(identity.dataset_tenants)
+        trusted["capabilities"] = sorted(identity.capabilities)
         with self.database.transaction():
             old = self.job(job.specification.job_id, identity)
             if old is not None:
@@ -167,6 +168,7 @@ class SQLiteModelRegistry:
             trusted = json.loads(row[1])
             trusted["application_ids"] = frozenset(trusted["application_ids"])
             trusted["dataset_tenants"] = frozenset(trusted["dataset_tenants"])
+            trusted["capabilities"] = frozenset(trusted.get("capabilities", []))
             result.append((TrainingJob.model_validate_json(row[0]), Identity(**trusted)))
         return result
 
@@ -288,7 +290,11 @@ class SQLiteModelRegistry:
     def _passed(
         self, manifest: ModelManifest, evaluation_id: str | None, identity: Identity
     ) -> bool:
-        dataset = self._dataset(manifest)
+        dataset = (
+            manifest.pruning.evaluation_dataset
+            if manifest.pruning is not None
+            else self._dataset(manifest)
+        )
         if evaluation_id is None:
             return False
         report = self.evaluations.get(evaluation_id, identity)
@@ -306,6 +312,12 @@ class SQLiteModelRegistry:
                 and report.dataset_content_digest == dataset.content_digest
             )
         if report is None or report.specification.baseline_deployment_id is None:
+            return False
+        if manifest.adapter_architecture == "pruned-full-v1" and (
+            manifest.pruning is None
+            or self.benchmark_gate is None
+            or not self.benchmark_gate(manifest, report, identity)
+        ):
             return False
         if manifest.distillation is not None and (
             report.distillation != manifest.distillation

@@ -37,6 +37,19 @@
           "title": "P95 Latency Ms",
           "type": "number"
         },
+        "parameter_count": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parameter Count"
+        },
         "peak_rss_bytes": {
           "exclusiveMinimum": 0,
           "title": "Peak Rss Bytes",
@@ -208,6 +221,16 @@
       "title": "Dataset Content Digest",
       "type": "string"
     },
+    "gate_reasons": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "title": "Gate Reasons",
+      "type": "array"
+    },
     "known_limitations": {
       "items": {
         "type": "string"
@@ -234,6 +257,33 @@
     "passed": {
       "title": "Passed",
       "type": "boolean"
+    },
+    "peak_rss_reduction_fraction": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Peak Rss Reduction Fraction"
+    },
+    "pruning_study_id": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pruning Study Id"
     },
     "quality_comparison": {
       "$ref": "#/$defs/PairedComparison"

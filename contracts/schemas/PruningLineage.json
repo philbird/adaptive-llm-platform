@@ -1,0 +1,183 @@
+{
+  "$defs": {
+    "DatasetLineage": {
+      "properties": {
+        "content_digest": {
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "dataset_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "weight": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "dataset_id",
+        "version",
+        "content_digest"
+      ],
+      "title": "DatasetLineage",
+      "type": "object"
+    },
+    "PruningPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "maximum_fraction": {
+          "default": 0.25,
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "title": "Maximum Fraction",
+          "type": "number"
+        },
+        "ranking_rule": {
+          "default": "ablation_sensitivity",
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Ranking Rule",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "structures": {
+          "items": {
+            "enum": [
+              "attention_heads",
+              "mlp_channels",
+              "layers"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Structures",
+          "type": "array"
+        }
+      },
+      "title": "PruningPlan",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "adapter_digest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Adapter Digest"
+    },
+    "adapter_version": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Adapter Version"
+    },
+    "base_digest": {
+      "title": "Base Digest",
+      "type": "string"
+    },
+    "baseline_evaluation_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Baseline Evaluation Id",
+      "type": "string"
+    },
+    "calibration_dataset": {
+      "$ref": "#/$defs/DatasetLineage"
+    },
+    "evaluation_dataset": {
+      "$ref": "#/$defs/DatasetLineage"
+    },
+    "parameter_count_after": {
+      "exclusiveMinimum": 0,
+      "title": "Parameter Count After",
+      "type": "integer"
+    },
+    "parameter_count_before": {
+      "exclusiveMinimum": 0,
+      "title": "Parameter Count Before",
+      "type": "integer"
+    },
+    "plan": {
+      "$ref": "#/$defs/PruningPlan"
+    },
+    "removed_indices": {
+      "additionalProperties": {
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "title": "Removed Indices",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "study_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Study Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "study_id",
+    "plan",
+    "removed_indices",
+    "parameter_count_before",
+    "parameter_count_after",
+    "base_digest",
+    "calibration_dataset",
+    "evaluation_dataset",
+    "baseline_evaluation_id"
+  ],
+  "title": "PruningLineage",
+  "type": "object"
+}

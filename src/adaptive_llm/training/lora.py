@@ -264,6 +264,16 @@ class LoraTrainer:
         except Exception:
             raise GatewayError(503, "training_failed") from None
 
+    def _base(self, spec: TrainingJobSpecification) -> BaseFiles:
+        return base_files(
+            self.data_dir,
+            spec.base_model_id,
+            spec.base_model_revision,
+            spec.tokenizer_id,
+            spec.chat_template_version,
+            spec.base_model_licence,
+        )
+
     def _train(
         self,
         spec: TrainingJobSpecification,
@@ -277,14 +287,7 @@ class LoraTrainer:
         start = perf_counter()
         if spec.hardware_class != "cpu":
             raise GatewayError(422, "training_configuration_invalid")
-        base = base_files(
-            self.data_dir,
-            spec.base_model_id,
-            spec.base_model_revision,
-            spec.tokenizer_id,
-            spec.chat_template_version,
-            spec.base_model_licence,
-        )
+        base = self._base(spec)
         precision_bytes = 4 if spec.adapter_config.precision == "fp32" else 2
         estimate = base.parameter_count * precision_bytes * 6
         if estimate > self.memory_limit_bytes:
@@ -589,6 +592,27 @@ class LoraGenerator:
     def __init__(self, manifest: ModelManifest, data_dir: Path, files: dict[str, bytes]) -> None:
         self.manifest = manifest
         self.libs = libraries()
+        if manifest.adapter_architecture == "pruned-full-v1":
+            if manifest.pruning is None:
+                raise GatewayError(409, "artifact_integrity_failed")
+            base = BaseFiles(
+                {
+                    k: v
+                    for k, v in files.items()
+                    if k not in {"training_report.json", "adapter_config.json"}
+                },
+                manifest.artifact_digest,
+                manifest.context_limit,
+                manifest.pruning.parameter_count_after,
+            )
+            try:
+                with cpu(self.libs, manifest.seed):
+                    self.model, self.tokenizer = load_base(base, self.libs, "fp32")
+                    self.model.eval()
+                self.limit = manifest.context_limit
+                return
+            except Exception:
+                raise GatewayError(409, "artifact_integrity_failed") from None
         base = base_files(
             data_dir,
             manifest.base_model_id,
