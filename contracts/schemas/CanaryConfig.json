@@ -1,0 +1,37 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "assignment": {
+      "const": "sha256-interaction-policy-v1",
+      "default": "sha256-interaction-policy-v1",
+      "title": "Assignment",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tenant_allowlist": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[\\w.-]+$",
+        "type": "string"
+      },
+      "maxItems": 100,
+      "title": "Tenant Allowlist",
+      "type": "array"
+    },
+    "traffic_fraction": {
+      "default": 0,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Traffic Fraction",
+      "type": "number"
+    }
+  },
+  "title": "CanaryConfig",
+  "type": "object"
+}

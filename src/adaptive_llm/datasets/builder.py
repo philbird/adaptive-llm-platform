@@ -36,6 +36,12 @@ class DatasetBuilder(Protocol):
     def get(self, dataset_id: str, version: str, identity: Identity) -> DatasetManifest: ...
 
 
+class RoutingExamples(Protocol):
+    def build(
+        self, examples: list[Example], specification: DatasetSpecification, identity: Identity
+    ) -> list[BuiltExample]: ...
+
+
 def code_revision() -> str:
     try:
         result = subprocess.run(
@@ -70,6 +76,7 @@ class LocalDatasetBuilder:
         self.persistence, self.policy = persistence, policy
         self.data_dir, self.golden_dir, self.clock = data_dir, golden_dir, clock
         self.revision = revision
+        self.routing_examples: RoutingExamples | None = None
         self.constructor = Constructor(
             persistence.payloads,
             persistence.cipher,
@@ -100,6 +107,8 @@ class LocalDatasetBuilder:
         with self.persistence.metadata.read_transaction():
             at = self.clock()
             selection = select(self.persistence.metadata, self.policy, specification, at)
+            if specification.purpose == "router_training":
+                return at, selection, PayloadSnapshot(blobs)
             for candidate in selection.examples:
                 tenant = candidate.interaction.tenant_id
                 refs = {candidate.interaction.input.messages_ref}
@@ -137,7 +146,7 @@ class LocalDatasetBuilder:
         examples: list[BuiltExample] = []
         exclusions = selection.exclusions.copy()
         # Phase 2: no database reads or locks during decryption, construction or curation.
-        for candidate in selection.examples:
+        for candidate in selection.examples if specification.purpose != "router_training" else []:
             if candidate.interaction.environment != identity.environment:
                 exclusions["environment_forbidden"] += 1
                 continue
@@ -147,6 +156,18 @@ class LocalDatasetBuilder:
                 )
             except Excluded as error:
                 exclusions[str(error)] += 1
+        if specification.purpose == "router_training":
+            if self.routing_examples is None:
+                raise GatewayError(422, "routing_observations_unavailable")
+            examples = self.routing_examples.build(
+                [
+                    e
+                    for e in selection.examples
+                    if e.interaction.environment == identity.environment
+                ],
+                specification,
+                identity,
+            )
         golden = golden_texts(self.golden_dir)
         candidates = selection.examples
         created = False
@@ -226,7 +247,11 @@ class LocalDatasetBuilder:
         staging: Path,
     ) -> DatasetManifest:
         counts = exclusions.copy()
-        accepted = curate(examples, golden, specification.near_duplicate_threshold, counts)
+        accepted = (
+            examples
+            if specification.purpose == "router_training"
+            else curate(examples, golden, specification.near_duplicate_threshold, counts)
+        )
         splits = split_examples(accepted, specification)
         if len(splits["train"]) < specification.minimum_examples:
             raise GatewayError(422, "insufficient_training_examples")

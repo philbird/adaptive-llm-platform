@@ -1,0 +1,200 @@
+{
+  "$defs": {
+    "RoutingFeatures": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Chunk Count",
+          "type": "integer"
+        },
+        "context_supplied": {
+          "default": false,
+          "title": "Context Supplied",
+          "type": "boolean"
+        },
+        "index_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index Id"
+        },
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "language": {
+          "default": "en",
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Language",
+          "type": "string"
+        },
+        "risk_tier": {
+          "default": "medium",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "task": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Task",
+          "type": "string"
+        },
+        "top_score": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Top Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "task",
+        "input_tokens"
+      ],
+      "title": "RoutingFeatures",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "critical_safety_incidents": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Critical Safety Incidents",
+      "type": "integer"
+    },
+    "error": {
+      "default": false,
+      "title": "Error",
+      "type": "boolean"
+    },
+    "fallback_used": {
+      "default": false,
+      "title": "Fallback Used",
+      "type": "boolean"
+    },
+    "features": {
+      "$ref": "#/$defs/RoutingFeatures"
+    },
+    "interaction_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Interaction Id",
+      "type": "string"
+    },
+    "latency_ms": {
+      "minimum": 0,
+      "title": "Latency Ms",
+      "type": "number"
+    },
+    "policy_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "quality": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Quality",
+      "type": "number"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "shadow_cost_micros": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Shadow Cost Micros",
+      "type": "integer"
+    },
+    "specialist_served": {
+      "default": false,
+      "title": "Specialist Served",
+      "type": "boolean"
+    },
+    "specialist_version": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Specialist Version"
+    },
+    "success": {
+      "title": "Success",
+      "type": "boolean"
+    },
+    "tenant_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "total_cost_micros": {
+      "minimum": 0,
+      "title": "Total Cost Micros",
+      "type": "integer"
+    },
+    "validation_failure": {
+      "default": false,
+      "title": "Validation Failure",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "interaction_id",
+    "policy_id",
+    "tenant_id",
+    "features",
+    "success",
+    "quality",
+    "total_cost_micros",
+    "latency_ms"
+  ],
+  "title": "LiveObservation",
+  "type": "object"
+}

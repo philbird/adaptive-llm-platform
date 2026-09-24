@@ -36,6 +36,7 @@ def test_lifespan_health_and_mounted_inference() -> None:
             "dead_letters": 0,
             "circuit_breakers": {},
             "kill_switch": False,
+            "live_planner_failures": 0,
             "shadow_queue_depth": 0,
         }
         assert client.post("/v1/inference", json={}).status_code == 401

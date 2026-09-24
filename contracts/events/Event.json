@@ -2,6 +2,18 @@
   "$defs": {
     "Candidate": {
       "properties": {
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
         "eligible": {
           "title": "Eligible",
           "type": "boolean"
@@ -1020,6 +1032,12 @@
           "title": "Schema Version",
           "type": "string"
         },
+        "shadow_cost_micros": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Shadow Cost Micros",
+          "type": "integer"
+        },
         "started_at": {
           "format": "date-time",
           "title": "Started At",
@@ -1050,6 +1068,12 @@
         "tenant_id": {
           "title": "Tenant Id",
           "type": "string"
+        },
+        "total_cost_micros": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Total Cost Micros",
+          "type": "integer"
         },
         "trace_id": {
           "title": "Trace Id",
@@ -1748,6 +1772,11 @@
     },
     "ValidationCheck": {
       "properties": {
+        "critical_safety": {
+          "default": false,
+          "title": "Critical Safety",
+          "type": "boolean"
+        },
         "name": {
           "title": "Name",
           "type": "string"

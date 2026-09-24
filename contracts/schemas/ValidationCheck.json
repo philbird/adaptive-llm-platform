@@ -1,5 +1,10 @@
 {
   "properties": {
+    "critical_safety": {
+      "default": false,
+      "title": "Critical Safety",
+      "type": "boolean"
+    },
     "name": {
       "title": "Name",
       "type": "string"

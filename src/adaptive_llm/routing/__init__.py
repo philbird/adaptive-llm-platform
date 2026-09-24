@@ -8,7 +8,14 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from adaptive_llm.contracts import Candidate, PolicyDecision, Region, RouteDecision, RoutingOptions
+from adaptive_llm.contracts import (
+    Candidate,
+    PolicyDecision,
+    Region,
+    RouteDecision,
+    RoutingFeatures,
+    RoutingOptions,
+)
 from adaptive_llm.providers import ProviderRequest
 
 
@@ -40,6 +47,9 @@ class Deployment(BaseModel):
 class RouteSelection:
     decision: RouteDecision
     deployment: Deployment
+    features: RoutingFeatures | None = None
+    request: ProviderRequest | None = None
+    policy: PolicyDecision | None = None
 
 
 class Router(Protocol):

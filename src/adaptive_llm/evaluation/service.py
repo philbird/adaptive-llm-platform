@@ -36,7 +36,7 @@ from adaptive_llm.gateway.identity import GatewayError, Identity
 from adaptive_llm.providers import Provider
 from adaptive_llm.providers.specialist import SpecialistProvider
 from adaptive_llm.registry import ModelRegistry
-from adaptive_llm.routing import Deployment, FoundationRouter
+from adaptive_llm.routing import Deployment, FoundationRouter, PriceList
 from adaptive_llm.storage.persistence import Persistence
 from adaptive_llm.validation import Validator
 
@@ -125,6 +125,12 @@ class LocalEvaluator:
                     "model_deployment_id": model.version,
                     "model_version": provider.model_version,
                     "model_id": model.base_model_id,
+                    "processing_region": model.processing_region,
+                    "price_list": PriceList(
+                        version=f"model-{model.version}",
+                        input_micros_per_1000_tokens=model.input_micros_per_1000_tokens,
+                        output_micros_per_1000_tokens=model.output_micros_per_1000_tokens,
+                    ),
                 }
             ),
             provider,
@@ -183,6 +189,8 @@ class LocalEvaluator:
             if existing.specification != spec:
                 raise GatewayError(409, "evaluation_id_conflict")
             return existing
+        if "routing" in spec.suites:
+            return self._evaluate_router(request, spec, identity)
         validate_versions(self.judge, spec.judge_version, spec.rubric_version)
         start = now()
         manifest, held_out = self.reader.read(spec, identity)
@@ -328,6 +336,91 @@ class LocalEvaluator:
             lock_baseline=locking and report.passed,
             expected_baseline=locked.specification.evaluation_id if locked else None,
             note=request.operator_note,
+        )
+        return report
+
+    def _evaluate_router(
+        self,
+        request: EvaluationInput,
+        spec: EvaluationSpecification,
+        identity: Identity,
+    ) -> EvaluationReport:
+        from adaptive_llm.registry.artifacts import verify_artifact
+        from adaptive_llm.routing.model import LogisticRouter, routing_suite
+
+        if (
+            spec.suites != ["routing"]
+            or spec.baseline_deployment_id is not None
+            or request.replace
+            or self.registry is None
+            or self.data_dir is None
+        ):
+            raise GatewayError(422, "routing_evaluation_configuration_invalid")
+        model = self.registry.get(spec.candidate_deployment_id, identity)
+        manifest, held_out = self.reader.read_routing(spec, identity)
+        if (
+            model.adapter_architecture != "router-logistic-v1"
+            or manifest.purpose != "router_training"
+            or len(model.datasets) != 1
+            or model.datasets[0].version != manifest.version
+            or model.datasets[0].content_digest != manifest.content_digest
+            or model.datasets[0].dataset_id != manifest.dataset_id
+        ):
+            raise GatewayError(409, "model_dataset_mismatch")
+        files = verify_artifact(
+            model, self.data_dir / model.storage_location, self.persistence.keyring
+        )
+        router = LogisticRouter.model_validate_json(files["router.json"])
+        if model.state == "candidate":
+            self.registry.promote(
+                PromotionRequest(
+                    model_version=model.version,
+                    target_state="evaluating",
+                    reason="evaluation_requested",
+                ),
+                identity,
+            )
+        elif model.state in {"revoked", "deprecated"}:
+            raise GatewayError(409, "model_not_evaluating")
+        start = now()
+        result = routing_suite(router, held_out)
+        report = EvaluationReport(
+            specification=spec,
+            candidate_manifest_version=model.version,
+            candidate_model_version=model.version,
+            candidate_artifact_digest=model.artifact_digest,
+            baseline_manifest_version=None,
+            dataset_content_digest=manifest.content_digest,
+            suite_content_digest=hashlib.sha256(b"router-logistic-v1-routing-suite-1").hexdigest(),
+            code_revision=self.revision,
+            started_at=start,
+            completed_at=now(),
+            suite_results=[result],
+            baseline_suite_results=[],
+            paired_comparison=PairedComparison(sample_size=0),
+            segment_comparisons={},
+            coverage={"routing": result.items},
+            pilot_standard_deviation=0,
+            derived_minimum_sample_size=4,
+            gate_decisions=[],
+            passed=False,
+            known_limitations=[
+                "Numeric counterfactual quality proxies; missing coverage labels abstention.",
+                "Independent test fold; calibration uses only the validation fold.",
+                "OOD detection uses unseen categories; zero count means unmeasured.",
+            ],
+        )
+        gates = decisions(report)
+        report = report.model_copy(
+            update={"gate_decisions": gates, "passed": all(g.passed for g in gates)}
+        )
+        self.store.publish(
+            report,
+            manifest.tenant_ids,
+            identity,
+            lock_baseline=False,
+            expected_baseline=None,
+            note=None,
         )
         return report
 

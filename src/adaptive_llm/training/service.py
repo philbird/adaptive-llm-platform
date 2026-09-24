@@ -61,6 +61,12 @@ class TrainingOrchestrator:
             revision,
         )
         self.stopping = Event()
+        from adaptive_llm.routing.train import RouterTrainer
+
+        self.router_trainer = RouterTrainer(data_dir, cipher, keyring)
+
+    def _trainer(self, spec: TrainingJobSpecification) -> Trainer:
+        return self.router_trainer if spec.job_type == "router" else self.trainer
 
     def submit(self, specification: TrainingJobSpecification, identity: Identity) -> TrainingJob:
         LocalDatasetBuilder._authorize(identity, [])
@@ -69,7 +75,7 @@ class TrainingOrchestrator:
         spec = specification.model_copy(update={"code_revision": self.revision})
         dataset = self._eligible(spec, identity)
         return self.registry.enqueue(
-            TrainingJob(specification=spec, trainer_architecture=self.trainer.architecture),
+            TrainingJob(specification=spec, trainer_architecture=self._trainer(spec).architecture),
             dataset.tenant_ids,
             identity,
         )
@@ -94,7 +100,7 @@ class TrainingOrchestrator:
             for job, identity in self.registry.pending_jobs():
                 if self.stopping.is_set():
                     return
-                if job.trainer_architecture != self.trainer.architecture:
+                if job.trainer_architecture != self._trainer(job.specification).architecture:
                     continue
                 try:
                     self.run(job.specification, identity)
@@ -123,7 +129,9 @@ class TrainingOrchestrator:
         read_shards(manifest, self.data_dir, self.cipher, self.keyring)
         if manifest.approval.status != "approved":
             raise GatewayError(409, "dataset_approval_required")
-        if manifest.purpose != "adapter_training":
+        if manifest.purpose != (
+            "router_training" if spec.job_type == "router" else "adapter_training"
+        ):
             raise GatewayError(409, "training_dataset_required")
         for tenant in manifest.tenant_ids:
             # The application is a server-owned training purpose, never a body-supplied identity.
@@ -153,9 +161,10 @@ class TrainingOrchestrator:
     def _run(
         self, spec: TrainingJobSpecification, dataset: DatasetManifest, identity: Identity
     ) -> TrainingJob:
+        trainer = self._trainer(spec)
         job = self.registry.job(spec.job_id, identity)
         if job is not None:
-            if job.trainer_architecture != self.trainer.architecture:
+            if job.trainer_architecture != trainer.architecture:
                 raise GatewayError(409, "training_trainer_mismatch")
             if job.specification != spec:
                 raise GatewayError(409, "training_job_id_conflict")
@@ -164,7 +173,7 @@ class TrainingOrchestrator:
             if job.state == "cancelled":
                 return job
         else:
-            job = TrainingJob(specification=spec, trainer_architecture=self.trainer.architecture)
+            job = TrainingJob(specification=spec, trainer_architecture=trainer.architecture)
             self.registry.save_job(job, dataset.tenant_ids)
         destination = self.data_dir / "models" / spec.registry_id / job.model_version
         working = destination.with_name(f".{job.model_version}.training")
@@ -205,9 +214,7 @@ class TrainingOrchestrator:
 
             cpu_start = thread_time()
             wall_start = perf_counter()
-            usage = self.trainer.train(
-                spec, dataset, working, job.checkpoint_refs, checkpoint, check
-            )
+            usage = trainer.train(spec, dataset, working, job.checkpoint_refs, checkpoint, check)
             check()
             usage = usage.model_copy(
                 update={
@@ -239,11 +246,14 @@ class TrainingOrchestrator:
                 base_model_id=spec.base_model_id,
                 base_model_revision=spec.base_model_revision,
                 base_model_licence=spec.base_model_licence,
-                adapter_architecture=self.trainer.architecture,
+                adapter_architecture=trainer.architecture,
                 adapter_config=spec.adapter_config,
                 tokenizer_id=spec.tokenizer_id,
                 chat_template_version=spec.chat_template_version,
                 context_limit=spec.max_sequence_length,
+                capability_signature_version="1",
+                input_micros_per_1000_tokens=spec.input_micros_per_1000_tokens,
+                output_micros_per_1000_tokens=spec.output_micros_per_1000_tokens,
                 safety_notes=[
                     "Local synthetic lifecycle verification; quality requires evaluation."
                 ],
@@ -288,7 +298,7 @@ class TrainingOrchestrator:
                     "artifact_digest": model.artifact_digest,
                 }
             )
-            self.registry.complete(job, model, trainer_architecture=self.trainer.architecture)
+            self.registry.complete(job, model, trainer_architecture=trainer.architecture)
             return job
         except Exception as error:
             if published:

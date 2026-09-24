@@ -14,10 +14,23 @@ def artifact_digest(hashes: dict[str, str]) -> str:
 
 
 def signed_metadata(manifest: ModelManifest) -> str:
+    excluded = {"artifact_mac", "state", "evaluation_reports", "lifecycle_history"}
+    if manifest.capability_signature_version is None:
+        # Preserve verification of artifacts produced before slice 4b's signed capabilities.
+        excluded.update(
+            {
+                "capability_signature_version",
+                "processing_region",
+                "modalities",
+                "tools_supported",
+                "input_micros_per_1000_tokens",
+                "output_micros_per_1000_tokens",
+            }
+        )
     return json.dumps(
         manifest.model_dump(
             mode="json",
-            exclude={"artifact_mac", "state", "evaluation_reports", "lifecycle_history"},
+            exclude=excluded,
         ),
         sort_keys=True,
     )
@@ -26,6 +39,14 @@ def signed_metadata(manifest: ModelManifest) -> str:
 def verify_artifact(manifest: ModelManifest, path: Path, keyring: Keyring) -> dict[str, bytes]:
     """Return authenticated bytes so loaders never reread files after verification."""
     try:
+        if manifest.capability_signature_version is None and (
+            manifest.processing_region != "local"
+            or manifest.modalities != ["text"]
+            or manifest.tools_supported
+            or manifest.input_micros_per_1000_tokens != 1000
+            or manifest.output_micros_per_1000_tokens != 2000
+        ):
+            raise ValueError
         if not hmac.compare_digest(
             manifest.artifact_mac, keyring.artifact_mac(signed_metadata(manifest))
         ):

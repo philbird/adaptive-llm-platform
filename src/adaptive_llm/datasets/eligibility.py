@@ -66,7 +66,7 @@ def select(
             # Evaluation datasets also require their own purpose permission.
             if specification.purpose == "evaluation" and not current.evaluation_allowed:
                 reasons.add("evaluation_forbidden")
-            if interaction.status != "completed":
+            if interaction.status != "completed" and specification.purpose != "router_training":
                 reasons.add("not_completed")
             if metadata.get_tombstone(tenant, interaction.interaction_id) is not None:
                 reasons.add("interaction_deleted")
@@ -112,7 +112,7 @@ def select(
                 and item.correction_ref
                 and not item.error_code
             ]
-            if any(
+            if specification.purpose != "router_training" and any(
                 item.source == "user"
                 and item.label_type in {"thumb", "rubric"}
                 and item.value.score * 2 < item.value.max_score
@@ -125,7 +125,9 @@ def select(
                 if interaction.final_attempt_id
                 else None
             )
-            if not interaction.input.messages_ref or not interaction.input.content_hash:
+            if specification.purpose != "router_training" and (
+                not interaction.input.messages_ref or not interaction.input.content_hash
+            ):
                 reasons.add("missing_input")
             if reasons:
                 exclusions.update(reasons)

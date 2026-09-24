@@ -24,6 +24,7 @@ Counter = Literal[
     "shadow_drops",
     "shadow_cost_micros",
     "shadow_failures",
+    "live_planner_failures",
     "validation_advisory_failures",
 ]
 Gauge = Literal[
@@ -195,6 +196,13 @@ class InProcessMetrics:
             "low_quality",
             "circuit_open",
             "live_specialists_disabled",
+            "deployment_disabled",
+            "state_ineligible",
+            "context_length",
+            "unsupported_modality",
+            "canary_not_assigned",
+            "not_cheapest",
+            "not_selected",
             "queue_full",
             "disabled",
             "unhealthy",

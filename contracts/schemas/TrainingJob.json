@@ -214,6 +214,12 @@
           "title": "Hardware Class",
           "type": "string"
         },
+        "input_micros_per_1000_tokens": {
+          "default": 1000,
+          "minimum": 0,
+          "title": "Input Micros Per 1000 Tokens",
+          "type": "integer"
+        },
         "job_id": {
           "maxLength": 100,
           "minLength": 1,
@@ -222,8 +228,11 @@
           "type": "string"
         },
         "job_type": {
-          "const": "adapter",
           "default": "adapter",
+          "enum": [
+            "adapter",
+            "router"
+          ],
           "title": "Job Type",
           "type": "string"
         },
@@ -231,6 +240,12 @@
           "default": 256,
           "minimum": 2,
           "title": "Max Sequence Length",
+          "type": "integer"
+        },
+        "output_micros_per_1000_tokens": {
+          "default": 2000,
+          "minimum": 0,
+          "title": "Output Micros Per 1000 Tokens",
           "type": "integer"
         },
         "registry_id": {

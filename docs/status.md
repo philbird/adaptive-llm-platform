@@ -1,7 +1,7 @@
 # Status and gap analysis
 
 The engineering specification v1.0 was supplied on 2026-09-23. Milestone 1 slices 1a–1c
-and milestone 2 slices 2a–2b plus milestone 3 slices 3a–3b and milestone 4 slice 4a are implemented
+and milestone 2 slices 2a–2b plus milestone 3 slices 3a–3b and milestone 4 slices 4a–4b are implemented
 and tested locally with synthetic data. The reviewer runs `make ci` on the host; the slice 3b
 checkpoint passed every gate on 2026-09-24 with the training group installed, including the SBOM
 audit. The reviewer also ran full `make ci` for slice 4a on the host on 2026-09-24 and every
@@ -22,8 +22,8 @@ Python project uses uv/FastAPI; it provides tooling precedent, not shared infras
 | Telemetry | SQLite outbox, retry/quarantine, idempotent sink, in-process metrics and traces | Real transport, exporter, multi-process dispatch |
 | Evaluation (milestone 2, slice 2b, delivered 2026-09-23 on branch `slice-2b`) | Five in-process suites; blinded deterministic judge; paired bootstrap and segmented hard gates; local MACs and transactional foundation baseline lock | Real-provider baseline, human review, asymmetric signing and production promotion approvals |
 | Datasets (milestone 2, slices 2a–2b) | Authenticated feedback/corrections; current-policy eligibility; exact source provenance; indexed exact/5-gram deduplication and golden decontamination; joint family/subject splits; encrypted shards, pending manifests with local MACs and data cards; operator API/CLI; deletion/reproducibility/concurrency tests; evaluation interactions excluded | Asymmetric signing, external artifact lifecycle |
-| Training/registry (milestone 3, slices 3a–3b, delivered 2026-09-24 on branch `slice-3b`) | Signed approval; durable asynchronous queue/cancellation/restart; optional offline CPU LoRA; deterministic safetensors checkpoints and merged/unmerged exports; verified specialist generation; resource limits; exact-artifact evaluation and audited promotion/rollback | GPU/distributed training, external artifact lifecycle, production approvals, traffic routing (milestone 4) |
-| Routing/deployment (milestone 4, slice 4a, delivered 2026-09-24 on branch `slice-4a`) | Immutable route policies, post-response shadow worker and aggregate comparisons, expanded validators, bounded fallback machinery, per-deployment breakers and persistent global/tenant/task disablement; public output remains foundation-only | Live specialist/canary routing, calibrated routing, automated rollback (4b) |
+| Training/registry (milestone 3, slices 3a–3b; router jobs added in 4b) | Signed approval; durable asynchronous queue/cancellation/restart; optional offline CPU LoRA; deterministic exports; verified specialist generation; plain-Python calibrated router jobs; exact-artifact evaluation and audited promotion/rollback | GPU/distributed training, external artifact lifecycle, production approvals |
+| Routing/deployment (milestone 4, slices 4a–4b, delivered 2026-09-24 on branch `slice-4b`) | Immutable policies; shadow comparisons; numeric encrypted router datasets; calibrated logistic/OOD admission; opt-in canary/production responses; segmented outcome costs; persistent automatic rollback and kill controls | Real workload calibration, production approvals, external transport, later bandits |
 | Research | Disabled configuration intent | Isolated activation/pruning work after earlier milestones |
 
 ## Milestone 1, delivered as three reviewable slices
@@ -114,8 +114,8 @@ current policy for every manifest tenant and runs off the HTTP event loop. Two s
 checkpoints support retry with the same job id; final versions are never overwritten.
 All artifact files are digest/MAC verified before specialist loading. Candidate reports bind
 registry version, artifact digest, dataset version and the locked foundation baseline.
-Approval remains an explicit operator action; shadow/canary/production states do not route
-traffic. Emergency rollback uses the previous version's recorded approval history and verified
+At the slice 3a checkpoint, approval remained explicit and shadow/canary/production states did
+not route traffic; slice 4b now opts canary/production into live policies. Emergency rollback uses the previous version's recorded approval history and verified
 artifact, independent of later baseline replacement. Adapter architecture identifiers are
 extensible and checked against the trainer declaration; multi-dataset manifests are refused
 until mixing is supported. Backup/restore atomically covers both database schemas, records
@@ -183,7 +183,7 @@ validated per-application severity overrides. Token-budget completion remains a 
 response. Verified specialists use an eight-entry version/digest cache, with registry eligibility
 rechecked on every access and state/digest changes evicting stale entries.
 
-Live specialist enablement is rejected by the public contract. An injected planner tests the
+At the slice 4a checkpoint, live specialist enablement was rejected by the public contract. An injected planner tested the
 bounded chain's ordering, budgets, deadlines, failure suppression and maximum attempts.
 Breakers use bounded process-local sliding windows and single half-open probes. Environment,
 tenant and task disablement survive restarts and propagate through a one-second pointer cache.
@@ -208,6 +208,87 @@ absence gate passed 336 tests with nine expected skips. The new coverage checks 
 severities and application overrides, preserved budget-limited responses, provider cache reuse
 and revocation/digest eviction, and the distinct shadow proxy version.
 
-Future increments may broaden to milestone 4 live/canary routing (4b),
-milestone 5 distillation, and optional milestone 6 research. Each remains a separate reviewable
-increment. No production acceptance criterion is claimed satisfied at this checkpoint.
+## Milestone 4 slice 4b — calibrated live routing and rollback
+
+Slice 4b is implemented locally without commits or dependency changes. The reviewer ran
+`make ci` on the host on **2026-09-24** and every gate passed, including the SBOM audit:
+**371 tests**, **eight drills**, automatic rollback **1.03 s** breach-to-foundation,
+novel-task foundation routing with `out_of_distribution`, and kill-switch propagation **1.0 s**.
+Router datasets use the existing builder, current-policy/deletion checks, encrypted tenant/split
+shards, approval and
+source-version lineage. The numeric rows preserve absent counterfactual coverage. Router jobs
+use the ordinary durable orchestrator and signed registry artifacts, with independent logistic
+fit, Platt calibration and test folds. The new routing suite gates false-specialist rate and
+ten-bin ECE. Approved router versions enable live policies; only canary/production specialists
+can answer users, and hard controls precede calibrated admission.
+
+Control migration 0010 adds persistent per-specialist disablement, live observations and
+rollback measurements. The monitor checks configured hard thresholds, including critical
+segments, and atomically stores the triggering numbers, disablement audit and deployment event.
+It never promotes. Shadow and canary evidence gate specialist progression; production still
+requires an authenticated operator note. Cost comparisons retain failed attempts and fallback
+cost, expose actual-serving cohorts separately, and exclude shadow cost from live savings.
+
+| Milestone 4 local exit criterion | Slice 4b measured result (2026-09-24) |
+| --- | --- |
+| Numeric counterfactual data and reproducible calibrated router | 60 shadow observations, 40 train / 10 calibration / 10 test; identical signed artifact digests across fresh jobs; coverage gaps retained as nulls |
+| Router promotion gates | Ten-item fold: false-specialist **0**, unnecessary-foundation **0**, ECE **0.00017646**; .021 false-specialist and .101 ECE block approval. This fold has zero natural OOD samples; the separate novelty drill supplies that coverage |
+| Live canary non-inferiority | Five matched specialist/control outcomes; proxy mean delta **0**, 95% CI **[0, 0]**; no hard validation/error/safety failures |
+| Live synthetic savings | Specialist **4** versus foundation **13** USD micros per success: **69.23%** reduction |
+| Live latency and safety | Measured specialist cohort p95 **1.875 ms**, below 5,000 ms; hard validation failures, endpoint errors and critical safety incidents **0** in the passing canary |
+| Business outcome with fallback | Ten successful outcomes, **12 attempts**, two fallbacks; specialist cohort total **66** micros, displayed per-success **7** (exact **6.6**) versus foundation **13**; reduction **49.23%** |
+| Independent arithmetic fixture | Specialist total **400**, ten successes, per-success **40** versus **100**; reduction **60%**; shadow cost **56** separate; one extra failed outcome raises per-success to **50** |
+| Automatic rollback under five seconds | Injected critical breach → persistent disablement → foundation in a second app instance: **1.012 s** (focused repeat **1.014 s**); validation-failing live wrapper also triggers automatic disablement |
+| Existing kill switch and load gates | Kill-switch effect **1.001 s**, 100/100 load requests successful, zero subsequent shadows; event correlation **1,000/1,000**, 5,000 events; normal p95 overhead **1.993 ms**, below 50 ms |
+| Live-path overhead after review pass 1 | **200/200** responses from one production-state specialist at **100%** assignment; full-CI p95 overhead excluding provider time **2.375 ms**, including classification, routing, logging, persistence and HTTP; p95 routing **0.169 ms**, below the **50 ms** overhead target. Focused run: overhead **2.786 ms**, routing **0.187 ms** |
+| Novel task abstention | Foundation response with `out_of_distribution`; measured OOD **0.739**, policy ceiling **0.15** |
+| Deterministic canary assignment | Stable SHA-256 assignment over 10,000 ids within the tested 5% range; shadow state never served live; canary capped at 5%, production at 100% |
+
+These are local synthetic measurements. Task/language/risk features still use the existing
+RAG-flag/English/medium classification. Quality uses the coarse shadow chunk-overlap proxy;
+task/risk pairing is observational matching, not identical-prompt counterfactual inference.
+OOD coverage is reported explicitly, including unmeasured folds. Router `approved` is the
+explicit promoted state required by live policies; generative specialists retain the full
+shadow/canary/production progression. Immutable artifacts and current controls remain distinct.
+Review pass 1 adds snapshot-cadence admission-manifest caching, a bounded verified-router cache
+keyed by version/digest, eviction on registry state/digest changes, and observable fail-closed
+planner exceptions via `live_planner_failures` on `/healthz`. The internal price-comparison
+reason is `not_cheapest`; request-budget errors retain `cost_limit_exceeded`.
+See [canary and rollback](runbooks/canary-and-rollback.md) for commands and detailed limitations.
+
+Future increments are milestone 5 distillation and optional milestone 6 research. Bandits,
+real providers, streaming, semantic classification and production acceptance remain outside
+this slice. The specification, `pyproject.toml` and `uv.lock` are unchanged.
+
+Initial implementation verification commands use the already provisioned environment, with the exact prefix
+`UV_NO_SYNC=1 UV_CACHE_DIR=/private/tmp/adaptive-llm-uv-cache`:
+
+| Command after that prefix | Result |
+| --- | --- |
+| `make contracts` | Generated JSON schemas and OpenAPI synchronized; schema consistency gate passed |
+| `make check integration` | Formatting, Ruff, strict mypy on 67 source files; 194 unit/contract passed, one existing GPU skip; 125 integration passed |
+| `make ci` | Reviewer host run passed every gate, including the SBOM audit, on 2026-09-24: 371 tests and eight drills |
+| `uv run --locked pytest tests/security tests/load -s` | 43 passed; correlation and overhead figures above |
+| `uv run --locked pytest tests/drills -m drill -s` | Eight passed, including rollback, novel task and the existing kill switch; backup/restore verified control migration 0010 |
+| `uv run --locked pytest -m smoke -s` | Two passed; real CPU LoRA lifecycle 2.904 s, fake lifecycle 0.192 s |
+| `make check-without-training` | 362 passed, nine expected optional-stack/GPU skips; the full suite runs with training imports blocked |
+| `uv run --locked pytest tests/integration/test_live_routing.py -q -s --tb=short` | Six passed; measured calibration, live latency, cost and fallback evidence above |
+
+Focused development also ran `uv run --locked ruff format src tests`,
+`uv run --locked ruff check src tests --fix`, `uv run --locked mypy src/adaptive_llm`, and
+`uv run --locked pytest tests/unit/test_router_model.py tests/unit/test_canary.py -q --tb=short`.
+Shadow/training regressions, all-candidate admission, and both new drills were run independently
+before the full gates. Early failures in shadow cost updates and breaker telemetry were fixed;
+no gate was disabled. Recovery-only legacy registry tests inject passed progression evidence
+so they continue to test emergency rollback independently of mutable rollout gates; new live
+tests exercise the real progression checks.
+
+Review pass 1 verification on 2026-09-24: `make contracts` and `make ci` passed end to end,
+including the SBOM audit (no known vulnerabilities), formatting, lint and strict mypy.
+There were **202** unit/contract passes (one existing GPU skip), **126** integration passes,
+**44** security/load passes, **eight** passing drills and **two** passing smoke tests;
+`make check-without-training` finished with **372 passed, nine expected skips**.
+The focused planner, metric, live-routing, application and overhead tests also passed (**30**).
+This full-CI run measured automatic rollback **1.013 s**, kill-switch propagation **1.006 s**,
+and the live overhead numbers in the exit table. `git diff --check` and the protected-file
+diff check passed. No dependency changes or commits were made.

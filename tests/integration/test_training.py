@@ -292,6 +292,9 @@ def test_rollback_after_baseline_replacement_and_transactional_events(
     evaluation_seed: "EvaluationSeed", monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seed = evaluation_seed
+    # This recovery test supplies passed progression evidence; live report gates have their own
+    # integration coverage. Emergency rollback must remain independent of those mutable gates.
+    monkeypatch.setattr(seed.app.state.registry, "progression_gate", lambda *args: None)
     approve(seed)
     baseline = evaluate(seed)
     versions = []
@@ -678,9 +681,10 @@ def test_registration_and_approval_refuse_unsupported_lineage(
     "failure", ["missing_approval", "wrong_approval_edge", "revoked", "artifact"]
 )
 def test_rollback_still_requires_previous_approval_history_and_valid_artifact(
-    evaluation_seed: "EvaluationSeed", failure: str
+    evaluation_seed: "EvaluationSeed", failure: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seed = evaluation_seed
+    monkeypatch.setattr(seed.app.state.registry, "progression_gate", lambda *args: None)
     approve(seed)
     evaluate(seed)
     versions = []

@@ -149,6 +149,7 @@ class LocalValidator:
             passed: bool,
             version: str = "deterministic-1",
             default_severity: Severity = "hard",
+            critical_safety: bool = False,
         ) -> None:
             severity = config.severity.get(name, DEFAULT_SEVERITIES.get(name, default_severity))
             checks.append(
@@ -157,6 +158,7 @@ class LocalValidator:
                     version=version,
                     passed=passed,
                     severity=severity,
+                    critical_safety=critical_safety,
                 )
             )
 
@@ -188,7 +190,7 @@ class LocalValidator:
         counts = Counter(tuple(tokens[i : i + 5]) for i in range(len(tokens) - 4))
         check("repetition", max(counts.values(), default=0) < 3)
         check("truncation", result.finish_reason != "length")
-        check("tool_allowlist", not result.tool_calls)
+        check("tool_allowlist", not result.tool_calls, critical_safety=True)
         for test in config.tests:
             passed = (
                 test.value.casefold() in text.casefold()
@@ -202,6 +204,7 @@ class LocalValidator:
                 passed,
                 test.version,
                 "advisory" if test.kind == "required_text" else "hard",
+                critical_safety=test.kind == "forbidden_text",
             )
         return Validation(
             validator_version="local-validator-3",

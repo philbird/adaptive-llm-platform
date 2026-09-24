@@ -53,6 +53,109 @@
       },
       "title": "BreakerThresholds",
       "type": "object"
+    },
+    "CanaryConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "assignment": {
+          "const": "sha256-interaction-policy-v1",
+          "default": "sha256-interaction-policy-v1",
+          "title": "Assignment",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "tenant_allowlist": {
+          "items": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Tenant Allowlist",
+          "type": "array"
+        },
+        "traffic_fraction": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Traffic Fraction",
+          "type": "number"
+        }
+      },
+      "title": "CanaryConfig",
+      "type": "object"
+    },
+    "RollbackThresholds": {
+      "additionalProperties": false,
+      "properties": {
+        "cost_ratio_max": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "title": "Cost Ratio Max",
+          "type": "number"
+        },
+        "error_rate_max": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Error Rate Max",
+          "type": "number"
+        },
+        "interval_seconds": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "title": "Interval Seconds",
+          "type": "number"
+        },
+        "minimum_samples": {
+          "default": 4,
+          "minimum": 1,
+          "title": "Minimum Samples",
+          "type": "integer"
+        },
+        "non_inferiority_margin": {
+          "default": 0.02,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Non Inferiority Margin",
+          "type": "number"
+        },
+        "p95_latency_ms_max": {
+          "default": 5000,
+          "exclusiveMinimum": 0,
+          "title": "P95 Latency Ms Max",
+          "type": "number"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "validation_failure_rate_max": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Validation Failure Rate Max",
+          "type": "number"
+        },
+        "window_seconds": {
+          "default": 300,
+          "exclusiveMinimum": 0,
+          "maximum": 86400,
+          "title": "Window Seconds",
+          "type": "number"
+        }
+      },
+      "title": "RollbackThresholds",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -60,6 +163,9 @@
   "properties": {
     "breaker": {
       "$ref": "#/$defs/BreakerThresholds"
+    },
+    "canary": {
+      "$ref": "#/$defs/CanaryConfig"
     },
     "eligible_specialist_versions": {
       "items": {
@@ -92,7 +198,8 @@
           "out_of_distribution",
           "low_quality",
           "circuit_open",
-          "live_specialists_disabled"
+          "live_specialists_disabled",
+          "not_cheapest"
         ],
         "type": "string"
       },
@@ -105,7 +212,6 @@
       "type": "boolean"
     },
     "live_specialists_allowed": {
-      "const": false,
       "default": false,
       "title": "Live Specialists Allowed",
       "type": "boolean"
@@ -138,12 +244,30 @@
       "title": "Quality Threshold",
       "type": "number"
     },
+    "rollback": {
+      "$ref": "#/$defs/RollbackThresholds"
+    },
     "router_confidence_threshold": {
       "default": 0.85,
       "maximum": 1,
       "minimum": 0,
       "title": "Router Confidence Threshold",
       "type": "number"
+    },
+    "router_version": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Router Version"
     },
     "schema_version": {
       "const": "1.0",

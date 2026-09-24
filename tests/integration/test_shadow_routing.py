@@ -398,7 +398,7 @@ def test_policy_immutable_activation_rollback_and_public_live_rejection(
         seed.client.post(
             f"/v1/models/{version}/promotion-requests",
             headers=OPERATOR,
-            json={"model_version": version, "target_state": "canary", **NOTE},
+            json={"model_version": version, "target_state": "revoked", **NOTE},
         ).status_code
         == 200
     )
