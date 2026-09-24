@@ -1,0 +1,44 @@
+{
+  "properties": {
+    "benchmark_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Benchmark Id",
+      "type": "string"
+    },
+    "candidate_version": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Candidate Version",
+      "type": "string"
+    },
+    "evaluation_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Evaluation Id",
+      "type": "string"
+    },
+    "requests": {
+      "default": 40,
+      "maximum": 1000,
+      "minimum": 4,
+      "title": "Requests",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "candidate_version",
+    "evaluation_id"
+  ],
+  "title": "BenchmarkSpecification",
+  "type": "object"
+}

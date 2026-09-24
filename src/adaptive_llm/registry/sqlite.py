@@ -43,6 +43,9 @@ class SQLiteModelRegistry:
         self.progression_gate: (
             Callable[[ModelManifest, PromotionRequest, Identity], None] | None
         ) = None
+        self.benchmark_gate: Callable[[ModelManifest, EvaluationReport, Identity], bool] | None = (
+            None
+        )
 
     def get(self, version: str, identity: Identity) -> ModelManifest:
         LocalDatasetBuilder._authorize(identity, [])
@@ -303,6 +306,12 @@ class SQLiteModelRegistry:
                 and report.dataset_content_digest == dataset.content_digest
             )
         if report is None or report.specification.baseline_deployment_id is None:
+            return False
+        if manifest.distillation is not None and (
+            report.distillation != manifest.distillation
+            or self.benchmark_gate is None
+            or not self.benchmark_gate(manifest, report, identity)
+        ):
             return False
         baseline = self.evaluations.baseline(
             report.specification.baseline_deployment_id, dataset.version, identity

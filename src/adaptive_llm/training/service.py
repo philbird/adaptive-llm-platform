@@ -3,6 +3,8 @@
 import asyncio
 import fcntl
 import hashlib
+import json
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from threading import Event
@@ -52,6 +54,9 @@ class TrainingOrchestrator:
         cipher: PayloadCipher,
         keyring: Keyring,
         revision: str,
+        *,
+        student_memory_limit_bytes: int = 2_000_000_000,
+        student_time_limit_seconds: float = 300,
     ) -> None:
         self.registry, self.builder, self.policy, self.trainer = registry, builder, policy, trainer
         self.data_dir, self.cipher, self.keyring, self.revision = (
@@ -61,11 +66,27 @@ class TrainingOrchestrator:
             revision,
         )
         self.stopping = Event()
+        self.distillation_eligibility: Callable[[DatasetManifest, Identity], None] | None = None
         from adaptive_llm.routing.train import RouterTrainer
 
         self.router_trainer = RouterTrainer(data_dir, cipher, keyring)
+        from adaptive_llm.distillation.training import StudentTrainer
+
+        self.student_trainers = {
+            mode: StudentTrainer(
+                data_dir,
+                cipher,
+                keyring,
+                full=mode == "full",
+                memory_limit_bytes=student_memory_limit_bytes,
+                time_limit_seconds=student_time_limit_seconds,
+            )
+            for mode in ("full", "lora")
+        }
 
     def _trainer(self, spec: TrainingJobSpecification) -> Trainer:
+        if spec.job_type == "distillation":
+            return self.student_trainers[spec.student_training]
         return self.router_trainer if spec.job_type == "router" else self.trainer
 
     def submit(self, specification: TrainingJobSpecification, identity: Identity) -> TrainingJob:
@@ -130,9 +151,31 @@ class TrainingOrchestrator:
         if manifest.approval.status != "approved":
             raise GatewayError(409, "dataset_approval_required")
         if manifest.purpose != (
-            "router_training" if spec.job_type == "router" else "adapter_training"
+            "router_training"
+            if spec.job_type == "router"
+            else "distillation"
+            if spec.job_type == "distillation"
+            else "adapter_training"
         ):
             raise GatewayError(409, "training_dataset_required")
+        if spec.job_type == "distillation":
+            if manifest.distillation is None:
+                raise GatewayError(409, "distillation_lineage_required")
+            if self.distillation_eligibility is None:
+                raise GatewayError(503, "distillation_unavailable")
+            self.distillation_eligibility(manifest, identity)
+            source = self.builder.get(
+                manifest.distillation.source_dataset_id,
+                manifest.distillation.source_dataset_version,
+                identity,
+            )
+            read_shards(source, self.data_dir, self.cipher, self.keyring)
+            if (
+                source.approval.status != "approved"
+                or source.purpose != "adapter_training"
+                or source.content_digest != manifest.distillation.source_content_digest
+            ):
+                raise GatewayError(409, "approved_adapter_source_required")
         for tenant in manifest.tenant_ids:
             # The application is a server-owned training purpose, never a body-supplied identity.
             trusted = replace(identity, tenant_id=tenant, application_ids=frozenset({"training"}))
@@ -216,6 +259,8 @@ class TrainingOrchestrator:
             wall_start = perf_counter()
             usage = trainer.train(spec, dataset, working, job.checkpoint_refs, checkpoint, check)
             check()
+            if spec.job_type == "distillation":
+                self._eligible(spec, identity)
             usage = usage.model_copy(
                 update={
                     "cpu_seconds": thread_time() - cpu_start,
@@ -239,6 +284,19 @@ class TrainingOrchestrator:
             actor = identity.subject_id_pseudonymous
             if actor is None:
                 raise GatewayError(422, "operator_actor_required")
+            student_architecture: str | None = None
+            student_parameter_count: int | None = None
+            limitations = ["Local MAC, not asymmetric signing."]
+            if spec.job_type == "distillation":
+                # This report was produced from the same verified snapshot used for training.
+                report = json.loads((working / "training_report.json").read_bytes())
+                student_architecture = report["student_architecture"]
+                student_parameter_count = report["student_parameter_count"]
+                if (
+                    dataset.distillation is not None
+                    and dataset.distillation.teacher_parameter_count is None
+                ):
+                    limitations.append("teacher size unknown; size reduction not verified")
             model = ModelManifest(
                 registry_id=spec.registry_id,
                 version=job.model_version,
@@ -273,6 +331,7 @@ class TrainingOrchestrator:
                 artifact_hashes=hashes,
                 artifact_digest=artifact_digest(hashes),
                 artifact_mac="pending",
+                manifest_mac_version="2",
                 storage_location=destination.relative_to(self.data_dir).as_posix(),
                 lifecycle_history=[
                     LifecycleTransition(
@@ -282,6 +341,10 @@ class TrainingOrchestrator:
                         reason="training_completed",
                     )
                 ],
+                student_architecture=student_architecture,
+                student_parameter_count=student_parameter_count,
+                known_limitations=limitations,
+                distillation=dataset.distillation if spec.job_type == "distillation" else None,
             )
             model = model.model_copy(
                 update={"artifact_mac": self.keyring.artifact_mac(signed_metadata(model))}
@@ -318,6 +381,9 @@ class TrainingOrchestrator:
                 "training_dependencies_unavailable",
                 "invalid_base_model",
                 "training_configuration_invalid",
+                "student_must_be_smaller",
+                "soft_target_tokenizer_mismatch",
+                "invalid_soft_targets",
             }
             code = (
                 error.code

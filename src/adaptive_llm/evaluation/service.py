@@ -194,6 +194,7 @@ class LocalEvaluator:
         validate_versions(self.judge, spec.judge_version, spec.rubric_version)
         start = now()
         manifest, held_out = self.reader.read(spec, identity)
+        model = None
         if spec.candidate_deployment_id not in self.deployments and self.registry is not None:
             try:
                 model = self.registry.get(spec.candidate_deployment_id, identity)
@@ -276,6 +277,29 @@ class LocalEvaluator:
                     locked.suite_results if locked and not locking else None,
                 )
             )
+            teacher_scores: list[ItemScore] | None = None
+            if model is not None and model.distillation is not None:
+                from adaptive_llm.distillation.data import teacher_deployment, teacher_digest
+
+                lineage = model.distillation
+                if manifest.distillation != lineage:
+                    raise GatewayError(409, "distillation_lineage_mismatch")
+                teacher = teacher_deployment(self, lineage.teacher_deployment_id, identity)
+                if (
+                    teacher.version != lineage.teacher_version
+                    or teacher_digest(teacher) != lineage.teacher_artifact_digest
+                    or spec.judge_version != lineage.judge_version
+                    or spec.rubric_version != lineage.rubric_version
+                ):
+                    raise GatewayError(409, "distillation_teacher_changed")
+                teacher_result = asyncio.run(
+                    HeldOutSuite().run(
+                        self._runner(lineage.teacher_deployment_id, identity, scratch),
+                        held_out,
+                        spec,
+                    )
+                )
+                teacher_scores = teacher_result.scores
         candidate_scores = self._scores(candidate_results)
         baseline_scores = self._scores(baseline_results)
         comparison = self._compare(candidate_scores, baseline_scores, spec)
@@ -288,6 +312,16 @@ class LocalEvaluator:
             )
             for key in segments
         }
+        if teacher_scores is not None:
+            segment_comparisons["distillation"] = self._compare(
+                candidate_scores, teacher_scores, spec
+            )
+            for key in segments:
+                segment_comparisons[f"distillation.{key}"] = self._compare(
+                    [s for s in candidate_scores if key in s.segments],
+                    [s for s in teacher_scores if key in s.segments],
+                    spec,
+                )
         report = EvaluationReport(
             specification=spec,
             candidate_manifest_version=candidate_version,
@@ -324,6 +358,7 @@ class LocalEvaluator:
                 "Retrieval uses immutable source snapshots and ACL decoys; no live index.",
                 "Latency includes private in-memory persistence; no tenant writes or case events.",
             ],
+            distillation=model.distillation if model is not None else None,
         )
         gates = decisions(report)
         report = report.model_copy(

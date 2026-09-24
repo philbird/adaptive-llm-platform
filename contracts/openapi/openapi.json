@@ -65,6 +65,248 @@
         "title": "AdapterConfig",
         "type": "object"
       },
+      "BenchmarkMeasurement": {
+        "properties": {
+          "concurrency": {
+            "const": 4,
+            "default": 4,
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "cost_per_success_micros": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Success Micros"
+          },
+          "input_micros_per_1000_tokens": {
+            "title": "Input Micros Per 1000 Tokens",
+            "type": "integer"
+          },
+          "output_micros_per_1000_tokens": {
+            "title": "Output Micros Per 1000 Tokens",
+            "type": "integer"
+          },
+          "p50_latency_ms": {
+            "minimum": 0.0,
+            "title": "P50 Latency Ms",
+            "type": "number"
+          },
+          "p95_latency_ms": {
+            "minimum": 0.0,
+            "title": "P95 Latency Ms",
+            "type": "number"
+          },
+          "peak_rss_bytes": {
+            "exclusiveMinimum": 0.0,
+            "title": "Peak Rss Bytes",
+            "type": "integer"
+          },
+          "requests": {
+            "title": "Requests",
+            "type": "integer"
+          },
+          "requests_per_second": {
+            "minimum": 0.0,
+            "title": "Requests Per Second",
+            "type": "number"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "successes": {
+            "title": "Successes",
+            "type": "integer"
+          },
+          "total_cost_micros": {
+            "minimum": 0.0,
+            "title": "Total Cost Micros",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requests",
+          "successes",
+          "p50_latency_ms",
+          "p95_latency_ms",
+          "requests_per_second",
+          "peak_rss_bytes",
+          "total_cost_micros",
+          "cost_per_success_micros",
+          "input_micros_per_1000_tokens",
+          "output_micros_per_1000_tokens"
+        ],
+        "title": "BenchmarkMeasurement",
+        "type": "object"
+      },
+      "BenchmarkReport": {
+        "properties": {
+          "candidate_artifact_digest": {
+            "title": "Candidate Artifact Digest",
+            "type": "string"
+          },
+          "cost_reduction_fraction": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Reduction Fraction"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset_content_digest": {
+            "title": "Dataset Content Digest",
+            "type": "string"
+          },
+          "known_limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Known Limitations",
+            "type": "array"
+          },
+          "latency_reduction_fraction": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Reduction Fraction"
+          },
+          "mac": {
+            "default": "",
+            "title": "Mac",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "quality_comparison": {
+            "$ref": "#/components/schemas/PairedComparison"
+          },
+          "request_mix_digest": {
+            "title": "Request Mix Digest",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "specification": {
+            "$ref": "#/components/schemas/BenchmarkSpecification"
+          },
+          "student": {
+            "$ref": "#/components/schemas/BenchmarkMeasurement"
+          },
+          "teacher": {
+            "$ref": "#/components/schemas/BenchmarkMeasurement"
+          },
+          "teacher_artifact_digest": {
+            "title": "Teacher Artifact Digest",
+            "type": "string"
+          },
+          "teacher_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Teacher Version",
+            "type": "string"
+          },
+          "tenant_ids": {
+            "items": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            "title": "Tenant Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "specification",
+          "tenant_ids",
+          "candidate_artifact_digest",
+          "teacher_version",
+          "teacher_artifact_digest",
+          "dataset_content_digest",
+          "request_mix_digest",
+          "student",
+          "teacher",
+          "quality_comparison",
+          "latency_reduction_fraction",
+          "cost_reduction_fraction",
+          "passed",
+          "known_limitations"
+        ],
+        "title": "BenchmarkReport",
+        "type": "object"
+      },
+      "BenchmarkSpecification": {
+        "properties": {
+          "benchmark_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Benchmark Id",
+            "type": "string"
+          },
+          "candidate_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Candidate Version",
+            "type": "string"
+          },
+          "evaluation_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Evaluation Id",
+            "type": "string"
+          },
+          "requests": {
+            "default": 40,
+            "maximum": 1000.0,
+            "minimum": 4.0,
+            "title": "Requests",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_version",
+          "evaluation_id"
+        ],
+        "title": "BenchmarkSpecification",
+        "type": "object"
+      },
       "BreakerThresholds": {
         "additionalProperties": false,
         "properties": {
@@ -375,6 +617,15 @@
             ],
             "title": "Actor"
           },
+          "approval_mac_version": {
+            "default": "1",
+            "enum": [
+              "1",
+              "2"
+            ],
+            "title": "Approval Mac Version",
+            "type": "string"
+          },
           "at": {
             "anyOf": [
               {
@@ -496,6 +747,16 @@
             "format": "date-time",
             "title": "Deletions Applied Through",
             "type": "string"
+          },
+          "distillation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DistillationLineage"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "eligibility_policy_version": {
             "title": "Eligibility Policy Version",
@@ -664,6 +925,13 @@
             "title": "Eligibility Policy Version",
             "type": "string"
           },
+          "general_safety_fraction": {
+            "default": 0.2,
+            "maximum": 0.8,
+            "minimum": 0.0,
+            "title": "General Safety Fraction",
+            "type": "number"
+          },
           "grouping_keys": {
             "items": {
               "enum": [
@@ -710,6 +978,11 @@
             "minimum": 0.0,
             "title": "Seed",
             "type": "integer"
+          },
+          "soft_targets": {
+            "default": false,
+            "title": "Soft Targets",
+            "type": "boolean"
           },
           "source_dataset_id": {
             "anyOf": [
@@ -762,6 +1035,34 @@
             "title": "Target Preference Order",
             "type": "array"
           },
+          "teacher_deployment_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher Deployment Id"
+          },
+          "teacher_max_output_tokens": {
+            "default": 256,
+            "maximum": 2048.0,
+            "minimum": 1.0,
+            "title": "Teacher Max Output Tokens",
+            "type": "integer"
+          },
+          "teacher_minimum_score": {
+            "default": 0.9,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Teacher Minimum Score",
+            "type": "number"
+          },
           "tenant_ids": {
             "items": {
               "maxLength": 100,
@@ -792,6 +1093,175 @@
           "eligibility_policy_version"
         ],
         "title": "DatasetSpecification",
+        "type": "object"
+      },
+      "DistillationLineage": {
+        "properties": {
+          "chat_template_version": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Template Version"
+          },
+          "generation_parameters": {
+            "patternProperties": {
+              "^[\\w.-]+$": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            },
+            "propertyNames": {
+              "maxLength": 100,
+              "minLength": 1
+            },
+            "title": "Generation Parameters",
+            "type": "object"
+          },
+          "judge_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Judge Version",
+            "type": "string"
+          },
+          "minimum_score": {
+            "title": "Minimum Score",
+            "type": "number"
+          },
+          "mix_content_digest": {
+            "title": "Mix Content Digest",
+            "type": "string"
+          },
+          "mix_counts": {
+            "patternProperties": {
+              "^[\\w.-]+$": {
+                "type": "integer"
+              }
+            },
+            "propertyNames": {
+              "maxLength": 100,
+              "minLength": 1
+            },
+            "title": "Mix Counts",
+            "type": "object"
+          },
+          "requested_mix_fraction": {
+            "title": "Requested Mix Fraction",
+            "type": "number"
+          },
+          "rubric_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Rubric Version",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "soft_target_files": {
+            "items": {
+              "$ref": "#/components/schemas/SoftTargetFile"
+            },
+            "title": "Soft Target Files",
+            "type": "array"
+          },
+          "source_content_digest": {
+            "title": "Source Content Digest",
+            "type": "string"
+          },
+          "source_dataset_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Source Dataset Id",
+            "type": "string"
+          },
+          "source_dataset_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Source Dataset Version",
+            "type": "string"
+          },
+          "teacher_artifact_digest": {
+            "title": "Teacher Artifact Digest",
+            "type": "string"
+          },
+          "teacher_deployment_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Teacher Deployment Id",
+            "type": "string"
+          },
+          "teacher_parameter_count": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher Parameter Count"
+          },
+          "teacher_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Teacher Version",
+            "type": "string"
+          },
+          "tokenizer_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokenizer Id"
+          }
+        },
+        "required": [
+          "source_dataset_id",
+          "source_dataset_version",
+          "source_content_digest",
+          "teacher_deployment_id",
+          "teacher_version",
+          "teacher_artifact_digest",
+          "generation_parameters",
+          "judge_version",
+          "rubric_version",
+          "minimum_score",
+          "requested_mix_fraction",
+          "mix_counts",
+          "mix_content_digest"
+        ],
+        "title": "DistillationLineage",
         "type": "object"
       },
       "EvaluationInput": {
@@ -1087,6 +1557,16 @@
             "minimum": 1.0,
             "title": "Derived Minimum Sample Size",
             "type": "integer"
+          },
+          "distillation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DistillationLineage"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "gate_decisions": {
             "items": {
@@ -2107,6 +2587,16 @@
             "title": "Datasets",
             "type": "array"
           },
+          "distillation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DistillationLineage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evaluation_reports": {
             "patternProperties": {
               "^[\\w.-]+$": {
@@ -2177,6 +2667,15 @@
             "title": "Lifecycle History",
             "type": "array"
           },
+          "manifest_mac_version": {
+            "default": "1",
+            "enum": [
+              "1",
+              "2"
+            ],
+            "title": "Manifest Mac Version",
+            "type": "string"
+          },
           "modalities": {
             "items": {
               "const": "text",
@@ -2243,6 +2742,32 @@
             "minLength": 1,
             "title": "Storage Location",
             "type": "string"
+          },
+          "student_architecture": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Architecture"
+          },
+          "student_parameter_count": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Parameter Count"
           },
           "tenant_ids": {
             "items": {
@@ -3203,6 +3728,49 @@
         "title": "ShadowReport",
         "type": "object"
       },
+      "SoftTargetFile": {
+        "properties": {
+          "example_hash": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Example Hash",
+            "type": "string"
+          },
+          "key_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Key Version",
+            "type": "string"
+          },
+          "plaintext_hash": {
+            "title": "Plaintext Hash",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "example_hash",
+          "plaintext_hash",
+          "key_version"
+        ],
+        "title": "SoftTargetFile",
+        "type": "object"
+      },
       "SourceWindow": {
         "properties": {
           "end": {
@@ -3640,7 +4208,8 @@
             "default": "adapter",
             "enum": [
               "adapter",
-              "router"
+              "router",
+              "distillation"
             ],
             "title": "Job Type",
             "type": "string"
@@ -3677,11 +4246,27 @@
             "title": "Seed",
             "type": "integer"
           },
+          "soft_target_weight": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Soft Target Weight",
+            "type": "number"
+          },
           "steps": {
             "default": 2,
             "minimum": 1.0,
             "title": "Steps",
             "type": "integer"
+          },
+          "student_training": {
+            "default": "full",
+            "enum": [
+              "full",
+              "lora"
+            ],
+            "title": "Student Training",
+            "type": "string"
           },
           "tokenizer_id": {
             "default": "fake-whitespace-v1",
@@ -3831,6 +4416,149 @@
         "tags": [
           "operations"
         ]
+      }
+    },
+    "/v1/benchmarks/jobs": {
+      "post": {
+        "operationId": "benchmark_v1_benchmarks_jobs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchmarkSpecification"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Benchmark"
+      }
+    },
+    "/v1/benchmarks/jobs/{benchmark_id}": {
+      "get": {
+        "operationId": "get_benchmark_v1_benchmarks_jobs__benchmark_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "benchmark_id",
+            "required": true,
+            "schema": {
+              "title": "Benchmark Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Benchmark"
       }
     },
     "/v1/canary/reports": {

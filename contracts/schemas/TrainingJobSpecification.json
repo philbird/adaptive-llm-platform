@@ -162,7 +162,8 @@
       "default": "adapter",
       "enum": [
         "adapter",
-        "router"
+        "router",
+        "distillation"
       ],
       "title": "Job Type",
       "type": "string"
@@ -199,11 +200,27 @@
       "title": "Seed",
       "type": "integer"
     },
+    "soft_target_weight": {
+      "default": 0.5,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Soft Target Weight",
+      "type": "number"
+    },
     "steps": {
       "default": 2,
       "minimum": 1,
       "title": "Steps",
       "type": "integer"
+    },
+    "student_training": {
+      "default": "full",
+      "enum": [
+        "full",
+        "lora"
+      ],
+      "title": "Student Training",
+      "type": "string"
     },
     "tokenizer_id": {
       "default": "fake-whitespace-v1",

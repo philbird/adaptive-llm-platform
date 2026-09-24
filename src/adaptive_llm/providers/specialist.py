@@ -23,13 +23,18 @@ class SpecialistProvider:
         self.model_version = f"{manifest.base_model_revision}.{manifest.artifact_digest}"
         self.artifact_digest = manifest.artifact_digest
         self._real: LoraGenerator | None = None
-        if manifest.adapter_architecture == "lora-peft-v1":
+        if manifest.adapter_architecture in {"lora-peft-v1", "student-full-v1"}:
             from adaptive_llm.training.lora import LoraGenerator
 
             self._real = LoraGenerator(manifest, data_dir, verified)
         else:
             self._weights = verified["adapter_weights.bin"]
         self._foundation = FakeProvider()
+
+    async def soft_targets(self, row: bytes) -> bytes | None:
+        if self._real is None:
+            return None
+        return await asyncio.to_thread(self._real.soft_targets, row)
 
     async def generate(self, request: ProviderRequest) -> ProviderResult:
         if self._real is not None:

@@ -56,6 +56,7 @@ def test_fresh_migrations_are_separate_and_legacy_control_moves(tmp_path: Path) 
         8,
         9,
         10,
+        11,
     ]
     upgraded.close()
 

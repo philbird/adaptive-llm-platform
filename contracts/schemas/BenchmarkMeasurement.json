@@ -1,0 +1,82 @@
+{
+  "properties": {
+    "concurrency": {
+      "const": 4,
+      "default": 4,
+      "title": "Concurrency",
+      "type": "integer"
+    },
+    "cost_per_success_micros": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Cost Per Success Micros"
+    },
+    "input_micros_per_1000_tokens": {
+      "title": "Input Micros Per 1000 Tokens",
+      "type": "integer"
+    },
+    "output_micros_per_1000_tokens": {
+      "title": "Output Micros Per 1000 Tokens",
+      "type": "integer"
+    },
+    "p50_latency_ms": {
+      "minimum": 0,
+      "title": "P50 Latency Ms",
+      "type": "number"
+    },
+    "p95_latency_ms": {
+      "minimum": 0,
+      "title": "P95 Latency Ms",
+      "type": "number"
+    },
+    "peak_rss_bytes": {
+      "exclusiveMinimum": 0,
+      "title": "Peak Rss Bytes",
+      "type": "integer"
+    },
+    "requests": {
+      "title": "Requests",
+      "type": "integer"
+    },
+    "requests_per_second": {
+      "minimum": 0,
+      "title": "Requests Per Second",
+      "type": "number"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "successes": {
+      "title": "Successes",
+      "type": "integer"
+    },
+    "total_cost_micros": {
+      "minimum": 0,
+      "title": "Total Cost Micros",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "requests",
+    "successes",
+    "p50_latency_ms",
+    "p95_latency_ms",
+    "requests_per_second",
+    "peak_rss_bytes",
+    "total_cost_micros",
+    "cost_per_success_micros",
+    "input_micros_per_1000_tokens",
+    "output_micros_per_1000_tokens"
+  ],
+  "title": "BenchmarkMeasurement",
+  "type": "object"
+}

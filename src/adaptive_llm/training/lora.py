@@ -34,7 +34,7 @@ from adaptive_llm.contracts import (
     TrainingJobSpecification,
     Usage,
 )
-from adaptive_llm.datasets.artifacts import read_shards
+from adaptive_llm.datasets.artifacts import read_shards, read_soft_targets
 from adaptive_llm.gateway.identity import GatewayError, Keyring
 from adaptive_llm.providers import CITATION_PATTERN, ProviderRequest, ProviderResult
 from adaptive_llm.storage.crypto import PayloadCipher
@@ -242,6 +242,7 @@ class LoraTrainer:
     ) -> None:
         self.data_dir, self.cipher, self.keyring = data_dir, cipher, keyring
         self.memory_limit_bytes, self.time_limit_seconds = memory_limit_bytes, time_limit_seconds
+        self.full_student = False
 
     def train(
         self,
@@ -290,14 +291,40 @@ class LoraTrainer:
             raise GatewayError(422, "training_memory_limit")
         if spec.max_sequence_length > base.context_limit:
             raise GatewayError(422, "training_configuration_invalid")
+        if spec.job_type == "distillation":
+            lineage = dataset.distillation
+            if lineage is None or (
+                lineage.teacher_parameter_count is not None
+                and base.parameter_count >= lineage.teacher_parameter_count
+            ):
+                raise GatewayError(422, "student_must_be_smaller")
+            if lineage.soft_target_files and (
+                spec.tokenizer_id != lineage.tokenizer_id
+                or spec.chat_template_version != lineage.chat_template_version
+            ):
+                raise GatewayError(422, "soft_target_tokenizer_mismatch")
         model, tokenizer = load_base(base, libs, spec.adapter_config.precision)
-        model = attach(model, spec.adapter_config, libs)
+        student_metadata: dict[str, str | int] = {}
+        if spec.job_type == "distillation":
+            # The loaded config comes exclusively from the verified base snapshot. Transformers
+            # normalizes architecture-specific aliases such as n_layer/n_embd on its config.
+            layers = getattr(model.config, "num_hidden_layers", None)
+            hidden = getattr(model.config, "hidden_size", None)
+            geometry = f"-{layers}x{hidden}" if layers is not None and hidden is not None else ""
+            student_metadata = {
+                "student_architecture": f"{model.config.model_type}{geometry}-v1",
+                "student_parameter_count": base.parameter_count,
+            }
+        if not self.full_student:
+            model = attach(model, spec.adapter_config, libs)
         model.train()
         model.config.use_cache = False
         rows = read_shards(dataset, self.data_dir, self.cipher, self.keyring)["train"]
+        soft = read_soft_targets(dataset, self.data_dir, self.cipher)
         if not rows:
             raise GatewayError(409, "empty_training_split")
         examples: list[tuple[list[int], list[int]]] = []
+        distributions: list[Any | None] = []
         for raw in rows:
             row = TrainingExample.model_validate_json(raw)
             messages = example_messages(row)
@@ -315,6 +342,27 @@ class LoraTrainer:
             if not prompt or not target:
                 raise GatewayError(422, "training_configuration_invalid")
             examples.append((prompt + target, [-100] * len(prompt) + target))
+            raw_soft = soft.get(json.loads(raw)["example_hash"])
+            distribution = None
+            if raw_soft is not None:
+                tensors = libs.tensors.load(raw_soft)
+                if (
+                    set(tensors) != {"log_probs", "target_ids"}
+                    or tensors["target_ids"].tolist()[: len(target)] != target
+                ):
+                    raise GatewayError(409, "invalid_soft_targets")
+                distribution = tensors["log_probs"][: len(target)]
+                if (
+                    list(distribution.shape) != [len(target), model.config.vocab_size]
+                    or not bool(libs.torch.isfinite(distribution).all())
+                    or not bool(
+                        libs.torch.allclose(
+                            distribution.exp().sum(-1), libs.torch.ones(len(target)), atol=1e-5
+                        )
+                    )
+                ):
+                    raise GatewayError(409, "invalid_soft_targets")
+            distributions.append(distribution)
         torch = libs.torch
         optimizer = torch.optim.AdamW(
             [p for p in model.parameters() if p.requires_grad],
@@ -348,9 +396,11 @@ class LoraTrainer:
         if reports:
             completed = max(reports)
             report, files = reports[completed]
-            libs.peft.set_peft_model_state_dict(
-                model, libs.tensors.load(files["adapter.safetensors"])
-            )
+            state_tensors = libs.tensors.load(files["adapter.safetensors"])
+            if self.full_student:
+                model.load_state_dict(state_tensors, strict=True)
+            else:
+                libs.peft.set_peft_model_state_dict(model, state_tensors)
             states = libs.tensors.load(files["optimizer.safetensors"])
             state = optimizer.state_dict()
             for index, _parameter in enumerate(optimizer.param_groups[0]["params"]):
@@ -371,9 +421,11 @@ class LoraTrainer:
                 return
             adapter = libs.tensors.save(
                 {
-                    k: v.detach().cpu().contiguous()
-                    for k, v in libs.peft.get_peft_model_state_dict(
-                        model, save_embedding_layers=False
+                    k: v.detach().cpu().contiguous().clone()
+                    for k, v in (
+                        model.state_dict()
+                        if self.full_student
+                        else libs.peft.get_peft_model_state_dict(model, save_embedding_layers=False)
                     ).items()
                 }
             )
@@ -433,7 +485,27 @@ class LoraTrainer:
                 )
                 labels = torch.tensor([y + [-100] * (width - len(y)) for _, y in selected])
                 mask = torch.tensor([[1] * len(x) + [0] * (width - len(x)) for x, _ in selected])
-                loss = model(input_ids=ids, attention_mask=mask, labels=labels).loss
+                output = model(input_ids=ids, attention_mask=mask, labels=labels)
+                loss = output.loss
+                kl_losses = []
+                for index, (_, target_labels) in enumerate(selected):
+                    distribution = distributions[(offset + index) % len(examples)]
+                    if distribution is None:
+                        continue
+                    prefix_length = target_labels.count(-100)
+                    logits = output.logits[index, prefix_length - 1 : len(target_labels) - 1]
+                    kl_losses.append(
+                        torch.nn.functional.kl_div(
+                            logits.log_softmax(-1),
+                            distribution,
+                            log_target=True,
+                            reduction="batchmean",
+                        )
+                    )
+                if kl_losses:
+                    loss = (
+                        1 - spec.soft_target_weight
+                    ) * loss + spec.soft_target_weight * torch.stack(kl_losses).mean()
                 if not bool(torch.isfinite(loss)):
                     raise GatewayError(503, "training_failed")
                 (loss / spec.adapter_config.gradient_accumulation).backward()
@@ -450,20 +522,23 @@ class LoraTrainer:
         (directory / "training_report.json").write_bytes(
             encoded(
                 {
-                    key: report[key]
-                    for key in (
-                        "steps",
-                        "examples",
-                        "loss_curve",
-                        "tokens_seen",
-                        "base_manifest_digest",
-                        "binding",
-                        "adapter_digest",
-                    )
+                    **{
+                        key: report[key]
+                        for key in (
+                            "steps",
+                            "examples",
+                            "loss_curve",
+                            "tokens_seen",
+                            "base_manifest_digest",
+                            "binding",
+                            "adapter_digest",
+                        )
+                    },
+                    **student_metadata,
                 }
             )
         )
-        merged = model.merge_and_unload()
+        merged = model if self.full_student else model.merge_and_unload()
         # Clone tied weights so the safetensors export has independent contiguous storage.
         (directory / "merged.safetensors").write_bytes(
             libs.tensors.save(
@@ -529,16 +604,51 @@ class LoraGenerator:
                 model, self.tokenizer = load_base(
                     base, self.libs, manifest.adapter_config.precision
                 )
-                self.model = attach(model, manifest.adapter_config, self.libs)
-                self.libs.peft.set_peft_model_state_dict(
-                    self.model, self.libs.tensors.load(files["adapter.safetensors"])
-                )
+                if manifest.adapter_architecture == "student-full-v1":
+                    self.model = model
+                    self.model.load_state_dict(
+                        self.libs.tensors.load(files["adapter.safetensors"]), strict=True
+                    )
+                else:
+                    self.model = attach(model, manifest.adapter_config, self.libs)
+                    self.libs.peft.set_peft_model_state_dict(
+                        self.model, self.libs.tensors.load(files["adapter.safetensors"])
+                    )
                 self.model.eval()
             self.limit = min(base.context_limit, manifest.context_limit)
         except GatewayError:
             raise
         except Exception:
             raise GatewayError(409, "artifact_integrity_failed") from None
+
+    def soft_targets(self, raw: bytes) -> bytes:
+        """Teacher-forced distributions on the accepted target with canonical source context."""
+        try:
+            row = TrainingExample.model_validate_json(raw)
+            messages = example_messages(row)
+            prefix = self.tokenizer.apply_chat_template(
+                messages, tokenize=True, add_generation_prompt=True
+            )
+            full = self.tokenizer.apply_chat_template(
+                [*messages, {"role": "assistant", "content": row.target}],
+                tokenize=True,
+            )
+            if full[: len(prefix)] != prefix or len(full) > self.limit:
+                raise GatewayError(422, "soft_target_context_limit")
+            with cpu(self.libs, self.manifest.seed), self.libs.torch.inference_mode():
+                output = self.model(input_ids=self.libs.torch.tensor([full]))
+                log_probs = output.logits[0, len(prefix) - 1 : -1].float().log_softmax(-1)
+                result: bytes = self.libs.tensors.save(
+                    {
+                        "log_probs": log_probs.contiguous(),
+                        "target_ids": self.libs.torch.tensor(full[len(prefix) :]),
+                    }
+                )
+                return result
+        except GatewayError:
+            raise
+        except Exception:
+            raise GatewayError(503, "soft_target_generation_failed") from None
 
     def generate(self, request: ProviderRequest) -> ProviderResult:
         try:
@@ -594,7 +704,7 @@ class LoraGenerator:
             raise GatewayError(503, "specialist_generation_failed") from None
 
 
-def generate_tiny_base(directory: Path) -> None:
+def generate_tiny_base(directory: Path, *, student: bool = False) -> None:
     """Fixed-seed, random-init two-layer Llama and byte tokenizer; no pretrained assets."""
     libs = libraries()
     with cpu(libs, 17):
@@ -622,9 +732,9 @@ def generate_tiny_base(directory: Path) -> None:
         )
         config = libs.transformers.LlamaConfig(
             vocab_size=len(vocabulary),
-            hidden_size=32,
-            intermediate_size=64,
-            num_hidden_layers=2,
+            hidden_size=16 if student else 32,
+            intermediate_size=32 if student else 64,
+            num_hidden_layers=1 if student else 2,
             num_attention_heads=4,
             num_key_value_heads=2,
             max_position_embeddings=512,
@@ -641,7 +751,7 @@ def generate_tiny_base(directory: Path) -> None:
             "Synthetic random tensors and byte vocabulary generated locally for tests. CC0-1.0.\n"
         )
         manifest = {
-            "model_id": "tiny",
+            "model_id": "tiny-student" if student else "tiny",
             "revision": "seed-17",
             "licence": "CC0-1.0",
             "tokenizer_id": "tiny-byte-v1",
