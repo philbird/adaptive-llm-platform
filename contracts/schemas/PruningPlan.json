@@ -1,0 +1,42 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "maximum_fraction": {
+      "default": 0.25,
+      "exclusiveMinimum": 0,
+      "maximum": 0.5,
+      "title": "Maximum Fraction",
+      "type": "number"
+    },
+    "ranking_rule": {
+      "default": "ablation_sensitivity",
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Ranking Rule",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "structures": {
+      "items": {
+        "enum": [
+          "attention_heads",
+          "mlp_channels",
+          "layers"
+        ],
+        "type": "string"
+      },
+      "maxItems": 3,
+      "minItems": 1,
+      "title": "Structures",
+      "type": "array"
+    }
+  },
+  "title": "PruningPlan",
+  "type": "object"
+}

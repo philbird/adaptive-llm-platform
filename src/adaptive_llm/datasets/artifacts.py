@@ -45,9 +45,8 @@ def approval_mac(manifest: DatasetManifest, keyring: Keyring) -> str:
     return keyring.manifest_mac(encoded)
 
 
-def read_shards(
-    manifest: DatasetManifest, data_dir: Path, cipher: PayloadCipher, keyring: Keyring
-) -> dict[Split, list[bytes]]:
+def verify_manifest(manifest: DatasetManifest, data_dir: Path, keyring: Keyring) -> None:
+    """Authenticate immutable metadata and current approval without decrypting any shards."""
     try:
         if any(
             v in {".", ".."} for v in [manifest.dataset_id, manifest.version, *manifest.tenant_ids]
@@ -69,6 +68,16 @@ def read_shards(
             manifest.approval.mac or "", approval_mac(manifest, keyring)
         ):
             raise ValueError
+    except Exception:
+        raise GatewayError(409, "invalid_dataset_artifact") from None
+
+
+def read_shards(
+    manifest: DatasetManifest, data_dir: Path, cipher: PayloadCipher, keyring: Keyring
+) -> dict[Split, list[bytes]]:
+    verify_manifest(manifest, data_dir, keyring)
+    try:
+        directory = data_dir / "datasets" / manifest.dataset_id / manifest.version
         rows: dict[Split, list[bytes]] = {split: [] for split in SPLITS}
         hashes = []
         for tenant in sorted(manifest.tenant_ids):

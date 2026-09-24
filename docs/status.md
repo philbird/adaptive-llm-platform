@@ -2,7 +2,7 @@
 
 The engineering specification v1.0 was supplied on 2026-09-23. Milestone 1 slices 1a–1c
 and milestone 2 slices 2a–2b plus milestone 3 slices 3a–3b, milestone 4 slices 4a–4b and
-milestone 5 slice 5a are implemented
+milestone 5 slice 5a and optional milestone 6 slice 6a are implemented
 and tested locally with synthetic data. The reviewer runs `make ci` on the host; the slice 3b
 checkpoint passed every gate on 2026-09-24 with the training group installed, including the SBOM
 audit. The reviewer also ran full `make ci` for slice 4a on the host on 2026-09-24 and every
@@ -28,7 +28,7 @@ Python project uses uv/FastAPI; it provides tooling precedent, not shared infras
 | Training/registry (milestone 3, slices 3a–3b; router jobs added in 4b) | Signed approval; durable asynchronous queue/cancellation/restart; optional offline CPU LoRA; deterministic exports; verified specialist generation; plain-Python calibrated router jobs; exact-artifact evaluation and audited promotion/rollback | GPU/distributed training, external artifact lifecycle, production approvals |
 | Distillation (milestone 5, slice 5a, delivered 2026-09-24 on branch `slice-5a`) | Isolated teacher curation, encrypted approved datasets, preserved evidence/folds, general/safety mix, full/LoRA tiny students, optional safetensors KL, teacher non-inferiority and signed deployment benchmarks | Real workload quality and hardware/cost acceptance; production approvals |
 | Routing/deployment (milestone 4, slices 4a–4b, delivered 2026-09-24 on branch `slice-4b`) | Immutable policies; shadow comparisons; numeric encrypted router datasets; calibrated logistic/OOD admission; opt-in canary/production responses; segmented outcome costs; persistent automatic rollback and kill controls | Real workload calibration, production approvals, external transport, later bandits |
-| Research | Disabled configuration intent | Isolated activation/pruning work after earlier milestones |
+| Research (optional milestone 6, slice 6a, delivered 2026-09-24 on branch `slice-6a`) | Disabled by default; isolated aggregate studies, encrypted safetensors, physical structured pruning, full tuning, ordinary candidate registry and independent-process benchmarks | Demonstrated hardware benefit, representative quality/safety acceptance, production approval |
 
 ## Milestone 1, delivered as three reviewable slices
 
@@ -374,3 +374,115 @@ drills. All **3** smoke paths passed: student **3.995 s**, real LoRA **3.302 s**
 **0.193 s**. Strict mypy passed on **71** source files. The dependency-absence gate passed
 **390** tests with **15** expected skips; the focused distillation/MAC regression run passed
 **24** tests. The earlier reviewer measurements above are retained.
+
+## Milestone 6 slice 6a — optional local activation and pruning research
+
+Both the Settings and routing JSON feature flags are required. Disabled applications import no
+research service, mount no research routes and create no research tables or directories. The
+research operator capability defaults empty. Jobs require an allowlisted verified tiny base,
+approved calibration/evaluation datasets, current training policy for all tenants and a passed
+evaluation of the exact unpruned base/adapter. Research code and artifacts are isolated under
+`src/adaptive_llm/research/` and `<data_dir>/research/`. No migrations or dependencies were added.
+
+Hooks capture only per-layer/head/channel norm moments, sparsity and a gradient-based
+zero-ablation sensitivity estimate. One bounded batch/backward pass produces three model-sized
+arrays, encrypted with study-bound AAD and a MAC-authenticated inventory. Structured pruning
+rewrites config and full weights, then uses the existing full student trainer. The standard
+loader verifies the `pruned-full-v1` candidate and its complete immutable lineage. Evaluation,
+benchmark MACs, baseline locks and explicit registry approval remain mandatory. Research jobs
+do not activate routes or deploy models.
+
+| Milestone 6 local exit criterion | Measured result on 2026-09-24 |
+| --- | --- |
+| Flag and capability isolation | All disabled flag combinations expose no routes/tables/artifacts; fresh-process test confirms no research or optional-stack imports |
+| Aggregate-only artifacts | Tiny shapes: layers **[2,1,4]**, heads **[2,4,4]**, MLP channels **[2,64,4]**; no token/example dimension; encrypted bytes and MAC tampering rejected |
+| Physical removal and standard loading | One of four heads per layer removed; MLP width **64 → 48**; standard Llama config and safetensors load and generate. Separate test removes one complete layer |
+| Distinct calibration/evaluation lineage | Passed with separate approved dataset versions: manifest training lineage and `training.completed.v1` name calibration; evaluation and registry admission bind to the declared evaluation version and reject calibration as evaluation evidence |
+| Residual sensitivity and batch admission | Both tiny layers rank first when their contribution is independently zeroed; an oversized batch is refused before any hook or forward call |
+| Parameter count | Heads plus channels: **35,168 → 32,096**. Head-only GQA compaction needs KV expansion and has no parameter saving; no unsupported saving is claimed |
+| Study → prune → full tune → five suites → benchmark | Initial focused smoke **6.721 s**, below **120 s**; **500** optimizer steps, **8** independent held-out cases |
+| Quality and safety on the narrow smoke | Five suites passed; candidate-minus-unpruned quality mean **0**, CI **[0,0]**, zero critical failures on the synthetic smoke safety fixture |
+| Warm concurrency-four benchmark | Candidate p50/p95 **167.807 / 175.327 ms**, **23.259 requests/s**; unpruned p50/p95 **168.424 / 171.534 ms**, **23.368 requests/s**; **8/8** successes each |
+| Independent-process peak RSS | Candidate **357,318,656 bytes**; unpruned **363,216,896 bytes**; **1.624%** reduction, including interpreter/library overhead |
+| Hardware benefit required for approval | **Not demonstrated**: p95 regressed **2.211%** and RSS reduction was below **20%**. Signed benchmark returned **no_hardware_benefit** and promotion was refused |
+| Specification milestone 6 exit / production acceptance | **Not met**: local lifecycle and refusal behavior are demonstrated; hardware benefit on a representative workload and production approval remain outstanding |
+
+The smoke intentionally learns one no-context synthetic response; its small safety fixture is
+not a general red-team acceptance claim. Numerical gate fixtures independently verify passing
+latency/RSS boundaries and refusal on missing/tampered benchmarks or critical safety failures.
+Research baselines and jobs use private in-memory persistence; measurements use separate fresh
+processes, so the source and candidate do not share a peak-RSS high-water mark. Request-scoped
+research jobs do not add a durable queue or restart/resume guarantee. See the
+[activation research runbook](runbooks/activation-research.md) for exact commands and limitations.
+
+Slice 6a verification used the installed training group and the exact prefix
+`UV_NO_SYNC=1 UV_CACHE_DIR=/private/tmp/adaptive-llm-uv-cache` on each command below:
+
+| Command after that prefix | Result |
+| --- | --- |
+| `make contracts` | Passed; generated schemas and disabled-by-default OpenAPI synchronized |
+| `make check integration` | Final pass: formatting, Ruff, strict mypy on **79** source files; **215** unit/contract passes, **1** existing GPU skip; **158** integration passes |
+| `make ci` | The reviewer ran `make ci` on the host (Python 3.12.13, uv 0.12.17) and it passed, including the SBOM audit. |
+| `uv run --locked pytest tests/security tests/load -s` | **44 passed**; **1,000/1,000** correlated interactions, **5,000** events; normal/live p95 overhead **2.084 / 2.421 ms** |
+| `uv run --locked pytest tests/drills -m drill -s` | **8 passed**; rollback **1.014 s**, kill-switch propagation **1.006 s**; paired restore still verifies control migration **0011** |
+| `uv run --locked pytest -m smoke -s` | **4 passed**; research **6.570 s**, student **3.563 s**, real LoRA **2.883 s**, fake lifecycle **0.200 s** |
+| `make check-without-training` | **398 passed, 28 expected skips** with all four training imports blocked |
+| `uv run --locked pytest tests/unit/test_research_boundary.py tests/unit/test_research_gates.py tests/integration/test_mac_versions.py -x -q --tb=short` | **14 passed**, including legacy MAC compatibility |
+| `uv run --locked pytest tests/unit/test_research_boundary.py tests/unit/test_research_gates.py tests/integration/test_research.py -m smoke -s --tb=short` | **1 passed**, initial research smoke measured above |
+| `uv run --locked pytest tests/integration/test_research.py -x -q --tb=short` | Initial **11 passed**; final expanded **13** research tests passed in the full integration gate |
+| `uv run --locked ruff format src tests` | Formatting applied; final check clean |
+| `uv run --locked ruff check src tests --fix` | Passed |
+| `uv run --locked mypy src/adaptive_llm` | Passed |
+
+The final smoke again passed quality and correctly refused hardware admission: candidate/base
+p95 **172.455 / 174.794 ms** (only **1.338%** improvement), RSS **358,203,392 / 358,678,528 bytes**
+(**0.132%** improvement). The table above retains the initial independent-process measurement.
+The new tests also reject modified summary MACs, cross-study ciphertext despite a freshly signed
+envelope, separately unapproved evaluation data, and tampered benchmark evidence. Identical
+studies produce identical decrypted aggregate bytes. Head-only and layer-only exports generate
+through the standard provider. All non-network CI gates ran; none was disabled.
+
+`git diff --check` and `git diff --exit-code -- docs/spec pyproject.toml uv.lock` passed.
+Development fixture setup failures were corrected before the full gates. No dependencies,
+specification changes, commits or pushes were made. The reviewer ran `make ci` on the host
+(Python 3.12.13, uv 0.12.17) and it passed, including the SBOM audit.
+
+Review pass 1 separates calibration training lineage from evaluation evidence, corrects layer
+statistics to use the residual contribution, and adds admission estimates for the padded batch.
+Source verification during benchmark pre-checks and promotion does not instantiate models.
+Queued or failed job IDs return a conflict; publication and summary checks authenticate dataset
+metadata and current approval/policy without decrypting shards again. Old hook summaries remain
+readable, but layer pruning requires the corrected hook version. Focused regressions passed:
+**16 tests** for instrumentation and the research lifecycle, plus **4 tests** for job conflicts,
+metadata rechecks and old layer statistics. The measured smoke numbers above are retained.
+
+Review pass 1 validation used the same command prefix as above:
+
+| Command after that prefix | Result |
+| --- | --- |
+| `make contracts` | Passed |
+| `make check integration` | Formatting, Ruff and strict mypy passed; **218** unit/contract passes, **1** existing GPU skip; **162** integration passes. These gates also passed inside `make ci` |
+| `uv run --locked pytest tests/security tests/load -s` | **44 passed** |
+| `uv run --locked pytest tests/drills -m drill -s` | **8 passed** |
+| `uv run --locked pytest -m smoke -s` | **4 passed**; research path **6.529 s**, quality passed and hardware admission correctly refused |
+| `make check-without-training` | **398 passed, 35 expected skips** |
+
+The protected-file diff and whitespace checks passed; no dependencies, commits or pushes were added.
+
+## Specification milestone coverage 0–6
+
+| Milestone | Implemented and locally verified | Not claimed / still required |
+| --- | --- | --- |
+| 0 — Discovery and decisions | Gap analysis, ADRs, threat/policy documentation and owner decision list | Confirmed real workload and signed security/data-owner design approvals |
+| 1 — Instrumented foundation | Authenticated gateway, exact RAG evidence, encryption/redaction, retention/deletion, correlated events, retry/recovery and local load/drills | Staging load acceptance, real providers/transport/exporters and production identity |
+| 2 — Dataset/evaluation platform | Approved reproducible encrypted datasets, decontamination/splits/lineage, five suites, bootstrap gates and locked local baseline | Representative seed data, human-reviewed real-provider baseline, external deletion lifecycle and asymmetric signing |
+| 3 — Adapter specialist | Offline CPU LoRA, durable queue/resume/cancel, authenticated registry, real tensor generation and local promotion smoke | Real specialist quality, staging endpoint acceptance, GPU/distributed training and production approval |
+| 4 — Router/shadow/canary | Calibrated logistic/OOD routing, validators/fallback/breakers, shadow/canary controls, costs and automatic rollback drills | Representative live calibration, production canary evidence and external infrastructure |
+| 5 — Distilled student | Teacher filtering, separately approved student data, full/LoRA/KL training, paired teacher evaluation and signed benchmark gates | Material real-world hardware/cost improvement with representative quality and safety |
+| 6 — Optional pruning research | Disabled-by-default studies, encrypted aggregate instrumentation, physically compact candidates, tuning, independent-process measurements and reports | Demonstrated hardware benefit without unacceptable representative quality/safety regressions; separate production approval |
+
+Milestones 1–6 have local synthetic implementation coverage. Their production and real-workload
+exit criteria remain distinct. The slice 6a hardware benchmark deliberately remains a failed
+admission result when the measured improvement is insufficient; parameter counts do not replace
+that requirement. No production deployment, GPU, downloads, real open-weight model experiment
+or bandit work is included.

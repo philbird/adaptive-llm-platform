@@ -35,6 +35,19 @@
       "title": "P95 Latency Ms",
       "type": "number"
     },
+    "parameter_count": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parameter Count"
+    },
     "peak_rss_bytes": {
       "exclusiveMinimum": 0,
       "title": "Peak Rss Bytes",

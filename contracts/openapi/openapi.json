@@ -102,6 +102,18 @@
             "title": "P95 Latency Ms",
             "type": "number"
           },
+          "parameter_count": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameter Count"
+          },
           "peak_rss_bytes": {
             "exclusiveMinimum": 0.0,
             "title": "Peak Rss Bytes",
@@ -173,6 +185,16 @@
             "title": "Dataset Content Digest",
             "type": "string"
           },
+          "gate_reasons": {
+            "items": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            "title": "Gate Reasons",
+            "type": "array"
+          },
           "known_limitations": {
             "items": {
               "type": "string"
@@ -199,6 +221,31 @@
           "passed": {
             "title": "Passed",
             "type": "boolean"
+          },
+          "peak_rss_reduction_fraction": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Rss Reduction Fraction"
+          },
+          "pruning_study_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pruning Study Id"
           },
           "quality_comparison": {
             "$ref": "#/components/schemas/PairedComparison"
@@ -2698,6 +2745,16 @@
             "title": "Processing Region",
             "type": "string"
           },
+          "pruning": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PruningLineage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "registry_id": {
             "maxLength": 100,
             "minLength": 1,
@@ -3057,6 +3114,143 @@
           "target_state"
         ],
         "title": "PromotionRequest",
+        "type": "object"
+      },
+      "PruningLineage": {
+        "properties": {
+          "adapter_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Digest"
+          },
+          "adapter_version": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Version"
+          },
+          "base_digest": {
+            "title": "Base Digest",
+            "type": "string"
+          },
+          "baseline_evaluation_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Baseline Evaluation Id",
+            "type": "string"
+          },
+          "calibration_dataset": {
+            "$ref": "#/components/schemas/DatasetLineage"
+          },
+          "evaluation_dataset": {
+            "$ref": "#/components/schemas/DatasetLineage"
+          },
+          "parameter_count_after": {
+            "exclusiveMinimum": 0.0,
+            "title": "Parameter Count After",
+            "type": "integer"
+          },
+          "parameter_count_before": {
+            "exclusiveMinimum": 0.0,
+            "title": "Parameter Count Before",
+            "type": "integer"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PruningPlan"
+          },
+          "removed_indices": {
+            "additionalProperties": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "title": "Removed Indices",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "study_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Study Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "study_id",
+          "plan",
+          "removed_indices",
+          "parameter_count_before",
+          "parameter_count_after",
+          "base_digest",
+          "calibration_dataset",
+          "evaluation_dataset",
+          "baseline_evaluation_id"
+        ],
+        "title": "PruningLineage",
+        "type": "object"
+      },
+      "PruningPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "maximum_fraction": {
+            "default": 0.25,
+            "exclusiveMinimum": 0.0,
+            "maximum": 0.5,
+            "title": "Maximum Fraction",
+            "type": "number"
+          },
+          "ranking_rule": {
+            "default": "ablation_sensitivity",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Ranking Rule",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "structures": {
+            "items": {
+              "enum": [
+                "attention_heads",
+                "mlp_channels",
+                "layers"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Structures",
+            "type": "array"
+          }
+        },
+        "title": "PruningPlan",
         "type": "object"
       },
       "RagOptions": {

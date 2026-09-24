@@ -17,7 +17,7 @@ def signed_metadata(manifest: ModelManifest) -> str:
     excluded = {"artifact_mac", "state", "evaluation_reports", "lifecycle_history"}
     if manifest.manifest_mac_version == "1":
         # Frozen legacy encoding. V2 signs every immutable field, including null/default values.
-        if manifest.student_parameter_count is not None:
+        if manifest.student_parameter_count is not None or manifest.pruning is not None:
             raise GatewayError(409, "artifact_integrity_failed")
         excluded.update({"manifest_mac_version", "student_parameter_count"})
         if manifest.distillation is None and manifest.student_architecture is None:

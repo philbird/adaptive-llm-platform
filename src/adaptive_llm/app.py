@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import hmac
+import json
 import os
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
@@ -106,6 +107,8 @@ def _default_data_dir() -> Path:
 @dataclass(frozen=True)
 class Settings:
     inference_enabled: bool = True
+    pruning_research_enabled: bool = False
+    research_licences_path: Path = ROOT / "configs/research/licences.json"
     identity_path: Path = ROOT / "configs/identity/local.json"
     policy_path: Path = ROOT / "configs/policy/local.json"
     routing_path: Path = ROOT / "configs/routing/local.json"
@@ -486,6 +489,29 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
 
     application.state.authenticator = authenticator
     application.state.keyring = keyring
+    if settings.pruning_research_enabled and (
+        json.loads(settings.routing_path.read_text()).get("pruning_research_enabled") is True
+    ):
+        from adaptive_llm.research.benchmark import ResearchBenchmarker
+        from adaptive_llm.research.service import ResearchService
+
+        if not isinstance(evaluator, LocalEvaluator) or not isinstance(
+            application.state.benchmarks, LocalBenchmarker
+        ):
+            raise ValueError("research_local_evaluator_required")
+        research = ResearchService(
+            application.state.training,
+            evaluator,
+            application.state.benchmarks,
+            settings.research_licences_path,
+            settings.training_memory_limit_bytes,
+            settings.training_time_limit_seconds,
+        )
+        application.state.research = research
+        research_benchmarker = ResearchBenchmarker(application.state.benchmarks, research)
+        application.state.benchmarks = research_benchmarker
+        if isinstance(registry, SQLiteModelRegistry):
+            registry.benchmark_gate = research_benchmarker.allows
 
 
 @asynccontextmanager
@@ -599,6 +625,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if identity.environment != settings.environment:
                 raise GatewayError(403, "environment_forbidden")
             return identity
+
+        if settings.pruning_research_enabled and (
+            json.loads(settings.routing_path.read_text()).get("pruning_research_enabled") is True
+        ):
+            from adaptive_llm.research.api import mount
+
+            mount(application, authenticate)
 
         @application.post("/v1/inference", response_model=InferenceResponse, tags=["inference"])
         async def inference(

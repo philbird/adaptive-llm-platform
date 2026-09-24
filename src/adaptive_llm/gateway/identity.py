@@ -75,6 +75,7 @@ class Identity:
     subject_id_pseudonymous: str | None
     key_class: Literal["user", "operator"] = "user"
     dataset_tenants: frozenset[str] = frozenset()
+    capabilities: frozenset[str] = frozenset()
 
 
 class Authenticator(Protocol):
@@ -88,6 +89,7 @@ class KeyIdentity(BaseModel):
     environment: Environment
     key_class: Literal["user", "operator"] = "user"
     dataset_tenants: frozenset[Identifier] = frozenset()
+    capabilities: frozenset[Identifier] = frozenset()
 
 
 class IdentityConfig(BaseModel):
@@ -119,4 +121,5 @@ class LocalAuthenticator:
             subject_id_pseudonymous=pseudonym,
             key_class=identity.key_class,
             dataset_tenants=identity.dataset_tenants,
+            capabilities=identity.capabilities,
         )

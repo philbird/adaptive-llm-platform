@@ -206,7 +206,11 @@ class LocalEvaluator:
                 d.dataset_id == spec.dataset_id
                 and d.version == spec.dataset_version
                 and d.content_digest == manifest.content_digest
-                for d in model.datasets
+                for d in (
+                    [model.pruning.evaluation_dataset]
+                    if model.pruning is not None
+                    else model.datasets
+                )
             ):
                 raise GatewayError(409, "model_dataset_mismatch")
             if model.state == "candidate":
