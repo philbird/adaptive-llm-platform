@@ -1,6 +1,7 @@
 """Control-plane registry: state, deployment pointers and events commit together."""
 
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from adaptive_llm.contracts import (
@@ -13,6 +14,7 @@ from adaptive_llm.contracts import (
     PromotionRequest,
     TrainingCompleted,
     TrainingJob,
+    now,
     uid,
 )
 from adaptive_llm.datasets.builder import LocalDatasetBuilder
@@ -74,31 +76,108 @@ class SQLiteModelRegistry:
 
     def save_job(self, job: TrainingJob, tenants: list[str]) -> None:
         with self.database.transaction():
-            self._save_job(job, tenants)
-            if job.state in {"failed", "cancelled"}:
-                trace_id = uid()
-                self.outbox.enqueue(
-                    [
-                        Event(
-                            event_type="training.completed.v1",
-                            producer="training_orchestrator",
-                            tenant_id=tenant,
-                            trace_id=trace_id,
-                            data=TrainingCompleted(
-                                job_id=job.specification.job_id,
-                                job_type="adapter",
-                                dataset_refs=[
-                                    f"{job.specification.dataset_id}/{job.specification.dataset_version}"
-                                ],
-                                model_version=None,
-                                status="failed" if job.state == "failed" else "cancelled",
-                                failure_code=job.failure_code,
-                            ),
+            self._save_job_outcome(job, tenants)
+
+    def _save_job_outcome(self, job: TrainingJob, tenants: list[str]) -> None:
+        previous = self.database.connection.execute(
+            "SELECT data, tenant_ids FROM training_jobs WHERE job_id=?", (job.specification.job_id,)
+        ).fetchone()
+        if previous is not None:
+            tenants = json.loads(previous[1])
+            old = TrainingJob.model_validate_json(previous[0])
+            if old.state == "cancelled":
+                return
+            job = job.model_copy(
+                update={"cancel_requested": old.cancel_requested or job.cancel_requested}
+            )
+            if old.state == job.state and old.state in {"failed", "cancelled"}:
+                return
+        self._save_job(job, tenants)
+        if job.state in {"failed", "cancelled"}:
+            trace_id = uid()
+            self.outbox.enqueue(
+                [
+                    Event(
+                        event_type="training.completed.v1",
+                        producer="training_orchestrator",
+                        tenant_id=tenant,
+                        trace_id=trace_id,
+                        data=TrainingCompleted(
+                            job_id=job.specification.job_id,
+                            job_type="adapter",
+                            dataset_refs=[
+                                f"{job.specification.dataset_id}/{job.specification.dataset_version}"
+                            ],
+                            model_version=None,
+                            status="failed" if job.state == "failed" else "cancelled",
+                            failure_code=job.failure_code,
+                        ),
+                    )
+                    for tenant in sorted(tenants)
+                ],
+                self.pending_limit,
+            )
+
+    def enqueue(self, job: TrainingJob, tenants: list[str], identity: Identity) -> TrainingJob:
+        trusted = asdict(identity)
+        trusted["application_ids"] = sorted(identity.application_ids)
+        trusted["dataset_tenants"] = sorted(identity.dataset_tenants)
+        with self.database.transaction():
+            old = self.job(job.specification.job_id, identity)
+            if old is not None:
+                if old.trainer_architecture != job.trainer_architecture:
+                    raise GatewayError(409, "training_trainer_mismatch")
+                if old.specification != job.specification:
+                    raise GatewayError(409, "training_job_id_conflict")
+                if old.state != "failed":
+                    if old.state in {"queued", "running"}:
+                        # Legacy 3a jobs acquire a trusted submitter on authenticated retry.
+                        self.database.connection.execute(
+                            "INSERT OR IGNORE INTO training_submitters VALUES (?, ?)",
+                            (job.specification.job_id, json.dumps(trusted)),
                         )
-                        for tenant in sorted(tenants)
-                    ],
-                    self.pending_limit,
+                    return old
+                job = old.model_copy(
+                    update={"state": "queued", "failure_code": None, "completed_at": None}
                 )
+            self._save_job(job, tenants)
+            self.database.connection.execute(
+                "INSERT INTO training_submitters VALUES (?, ?) ON CONFLICT(job_id) "
+                "DO UPDATE SET identity=excluded.identity",
+                (job.specification.job_id, json.dumps(trusted)),
+            )
+            return job
+
+    def pending_jobs(self) -> list[tuple[TrainingJob, Identity]]:
+        with self.database.lock:
+            rows = self.database.connection.execute(
+                "SELECT j.data, s.identity FROM training_jobs j JOIN training_submitters s "
+                "USING(job_id) WHERE json_extract(j.data, '$.state') IN ('queued', 'running') "
+                "ORDER BY json_extract(j.data, '$.created_at'), j.job_id"
+            ).fetchall()
+        result = []
+        for row in rows:
+            trusted = json.loads(row[1])
+            trusted["application_ids"] = frozenset(trusted["application_ids"])
+            trusted["dataset_tenants"] = frozenset(trusted["dataset_tenants"])
+            result.append((TrainingJob.model_validate_json(row[0]), Identity(**trusted)))
+        return result
+
+    def cancel_job(self, job_id: str, identity: Identity) -> TrainingJob:
+        with self.database.transaction():
+            job = self.job(job_id, identity)
+            if job is None:
+                raise GatewayError(404, "training_job_not_found")
+            if job.state in {"succeeded", "failed", "cancelled"}:
+                return job
+            job = job.model_copy(update={"cancel_requested": True})
+            if job.state == "queued":
+                job = job.model_copy(update={"state": "cancelled", "completed_at": now()})
+            row = self.database.connection.execute(
+                "SELECT tenant_ids FROM training_jobs WHERE job_id=?", (job_id,)
+            ).fetchone()
+            self._save_job_outcome(job, json.loads(row[0]))
+            return job
 
     def record_evaluation(self, report: EvaluationReport, identity: Identity) -> None:
         """Publication hook runs inside the evaluation store's control transaction."""
@@ -143,6 +222,11 @@ class SQLiteModelRegistry:
             raise GatewayError(409, "trainer_architecture_mismatch")
         self._dataset(manifest)
         with self.database.transaction():
+            current = self.database.connection.execute(
+                "SELECT data FROM training_jobs WHERE job_id=?", (job.specification.job_id,)
+            ).fetchone()
+            if current and TrainingJob.model_validate_json(current[0]).cancel_requested:
+                raise GatewayError(409, "training_cancelled")
             self.database.connection.execute(
                 "INSERT INTO model_versions VALUES (?, ?, ?, ?)",
                 (

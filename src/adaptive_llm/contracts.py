@@ -582,6 +582,10 @@ class TrainingJobSpecification(Record):
     chat_template_version: Identifier = "fake-chat-1"
     adapter_config: AdapterConfig = Field(default_factory=AdapterConfig)
     seed: int = Field(default=23, ge=0)
+    steps: int = Field(default=2, ge=1)
+    batch_size: int = Field(default=1, ge=1)
+    max_sequence_length: int = Field(default=256, ge=2)
+    checkpoint_every: int = Field(default=1, ge=1)
     hardware_class: Identifier = "cpu"
     container_digest: str = "local"
     code_revision: str = "server"
@@ -610,11 +614,15 @@ class ResourceUsage(Record):
     steps: int = Field(default=0, ge=0)
     artifact_bytes: int = Field(default=0, ge=0)
     cpu_seconds: float | None = Field(default=None, ge=0)
+    wall_seconds: float | None = Field(default=None, ge=0)
     peak_memory_bytes: int | None = Field(default=None, ge=0)
 
 
 class TrainingJob(Record):
     specification: TrainingJobSpecification
+    trainer_architecture: Identifier = "deterministic-fake-adapter-v1"
+    created_at: AwareDatetime = Field(default_factory=now)
+    cancel_requested: bool = False
     model_version: Identifier = Field(default_factory=uid)
     state: Literal["queued", "running", "succeeded", "failed", "cancelled"] = "queued"
     started_at: AwareDatetime | None = None

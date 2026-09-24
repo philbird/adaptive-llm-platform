@@ -10,4 +10,4 @@ dist/
 reports/
 sbom.json
 .DS_Store
-
+tests/fixtures/base-models/generated/

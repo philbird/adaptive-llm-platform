@@ -2181,6 +2181,18 @@
             "minimum": 0.0,
             "title": "Steps",
             "type": "integer"
+          },
+          "wall_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wall Seconds"
           }
         },
         "title": "ResourceUsage",
@@ -2497,6 +2509,11 @@
             ],
             "title": "Artifact Ref"
           },
+          "cancel_requested": {
+            "default": false,
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
           "checkpoint_refs": {
             "items": {
               "maxLength": 512,
@@ -2517,6 +2534,11 @@
               }
             ],
             "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
           },
           "failure_code": {
             "anyOf": [
@@ -2574,6 +2596,14 @@
             ],
             "title": "State",
             "type": "string"
+          },
+          "trainer_architecture": {
+            "default": "deterministic-fake-adapter-v1",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Trainer Architecture",
+            "type": "string"
           }
         },
         "required": [
@@ -2611,6 +2641,12 @@
             "title": "Base Model Revision",
             "type": "string"
           },
+          "batch_size": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Batch Size",
+            "type": "integer"
+          },
           "chat_template_version": {
             "default": "fake-chat-1",
             "maxLength": 100,
@@ -2618,6 +2654,12 @@
             "pattern": "^[\\w.-]+$",
             "title": "Chat Template Version",
             "type": "string"
+          },
+          "checkpoint_every": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Checkpoint Every",
+            "type": "integer"
           },
           "code_revision": {
             "default": "server",
@@ -2664,6 +2706,12 @@
             "title": "Job Type",
             "type": "string"
           },
+          "max_sequence_length": {
+            "default": 256,
+            "minimum": 2.0,
+            "title": "Max Sequence Length",
+            "type": "integer"
+          },
           "registry_id": {
             "default": "synthetic-specialist",
             "maxLength": 100,
@@ -2682,6 +2730,12 @@
             "default": 23,
             "minimum": 0.0,
             "title": "Seed",
+            "type": "integer"
+          },
+          "steps": {
+            "default": 2,
+            "minimum": 1.0,
+            "title": "Steps",
             "type": "integer"
           },
           "tokenizer_id": {
@@ -3903,6 +3957,77 @@
           }
         },
         "summary": "Training Job"
+      }
+    },
+    "/v1/training/jobs/{job_id}/cancel": {
+      "post": {
+        "operationId": "cancel_training_job_v1_training_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Subject"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainingJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Training Job"
       }
     }
   }

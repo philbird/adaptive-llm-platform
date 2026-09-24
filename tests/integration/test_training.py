@@ -3,6 +3,7 @@ from time import perf_counter
 from typing import TYPE_CHECKING
 
 import pytest
+from conftest import wait_training
 
 from adaptive_llm.contracts import (
     EvaluationReport,
@@ -48,7 +49,7 @@ def train(seed: "EvaluationSeed", spec: TrainingJobSpecification | None = None) 
         "/v1/training/jobs", headers=OPERATOR, json=(spec or spec_for(seed)).model_dump(mode="json")
     )
     assert response.status_code == 200, response.json()
-    return TrainingJob.model_validate(response.json())
+    return wait_training(seed.client, response.json()["specification"]["job_id"], OPERATOR)
 
 
 def evaluate(
@@ -212,8 +213,9 @@ def test_resume_and_reproducible_artifacts(evaluation_seed: "EvaluationSeed") ->
     result = seed.client.post(
         "/v1/training/jobs", headers=OPERATOR, json=spec.model_dump(mode="json")
     )
-    assert result.status_code == 503
-    failed = seed.client.get(f"/v1/training/jobs/{spec.job_id}", headers=OPERATOR).json()
+    assert result.status_code == 200
+    assert result.json()["state"] == "queued"
+    failed = wait_training(seed.client, spec.job_id, OPERATOR).model_dump(mode="json")
     assert failed["state"] == "failed" and failed["checkpoint_refs"] == ["checkpoint-1"]
     assert failed["failure_code"] == "training_interrupted"
     # A new trainer instance represents a restarted process, using durable checkpoint metadata.
@@ -373,7 +375,7 @@ def test_rollback_after_baseline_replacement_and_transactional_events(
         "adapter_weights.bin",
         "adapter_config.json",
         "training_report.json",
-        "checkpoint-1/checkpoint.mac",
+        "unexpected.json",
     ],
 )
 def test_specialist_refuses_tampered_artifact(evaluation_seed: "EvaluationSeed", file: str) -> None:
@@ -385,10 +387,10 @@ def test_specialist_refuses_tampered_artifact(evaluation_seed: "EvaluationSeed",
     )
     model = seed.app.state.registry.get(job.model_version, identity)
     path = seed.directory / model.storage_location
-    SpecialistProvider(model, path, seed.app.state.keyring)
+    SpecialistProvider(model, path, seed.app.state.keyring, seed.directory)
     (path / file).write_bytes(b"SYNTHETIC tamper")
     with pytest.raises(GatewayError, match="artifact_integrity_failed"):
-        SpecialistProvider(model, path, seed.app.state.keyring)
+        SpecialistProvider(model, path, seed.app.state.keyring, seed.directory)
     response = seed.client.post(
         "/v1/evaluations",
         headers=OPERATOR,
@@ -489,8 +491,8 @@ def test_training_worker_keeps_serving_available_and_excludes_duplicate_runner(
             duplicate = seed.client.post(
                 "/v1/training/jobs", headers=OPERATOR, json=spec.model_dump(mode="json")
             )
-            assert duplicate.status_code == 409
-            assert duplicate.json()["error"]["code"] == "training_job_running"
+            assert duplicate.status_code == 200
+            assert duplicate.json()["state"] == "running"
             serving = executor.submit(
                 seed.client.post,
                 "/v1/inference",
@@ -502,10 +504,39 @@ def test_training_worker_keeps_serving_available_and_excludes_duplicate_runner(
                 },
             )
             assert serving.result(timeout=1).status_code == 200
-            assert not future.done()
+            assert future.result(timeout=1).json()["state"] == "queued"
         finally:
             release.set()
         assert future.result(timeout=5).status_code == 200
+
+
+def test_training_cli_failed_job_exits_nonzero(evaluation_seed, monkeypatch, capsys):
+    from dataclasses import replace
+
+    from adaptive_llm.app import create_app
+    from adaptive_llm.training.__main__ import main
+
+    seed = evaluation_seed
+    approve(seed)
+    seed.app.state.training.stop()
+
+    class FailingTrainer:
+        architecture = "deterministic-fake-adapter-v1"
+
+        def train(self, *args):
+            raise RuntimeError("SYNTHETIC_PRIVATE_ERROR")
+
+    monkeypatch.setattr(
+        "adaptive_llm.training.__main__.create_app",
+        lambda settings: create_app(replace(seed.app.state.settings, trainer=FailingTrainer())),
+    )
+    path = seed.directory / "failed-training.json"
+    path.write_text(spec_for(seed).model_dump_json())
+    with pytest.raises(SystemExit) as error:
+        main(["train", "--spec", str(path), "--data-dir", str(seed.directory)])
+    output = capsys.readouterr()
+    assert error.value.code == 1 and output.err == "training_control_failed\n"
+    assert TrainingJob.model_validate_json(output.out).failure_code == "training_failed"
 
 
 @pytest.mark.parametrize("field", ["dataset_version", "dataset_id", "candidate_artifact_digest"])
@@ -555,15 +586,8 @@ def test_corrupt_checkpoint_refuses_resume_and_publication_failure_recovers(
     service = seed.app.state.training
     spec = spec_for(seed)
     service.trainer.fail_after_checkpoint = 1
-    assert (
-        seed.client.post(
-            "/v1/training/jobs", headers=OPERATOR, json=spec.model_dump(mode="json")
-        ).status_code
-        == 503
-    )
-    job = TrainingJob.model_validate(
-        seed.client.get(f"/v1/training/jobs/{spec.job_id}", headers=OPERATOR).json()
-    )
+    job = train(seed, spec)
+    assert job.state == "failed"
     checkpoint = (
         seed.directory
         / "models"
@@ -572,10 +596,7 @@ def test_corrupt_checkpoint_refuses_resume_and_publication_failure_recovers(
     )
     original_bytes = checkpoint.read_bytes()
     checkpoint.write_bytes(b"SYNTHETIC corrupt checkpoint")
-    response = seed.client.post(
-        "/v1/training/jobs", headers=OPERATOR, json=spec.model_dump(mode="json")
-    )
-    assert response.json()["error"]["code"] == "checkpoint_integrity_failed"
+    assert train(seed, spec).failure_code == "checkpoint_integrity_failed"
     checkpoint.write_bytes(original_bytes)
     enqueue = seed.app.state.evaluation_outbox.enqueue
 
@@ -587,18 +608,21 @@ def test_corrupt_checkpoint_refuses_resume_and_publication_failure_recovers(
         return enqueue(events, limit)
 
     monkeypatch.setattr(seed.app.state.evaluation_outbox, "enqueue", failed_completion)
-    assert (
-        seed.client.post(
-            "/v1/training/jobs", headers=OPERATOR, json=spec.model_dump(mode="json")
-        ).status_code
-        == 503
-    )
+    assert train(seed, spec).state == "failed"
     db = seed.app.state.evaluation_database.connection
     assert db.execute("SELECT count(*) FROM model_versions").fetchone()[0] == 0
     assert db.execute("SELECT count(*) FROM lifecycle_transitions").fetchone()[0] == 0
     assert not (seed.directory / "models" / spec.registry_id / job.model_version).exists()
+    archive = seed.directory / "models" / spec.registry_id / ".checkpoints" / job.model_version
+    assert {p.name for p in archive.iterdir()} == {"checkpoint-1", "checkpoint-2"}
+    # Simulate a crash partway through restoring an archived checkpoint inventory.
+    (archive / "checkpoint-1").rename(checkpoint.parent)
+    assert (archive / "checkpoint-2").is_dir() and checkpoint.is_file()
     monkeypatch.setattr(seed.app.state.evaluation_outbox, "enqueue", enqueue)
-    assert train(seed, spec).state == "succeeded"
+    resumed = train(seed, spec)
+    assert resumed.state == "succeeded"
+    assert {p.name for p in archive.iterdir()} == set(resumed.checkpoint_refs)
+    assert not list((seed.directory / resumed.artifact_ref).glob("checkpoint-*"))
 
 
 def test_registration_uses_and_checks_trainer_architecture(

@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
+from time import monotonic, sleep
 
 import pytest
 from fastapi import FastAPI
@@ -20,6 +21,7 @@ from adaptive_llm.contracts import (
     PolicyDecision,
     SourceWindow,
     TimeSplit,
+    TrainingJob,
     now,
     uid,
 )
@@ -140,6 +142,18 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "smoke: CPU-only training and evaluation under ten seconds")
 
 
+def wait_training(client: TestClient, job_id: str, headers: dict[str, str]) -> TrainingJob:
+    deadline = monotonic() + 60
+    while monotonic() < deadline:
+        response = client.get(f"/v1/training/jobs/{job_id}", headers=headers)
+        assert response.status_code == 200
+        job = TrainingJob.model_validate(response.json())
+        if job.state not in {"queued", "running"}:
+            return job
+        sleep(0.01)
+    raise AssertionError("training_poll_timeout")
+
+
 @pytest.fixture(autouse=True)
 def isolated_default_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Each app gets a fresh database unless a test explicitly shares data_dir (restart tests).
@@ -210,7 +224,8 @@ class EvaluationSeed:
 
 
 @pytest.fixture
-def evaluation_seed(tmp_path: Path) -> Iterator[EvaluationSeed]:
+def evaluation_seed(tmp_path: Path, request: pytest.FixtureRequest) -> Iterator[EvaluationSeed]:
+    no_context = getattr(request, "param", None) == "no_context"
     app = create_app(
         Settings(data_dir=tmp_path, policy=DatasetPolicy(), outbox_dispatch_enabled=False)
     )
@@ -230,7 +245,7 @@ def evaluation_seed(tmp_path: Path) -> Iterator[EvaluationSeed]:
                     "messages": [
                         {"role": "user", "content": f"SYNTHETIC unique case {i} unused receipt"}
                     ],
-                    "rag": {"enabled": i > 0, "index_id": "synthetic-kb"},
+                    "rag": {"enabled": i > 0 and not no_context, "index_id": "synthetic-kb"},
                 },
             )
             assert result.status_code == 200

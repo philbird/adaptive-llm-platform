@@ -41,7 +41,8 @@ def test_all_suites_baseline_lock_mac_events_idempotency_and_replacement(
     )
     assert all(value.sample_size == 8 for value in report.segment_comparisons.values())
     suites = {s.suite: s for s in report.suite_results}
-    assert suites["golden"].items == suites["safety"].items == 20
+    assert suites["golden"].items == 22
+    assert suites["safety"].items == 20
     assert suites["golden"].metrics["rubric_score"] == 5
     assert suites["golden"].metrics["judge_disagreements"] == 0
     assert suites["held_out"].metrics == {
@@ -402,7 +403,7 @@ def test_candidate_and_baseline_share_one_event_loop(evaluation_seed: "Evaluatio
         original.manifest, LoopBoundFake()
     )
     assert evaluate(seed).passed
-    assert calls == 2 * (20 + 8 + 20 + 8 + seed.request.performance_requests)
+    assert calls == 2 * (22 + 8 + 20 + 8 + seed.request.performance_requests)
     assert len(loops) == 1
     assert all(loop.is_closed() for loop in loops)
 

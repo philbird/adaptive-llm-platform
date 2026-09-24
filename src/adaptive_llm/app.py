@@ -94,6 +94,9 @@ class Settings:
     dataset_builder: DatasetBuilder | None = None
     dataset_sources: SourceResolver | None = None
     trainer: Trainer | None = None
+    training_backend: Literal["fake", "lora"] = "fake"
+    training_memory_limit_bytes: int = 2_000_000_000
+    training_time_limit_seconds: float = 300
     registry: ModelRegistry | None = None
     evaluator: Evaluator | None = None
     evaluation_store: EvaluationStore | None = None
@@ -304,11 +307,25 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
         registry, SQLiteModelRegistry
     ):
         evaluation_store.on_publish = registry.record_evaluation
+    trainer = settings.trainer
+    if trainer is None:
+        if settings.training_backend == "lora":
+            from adaptive_llm.training.lora import LoraTrainer
+
+            trainer = LoraTrainer(
+                settings.data_dir,
+                persistence.cipher,
+                keyring,
+                memory_limit_bytes=settings.training_memory_limit_bytes,
+                time_limit_seconds=settings.training_time_limit_seconds,
+            )
+        else:
+            trainer = FakeTrainer(settings.data_dir, persistence.cipher, keyring)
     application.state.training = TrainingOrchestrator(
         registry,
         application.state.datasets,
         policy,
-        settings.trainer or FakeTrainer(settings.data_dir, persistence.cipher, keyring),
+        trainer,
         settings.data_dir,
         persistence.cipher,
         keyring,
@@ -347,9 +364,11 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     application.state.ready = False
     dispatcher_task: asyncio.Task[None] | None = None
     evaluation_dispatcher_task: asyncio.Task[None] | None = None
+    training_task: asyncio.Task[None] | None = None
     try:
         if settings.inference_enabled:
             _start_inference(application, settings)
+            training_task = asyncio.create_task(application.state.training.worker())
             if settings.outbox_dispatch_enabled:
                 dispatcher_task = asyncio.create_task(application.state.dispatcher.run())
                 if hasattr(application.state, "evaluation_dispatcher"):
@@ -360,6 +379,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         application.state.ready = False
+        if training_task is not None:
+            application.state.training.stop()
+            await training_task
         if dispatcher_task is not None:
             application.state.dispatcher.stop()
             await dispatcher_task
@@ -516,11 +538,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             LocalDatasetBuilder._authorize(identity, [])
             service: TrainingOrchestrator = application.state.training
             try:
-                return await asyncio.to_thread(service.run, body, identity)
+                return await asyncio.to_thread(service.submit, body, identity)
             except GatewayError:
                 raise
             except Exception:
                 raise GatewayError(503, "training_failed") from None
+
+        @application.post("/v1/training/jobs/{job_id}/cancel", response_model=TrainingJob)
+        async def cancel_training_job(
+            job_id: str, identity: Annotated[Identity, Depends(authenticate)]
+        ) -> TrainingJob:
+            registry: ModelRegistry = application.state.registry
+            return await asyncio.to_thread(registry.cancel_job, job_id, identity)
 
         @application.get("/v1/training/jobs/{job_id}", response_model=TrainingJob)
         async def training_job(

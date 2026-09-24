@@ -2,6 +2,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
+from conftest import wait_training
 
 from adaptive_llm.contracts import TrainingJobSpecification
 from adaptive_llm.gateway.identity import GatewayError
@@ -41,6 +42,10 @@ def test_operator_auth_and_trusted_actor(evaluation_seed: "EvaluationSeed") -> N
             seed.client.get(f"/v1/training/jobs/{spec.job_id}", headers=headers).status_code == code
         )
         assert (
+            seed.client.post(f"/v1/training/jobs/{spec.job_id}/cancel", headers=headers).status_code
+            == code
+        )
+        assert (
             seed.client.post(
                 f"/v1/datasets/{seed.manifest.dataset_id}/versions/{seed.manifest.version}/approval",
                 headers=headers,
@@ -51,6 +56,7 @@ def test_operator_auth_and_trusted_actor(evaluation_seed: "EvaluationSeed") -> N
     job = seed.client.post(
         "/v1/training/jobs", headers=OPERATOR, json=spec.model_dump(mode="json")
     ).json()
+    job = wait_training(seed.client, spec.job_id, OPERATOR).model_dump(mode="json")
     model = job["model_version"]
     body = {"model_version": model, "target_state": "evaluating", "reason": "synthetic"}
     for headers, code in [({}, 401), (USER, 403)]:
@@ -80,6 +86,8 @@ def test_operator_auth_and_trusted_actor(evaluation_seed: "EvaluationSeed") -> N
     limited = replace(identity, dataset_tenants=frozenset({"synthetic-a"}))
     with pytest.raises(GatewayError, match="training_job_not_found"):
         seed.app.state.registry.job(spec.job_id, limited)
+    with pytest.raises(GatewayError, match="training_job_not_found"):
+        seed.app.state.registry.cancel_job(spec.job_id, limited)
     with pytest.raises(GatewayError, match="model_not_found"):
         seed.app.state.registry.get(model, limited)
     assert seed.app.state.registry.models(limited) == []
@@ -133,8 +141,8 @@ def test_training_errors_and_examples_do_not_retain_content(
     result = seed.client.post(
         "/v1/training/jobs", headers=OPERATOR, json=spec.model_dump(mode="json")
     )
-    assert result.status_code == 503
-    assert result.json() == {"error": {"code": "training_failed"}}
+    assert result.status_code == 200
+    assert wait_training(seed.client, spec.job_id, OPERATOR).failure_code == "training_failed"
     job = seed.client.get(f"/v1/training/jobs/{spec.job_id}", headers=OPERATOR)
     assert job.json()["failure_code"] == "training_failed"
     example = "SYNTHETIC unique case 0 unused receipt"

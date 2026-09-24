@@ -7,12 +7,14 @@ KEYRING ?= $(PAYLOAD_KEYRING)
 STORAGE = uv run --locked python -m adaptive_llm.storage
 TRAINING = uv run --locked python -m adaptive_llm.training
 TRAINING_ARGS = --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)"
+BACKEND ?= fake
 # Pass notes via environment to avoid expanding user text as shell code.
 export NOTE
 .PHONY: train promote rollback models
+.PHONY: check-without-training
 
 train:
-	$(TRAINING) train $(TRAINING_ARGS) --spec "$(SPEC)" $(if $(POLICY),--policy "$(POLICY)",)
+	$(TRAINING) train $(TRAINING_ARGS) --backend "$(BACKEND)" --spec "$(SPEC)" $(if $(POLICY),--policy "$(POLICY)",)
 
 promote:
 	$(TRAINING) promote $(TRAINING_ARGS) --model "$(MODEL)" --to "$(TO)" --note "$$NOTE" $(if $(EVALUATION_ID),--evaluation-id "$(EVALUATION_ID)",)
@@ -27,7 +29,11 @@ ci: check integration sbom
 	uv run --locked pytest tests/security tests/load -s
 	uv run --locked pytest tests/drills -m drill -s
 	uv run --locked pytest -m smoke -s
+	$(MAKE) check-without-training
 	@echo "local ci: all gates passed"
+
+check-without-training:
+	uv run --locked python scripts/check_without_training.py tests -q
 
 dev:
 	uv run --locked uvicorn adaptive_llm.app:app --host 127.0.0.1 --port 8000 --reload --no-access-log

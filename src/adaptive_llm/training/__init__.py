@@ -1,4 +1,4 @@
-"""Injectable CPU trainer boundary; real LoRA belongs to slice 3b."""
+"""Injectable CPU trainer boundary with cooperative step-boundary interruption."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -18,4 +18,5 @@ class Trainer(Protocol):
         directory: Path,
         checkpoint_refs: list[str],
         checkpoint: Callable[[str], None],
+        check: Callable[[], None],
     ) -> ResourceUsage: ...

@@ -93,6 +93,12 @@
       "title": "Base Model Revision",
       "type": "string"
     },
+    "batch_size": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Batch Size",
+      "type": "integer"
+    },
     "chat_template_version": {
       "default": "fake-chat-1",
       "maxLength": 100,
@@ -100,6 +106,12 @@
       "pattern": "^[\\w.-]+$",
       "title": "Chat Template Version",
       "type": "string"
+    },
+    "checkpoint_every": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Checkpoint Every",
+      "type": "integer"
     },
     "code_revision": {
       "default": "server",
@@ -146,6 +158,12 @@
       "title": "Job Type",
       "type": "string"
     },
+    "max_sequence_length": {
+      "default": 256,
+      "minimum": 2,
+      "title": "Max Sequence Length",
+      "type": "integer"
+    },
     "registry_id": {
       "default": "synthetic-specialist",
       "maxLength": 100,
@@ -164,6 +182,12 @@
       "default": 23,
       "minimum": 0,
       "title": "Seed",
+      "type": "integer"
+    },
+    "steps": {
+      "default": 2,
+      "minimum": 1,
+      "title": "Steps",
       "type": "integer"
     },
     "tokenizer_id": {

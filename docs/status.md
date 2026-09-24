@@ -1,7 +1,7 @@
 # Status and gap analysis
 
 The engineering specification v1.0 was supplied on 2026-09-23. Milestone 1 slices 1a–1c
-and milestone 2 slices 2a–2b plus milestone 3 slice 3a are implemented and verified locally with synthetic data. Staging and production
+and milestone 2 slices 2a–2b plus milestone 3 slices 3a–3b are implemented and tested locally with synthetic data. The reviewer runs `make ci` on the host; every gate passed on 2026-09-24 with the training group installed, including the SBOM audit. Staging and production
 acceptance remain separate; no external provider, transport or exporter is configured.
 
 Initial inspection found no existing repository, instructions, CI, deployment configuration,
@@ -18,7 +18,7 @@ Python project uses uv/FastAPI; it provides tooling precedent, not shared infras
 | Telemetry | SQLite outbox, retry/quarantine, idempotent sink, in-process metrics and traces | Real transport, exporter, multi-process dispatch |
 | Evaluation (milestone 2, slice 2b, delivered 2026-09-23 on branch `slice-2b`) | Five in-process suites; blinded deterministic judge; paired bootstrap and segmented hard gates; local MACs and transactional foundation baseline lock | Real-provider baseline, human review, asymmetric signing and production promotion approvals |
 | Datasets (milestone 2, slices 2a–2b) | Authenticated feedback/corrections; current-policy eligibility; exact source provenance; indexed exact/5-gram deduplication and golden decontamination; joint family/subject splits; encrypted shards, pending manifests with local MACs and data cards; operator API/CLI; deletion/reproducibility/concurrency tests; evaluation interactions excluded | Asymmetric signing, external artifact lifecycle |
-| Training/registry (milestone 3, slice 3a, delivered 2026-09-23 on branch `slice-3a`) | Signed dataset approval; current-policy fake CPU training, durable jobs and resume; MAC-verified artifacts; shared control registry; exact-model evaluation gates; audited promotions and atomic rollback; paired database backup/restore | Real LoRA/PyTorch/PEFT (3b), external artifact lifecycle, production approvals, traffic routing (milestone 4) |
+| Training/registry (milestone 3, slices 3a–3b, delivered 2026-09-24 on branch `slice-3b`) | Signed approval; durable asynchronous queue/cancellation/restart; optional offline CPU LoRA; deterministic safetensors checkpoints and merged/unmerged exports; verified specialist generation; resource limits; exact-artifact evaluation and audited promotion/rollback | GPU/distributed training, external artifact lifecycle, production approvals, traffic routing (milestone 4) |
 | Routing/deployment | Foundation-only routing with residency and integer-micro cost constraints | Shadow, bounded fallback, canary, rollback |
 | Research | Disabled configuration intent | Isolated activation/pruning work after earlier milestones |
 
@@ -127,6 +127,45 @@ migration ledgers, the original replay, one control job and five pending events 
 `pytest -m smoke` passed: CPU train → evaluate → approve → shadow completed in **0.122 s**, below
 the ten-second ceiling. These are local synthetic measurements, not production acceptance.
 
-Future increments may broaden to milestone 3 slice 3b LoRA, milestone 4 routing,
+Slice 3b adds control migration 0008 for authenticated queue submitters and a queue index. POST
+returns `queued`; a lifespan worker processes jobs in creation order under filesystem leases.
+Current policy and approved shards are rechecked before execution. Cancellation, graceful
+shutdown and crash recovery use cooperative boundaries and authenticated checkpoints. No identity
+comes from the specification. The optional stack is imported only inside `training/lora.py`;
+the default fake backend remains available without it. Real bases/tokenizers are verified local
+snapshots, never downloads. Only safetensors and numerical/configuration JSON enter real artifacts.
+The new golden items check grounded arithmetic/instruction retention and refusal with the pinned
+deterministic judge. Real-adapter failures still block promotion.
+
+| Milestone 3 local exit criterion | Slice 3b result measured 2026-09-24 |
+| --- | --- |
+| Real CPU train → five suites → approve → shadow in <60 s | **2.930 s**, 500 optimizer steps, 47,500 tokens; passing synthetic no-context task, eight held-out items |
+| Tiny model and memory measurement | Two layers, 32 hidden units, 259 tokens; admission estimate **844,032 bytes**; process peak RSS **391,905,280 bytes** |
+| CPU determinism and checkpoint resume | Identical four-step loss curves, every published file and full artifact digests across fresh runs; interruption at step 2 resumes to the same artifact digest |
+| Real generation and gates | Actual tokenizer usage, greedy bounded output; all five ordinary suites executed on a four-step adapter; failed report refuses approval |
+| Queue/cancellation/restart and resource limits | 4 fake-worker queue tests plus 8 real-trainer tests pass; trainer architecture remains pinned across workers/retries; cancelled work never registers; 1-byte admission limit refuses loading; zero-second deadline saves checkpoint 0 before failure |
+| Formatting, lint, strict types, unit/contract/integration | `make check integration` passes; strict mypy **59** source files; **133** unit/contract passed, **1** GPU skip; **102** integration passed |
+| Security/load and recovery | **43** security/load tests and **5** drills passed; correlation **1,000/1,000**, **5,000** events; normal p95 overhead **1.921 ms** |
+| CPU smoke gates | **2** passed; fake lifecycle **0.139 s**, real lifecycle **2.930 s** |
+| Optional dependencies absent | Full suite with all four training imports blocked: **275 passed, 9 skipped** in **31.55 s** (8 optional CPU tests and 1 GPU placeholder skipped) |
+| Required dependency-absence CI gate (review follow-up) | `make check-without-training` now runs after smoke in `make ci`: **275 passed, 9 skipped** in **31.75 s** |
+| Full `make ci` | **Passed on the reviewer's host, 2026-09-24**, with the training group installed, including SBOM audit: **284** tests; real smoke approximately **3 s**, same adapter digest on two runs |
+
+The passing real smoke intentionally learns one synthetic no-context response; its retrieval suite
+has no relevant documents. It demonstrates lifecycle mechanics, not general safety, RAG quality,
+catastrophic-forgetting acceptance or production readiness. Those broader golden/safety/retrieval
+fixtures are exercised separately and the tiny model fails their gates. Published files and the full
+artifact digest are reproducible: checkpoints live outside the signed export inventory, while wall
+clock and peak RSS live only in the job's resource usage. Dependency manifests/lockfiles and serving
+traffic behavior remain unchanged.
+See the [training runbook](runbooks/training-and-promotion.md) for reproduction and limits.
+
+The pass-1 follow-up also passed full `make ci`, including the SBOM audit and the newly required
+dependency-absence gate. Determinism assertions now compare complete published inventories and
+artifact digests across two fresh jobs and checkpoint resume. Publication recovery covers partially
+restored checkpoint archives, and specialist loading is checked with a relocated export and an
+explicit base-model data directory.
+
+Future increments may broaden to milestone 4 routing,
 milestone 5 distillation, and optional milestone 6 research. Each remains a separate reviewable
 increment. No production acceptance criterion is claimed satisfied at this checkpoint.

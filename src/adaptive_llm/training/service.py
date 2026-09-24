@@ -1,10 +1,12 @@
 """Approved, current-policy training; synchronous worker work never runs on the HTTP loop."""
 
+import asyncio
 import fcntl
 import hashlib
 from dataclasses import replace
 from pathlib import Path
-from time import thread_time
+from threading import Event
+from time import perf_counter, thread_time
 
 from adaptive_llm.contracts import (
     DatasetLineage,
@@ -26,6 +28,20 @@ from adaptive_llm.training import Trainer
 
 
 class TrainingOrchestrator:
+    @staticmethod
+    def _move_checkpoints(source: Path, destination: Path) -> None:
+        """Separate resumable state from exports; also recover partially completed moves."""
+        if any(p.is_symlink() for p in (source, source.parent, destination, destination.parent)):
+            raise GatewayError(409, "checkpoint_integrity_failed")
+        checkpoints = sorted([*source.glob("checkpoint-*"), *source.glob(".checkpoint-*")])
+        for path in checkpoints:
+            if path.is_symlink() or not path.is_dir() or (destination / path.name).exists():
+                raise GatewayError(409, "checkpoint_integrity_failed")
+        if checkpoints:
+            destination.mkdir(parents=True, exist_ok=True, mode=0o700)
+            for path in checkpoints:
+                path.rename(destination / path.name)
+
     def __init__(
         self,
         registry: ModelRegistry,
@@ -44,6 +60,63 @@ class TrainingOrchestrator:
             keyring,
             revision,
         )
+        self.stopping = Event()
+
+    def submit(self, specification: TrainingJobSpecification, identity: Identity) -> TrainingJob:
+        LocalDatasetBuilder._authorize(identity, [])
+        if identity.subject_id_pseudonymous is None:
+            raise GatewayError(422, "operator_actor_required")
+        spec = specification.model_copy(update={"code_revision": self.revision})
+        dataset = self._eligible(spec, identity)
+        return self.registry.enqueue(
+            TrainingJob(specification=spec, trainer_architecture=self.trainer.architecture),
+            dataset.tenant_ids,
+            identity,
+        )
+
+    def stop(self) -> None:
+        self.stopping.set()
+
+    async def worker(self) -> None:
+        while not self.stopping.is_set():
+            await asyncio.to_thread(self.work_once)
+            await asyncio.sleep(0.05)
+
+    def work_once(self) -> None:
+        # A process-wide lease also serializes separate local app/CLI processes.
+        lock_dir = self.data_dir / "control" / "training-locks"
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        with (lock_dir / "worker.lock").open("a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return
+            for job, identity in self.registry.pending_jobs():
+                if self.stopping.is_set():
+                    return
+                if job.trainer_architecture != self.trainer.architecture:
+                    continue
+                try:
+                    self.run(job.specification, identity)
+                except GatewayError as error:
+                    if error.code == "training_shutdown":
+                        return
+                    current = self.registry.job(job.specification.job_id, identity)
+                    if current is not None and current.state in {"queued", "running"}:
+                        if error.code == "training_job_running":
+                            return
+                        # Eligibility/revision failures happen before the trainer's failure handler.
+                        self.registry.save_job(
+                            current.model_copy(
+                                update={
+                                    "state": "failed",
+                                    "completed_at": now(),
+                                    "failure_code": "training_eligibility_failed",
+                                }
+                            ),
+                            sorted(identity.dataset_tenants),
+                        )
+                return
 
     def _eligible(self, spec: TrainingJobSpecification, identity: Identity) -> DatasetManifest:
         manifest = self.builder.get(spec.dataset_id, spec.dataset_version, identity)
@@ -82,17 +155,20 @@ class TrainingOrchestrator:
     ) -> TrainingJob:
         job = self.registry.job(spec.job_id, identity)
         if job is not None:
+            if job.trainer_architecture != self.trainer.architecture:
+                raise GatewayError(409, "training_trainer_mismatch")
             if job.specification != spec:
                 raise GatewayError(409, "training_job_id_conflict")
             if job.state == "succeeded":
                 return job
             if job.state == "cancelled":
-                raise GatewayError(409, "training_job_cancelled")
+                return job
         else:
-            job = TrainingJob(specification=spec)
+            job = TrainingJob(specification=spec, trainer_architecture=self.trainer.architecture)
             self.registry.save_job(job, dataset.tenant_ids)
         destination = self.data_dir / "models" / spec.registry_id / job.model_version
         working = destination.with_name(f".{job.model_version}.training")
+        archived_checkpoints = destination.parent / ".checkpoints" / job.model_version
         job = job.model_copy(
             update={
                 "state": "running",
@@ -107,21 +183,49 @@ class TrainingOrchestrator:
             if destination.exists():
                 raise GatewayError(409, "model_version_exists")
             working.mkdir(parents=True, exist_ok=True, mode=0o700)
+            # A publication failure or crash may leave all or part of the checkpoints archived.
+            self._move_checkpoints(archived_checkpoints, working)
 
             def checkpoint(reference: str) -> None:
                 nonlocal job
                 assert job is not None
-                job = job.model_copy(update={"checkpoint_refs": [*job.checkpoint_refs, reference]})
+                job = job.model_copy(
+                    update={
+                        "checkpoint_refs": list(dict.fromkeys([*job.checkpoint_refs, reference]))
+                    }
+                )
                 self.registry.save_job(job, dataset.tenant_ids)
 
+            def check() -> None:
+                current = self.registry.job(spec.job_id, identity)
+                if current is not None and current.cancel_requested:
+                    raise GatewayError(409, "training_cancelled")
+                if self.stopping.is_set():
+                    raise GatewayError(503, "training_shutdown")
+
             cpu_start = thread_time()
-            usage = self.trainer.train(spec, dataset, working, job.checkpoint_refs, checkpoint)
-            usage = usage.model_copy(update={"cpu_seconds": thread_time() - cpu_start})
+            wall_start = perf_counter()
+            usage = self.trainer.train(
+                spec, dataset, working, job.checkpoint_refs, checkpoint, check
+            )
+            check()
+            usage = usage.model_copy(
+                update={
+                    "cpu_seconds": thread_time() - cpu_start,
+                    "wall_seconds": perf_counter() - wall_start,
+                }
+            )
+            self._move_checkpoints(working, archived_checkpoints)
             hashes = {
                 p.relative_to(working).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted(working.rglob("*"))
                 if p.is_file()
             }
+            usage = usage.model_copy(
+                update={
+                    "artifact_bytes": sum((working / name).stat().st_size for name in hashes),
+                }
+            )
             config_digest = hashlib.sha256(
                 spec.model_dump_json(exclude={"job_id"}).encode()
             ).hexdigest()
@@ -139,6 +243,10 @@ class TrainingOrchestrator:
                 adapter_config=spec.adapter_config,
                 tokenizer_id=spec.tokenizer_id,
                 chat_template_version=spec.chat_template_version,
+                context_limit=spec.max_sequence_length,
+                safety_notes=[
+                    "Local synthetic lifecycle verification; quality requires evaluation."
+                ],
                 datasets=[
                     DatasetLineage(
                         dataset_id=dataset.dataset_id,
@@ -194,6 +302,12 @@ class TrainingOrchestrator:
                 "artifact_integrity_failed",
                 "trainer_architecture_mismatch",
                 "single_dataset_required",
+                "training_cancelled",
+                "training_shutdown",
+                "training_memory_limit",
+                "training_dependencies_unavailable",
+                "invalid_base_model",
+                "training_configuration_invalid",
             }
             code = (
                 error.code
@@ -202,9 +316,13 @@ class TrainingOrchestrator:
             )
             job = job.model_copy(
                 update={
-                    "state": "failed",
-                    "completed_at": now(),
-                    "failure_code": code,
+                    "state": "cancelled"
+                    if code == "training_cancelled"
+                    else "queued"
+                    if code == "training_shutdown"
+                    else "failed",
+                    "completed_at": None if code == "training_shutdown" else now(),
+                    "failure_code": None if code == "training_shutdown" else code,
                     "artifact_ref": None,
                     "artifact_digest": None,
                 }
