@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 from time import monotonic, sleep
+from unittest.mock import Mock
 
 import pytest
 from fastapi import FastAPI
@@ -27,6 +28,15 @@ from adaptive_llm.contracts import (
 )
 from adaptive_llm.gateway.identity import Identity, Keyring, LocalAuthenticator
 from adaptive_llm.providers import ProviderRequest
+
+
+@pytest.fixture(autouse=True)
+def metrics_listener(monkeypatch):
+    # API tests use an in-process client. Dedicated observability tests exercise real sockets.
+    server, thread = Mock(), Mock()
+    start = Mock(return_value=(server, thread))
+    monkeypatch.setattr("adaptive_llm.app.start_http_server", start)
+    return start
 
 
 class DatasetPolicy:
@@ -495,3 +505,7 @@ def evaluation_seed(tmp_path: Path, request: pytest.FixtureRequest) -> Iterator[
             performance_requests=12,
         )
         yield EvaluationSeed(app, client, tmp_path, manifest, request)
+
+
+# Reuse the existing behavioral suites for both durable backends.
+pytest_plugins = ["postgres_support"]

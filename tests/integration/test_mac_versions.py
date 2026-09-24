@@ -12,6 +12,12 @@ from adaptive_llm.gateway.identity import GatewayError
 from adaptive_llm.registry.artifacts import signed_metadata, verify_artifact
 
 
+@pytest.fixture(autouse=True)
+def legacy_mac_writes(monkeypatch):
+    # Exercise historical v1/v2 encodings independently of the new signing configuration.
+    monkeypatch.setattr("adaptive_llm.app.local_keys", lambda _: (None, None))
+
+
 @pytest.mark.parametrize("distilled", [False, True])
 def test_approval_mac_versions_cover_legacy_and_full_new_records(evaluation_seed, distilled):
     seed = evaluation_seed

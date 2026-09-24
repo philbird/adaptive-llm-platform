@@ -1,7 +1,7 @@
 """Evaluation-only serving identities and injected, replaceable pipeline boundaries."""
 
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -70,6 +70,9 @@ class DiscardEvents:
 
     def enqueue(self, events: Sequence[Event], pending_limit: int) -> int:
         return 0
+
+    def claim(self, at: datetime) -> AbstractContextManager[OutboxRow | None]:
+        return nullcontext(None)
 
     def next_due(self, at: datetime) -> OutboxRow | None:
         return None

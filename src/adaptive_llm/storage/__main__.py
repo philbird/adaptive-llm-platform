@@ -11,8 +11,12 @@ from adaptive_llm.events.outbox import Dispatcher
 from adaptive_llm.metrics import InProcessMetrics
 from adaptive_llm.storage import StorageError
 from adaptive_llm.storage.crypto import PayloadCipher, load_keyring
+from adaptive_llm.storage.database import Database
 from adaptive_llm.storage.operations import backup_pair, restore_pair, rotate_key
 from adaptive_llm.storage.outbox import SQLiteOutboxStore
+from adaptive_llm.storage.postgres import PostgresDatabase
+from adaptive_llm.storage.postgres_operations import backup_postgres, restore_postgres
+from adaptive_llm.storage.postgres_stores import PostgresOutboxStore
 from adaptive_llm.storage.retention import sweep
 from adaptive_llm.storage.sqlite import (
     SQLiteDatabase,
@@ -41,6 +45,12 @@ def main(argv: list[str] | None = None, *, sink: EventSink | None = None) -> Non
     parser.add_argument(
         "--environment", choices=("local", "development", "staging", "production"), default="local"
     )
+    parser.add_argument(
+        "--storage-backend",
+        choices=("sqlite", "postgres"),
+        default=os.environ.get("STORAGE_BACKEND", "sqlite"),
+    )
+    parser.add_argument("--database-url", default=os.environ.get("DATABASE_URL"))
     parser.add_argument("--tenant")
     parser.add_argument("--event-id")
     parser.add_argument("--new-key-version")
@@ -58,13 +68,26 @@ def main(argv: list[str] | None = None, *, sink: EventSink | None = None) -> Non
     if args.command == "rotate-key" and (not args.new_key_version or args.keyring is None):
         parser.error("rotate-key requires --new-key-version and --keyring")
     try:
+        if args.storage_backend == "postgres" and not args.database_url:
+            raise StorageError("database_url_required")
         if args.command == "restore":
-            restore_pair(args.out, args.data_dir, args.environment, force=args.force)
+            if args.storage_backend == "postgres":
+                restore_postgres(args.out, args.database_url, args.environment, force=args.force)
+            else:
+                restore_pair(args.out, args.data_dir, args.environment, force=args.force)
             print("database_restored")
             return
-        database = SQLiteDatabase(args.data_dir, cast(Environment, args.environment))
+        database: Database = (
+            PostgresDatabase(args.database_url, args.environment)
+            if args.storage_backend == "postgres"
+            else SQLiteDatabase(args.data_dir, cast(Environment, args.environment))
+        )
         try:
-            outbox = SQLiteOutboxStore(database)
+            outbox = (
+                PostgresOutboxStore(database)
+                if isinstance(database, PostgresDatabase)
+                else SQLiteOutboxStore(database)
+            )
             if args.command == "retention-sweep":
                 count = sweep(
                     SQLiteMetadataStore(database), SQLitePayloadStore(database), args.tenant
@@ -91,19 +114,29 @@ def main(argv: list[str] | None = None, *, sink: EventSink | None = None) -> Non
                 )
                 print(f"rotated_payloads={count}")
             elif args.command == "backup":
-                control = control_database(
-                    args.data_dir,
-                    cast(Environment, args.environment),
+                control: Database = (
+                    PostgresDatabase(args.database_url, args.environment, role="control")
+                    if args.storage_backend == "postgres"
+                    else control_database(args.data_dir, cast(Environment, args.environment))
                 )
                 try:
-                    backup_pair(database, control, args.out)
+                    if isinstance(database, PostgresDatabase) and isinstance(
+                        control, PostgresDatabase
+                    ):
+                        backup_postgres(database, control, args.out)
+                    else:
+                        assert isinstance(database, SQLiteDatabase) and isinstance(
+                            control, SQLiteDatabase
+                        )
+                        backup_pair(database, control, args.out)
                 finally:
                     control.close()
                 print("backup_complete")
             else:
-                control = control_database(
-                    args.data_dir,
-                    cast(Environment, args.environment),
+                control = (
+                    PostgresDatabase(args.database_url, args.environment, role="control")
+                    if args.storage_backend == "postgres"
+                    else control_database(args.data_dir, cast(Environment, args.environment))
                 )
                 control.close()
                 print("migrations_applied")

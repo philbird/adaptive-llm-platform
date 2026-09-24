@@ -10,9 +10,14 @@ from adaptive_llm.contracts import DatasetApproval, DatasetManifest, Split, now,
 from adaptive_llm.datasets.builder import DatasetBuilder, LocalDatasetBuilder
 from adaptive_llm.datasets.curation import SPLITS
 from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
+from adaptive_llm.signing import FIELDS, sign_record, signed, verify_record
 from adaptive_llm.storage import EncryptedPayload
 from adaptive_llm.storage.crypto import PayloadCipher
 from adaptive_llm.storage.persistence import Persistence
+
+
+def approval_payload(manifest: DatasetManifest) -> str:
+    return manifest.model_dump_json(exclude={"approval": FIELDS | {"mac"}})
 
 
 def approval_mac(manifest: DatasetManifest, keyring: Keyring) -> str:
@@ -55,19 +60,34 @@ def verify_manifest(manifest: DatasetManifest, data_dir: Path, keyring: Keyring)
         directory = data_dir / "datasets" / manifest.dataset_id / manifest.version
         encoded = (directory / "manifest.json").read_text()
         original = DatasetManifest.model_validate_json(encoded)
-        if (
-            not hmac.compare_digest(
-                (directory / "manifest.mac").read_text(), keyring.manifest_mac(encoded)
+        if signed(original):
+            verify_record(
+                original,
+                keyring.verifier,
+                "dataset-manifest",
+                original.model_dump_json(exclude=FIELDS | {"approval"}),
             )
-            or original.model_dump(exclude={"approval"})
-            != manifest.model_dump(exclude={"approval"})
+        elif not keyring.accepts_legacy_mac or not hmac.compare_digest(
+            (directory / "manifest.mac").read_text(), keyring.manifest_mac(encoded)
+        ):
+            raise ValueError
+        if (
+            original.model_dump(exclude={"approval"}) != manifest.model_dump(exclude={"approval"})
             or original.approval.status != "pending"
         ):
             raise ValueError
-        if manifest.approval.status != "pending" and not hmac.compare_digest(
-            manifest.approval.mac or "", approval_mac(manifest, keyring)
-        ):
-            raise ValueError
+        if manifest.approval.status != "pending":
+            if signed(manifest.approval):
+                verify_record(
+                    manifest.approval,
+                    keyring.verifier,
+                    "dataset-approval",
+                    approval_payload(manifest),
+                )
+            elif not keyring.accepts_legacy_mac or not hmac.compare_digest(
+                manifest.approval.mac or "", approval_mac(manifest, keyring)
+            ):
+                raise ValueError
     except Exception:
         raise GatewayError(409, "invalid_dataset_artifact") from None
 
@@ -189,12 +209,22 @@ class DatasetApprovals:
                 at=now(),
             )
             approved = manifest.model_copy(update={"approval": approval})
-            approved = approved.model_copy(
-                update={
-                    "approval": approval.model_copy(
-                        update={"mac": approval_mac(approved, self.persistence.keyring)}
-                    )
-                }
-            )
+            self.persistence.keyring.require_signer()
+            if self.persistence.keyring.signer is not None:
+                approval = sign_record(
+                    approval,
+                    self.persistence.keyring.signer,
+                    "dataset-approval",
+                    approval_payload(approved),
+                )
+                approved = approved.model_copy(update={"approval": approval})
+            else:
+                approved = approved.model_copy(
+                    update={
+                        "approval": approval.model_copy(
+                            update={"mac": approval_mac(approved, self.persistence.keyring)}
+                        )
+                    }
+                )
             self.persistence.metadata.approve_manifest(approved)
             return approved

@@ -25,6 +25,7 @@ from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
 from adaptive_llm.policy import PolicyEngine
 from adaptive_llm.registry import ModelRegistry
 from adaptive_llm.registry.artifacts import artifact_digest, signed_metadata, verify_artifact
+from adaptive_llm.signing import sign_record
 from adaptive_llm.storage.crypto import PayloadCipher
 from adaptive_llm.training import Trainer
 
@@ -110,15 +111,14 @@ class TrainingOrchestrator:
             await asyncio.sleep(0.05)
 
     def work_once(self) -> None:
-        # A process-wide lease also serializes separate local app/CLI processes.
-        lock_dir = self.data_dir / "control" / "training-locks"
-        lock_dir.mkdir(parents=True, exist_ok=True)
-        with (lock_dir / "worker.lock").open("a") as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                return
-            for job, identity in self.registry.pending_jobs():
+        with self.registry.worker_claim(
+            (
+                self.trainer.architecture,
+                self.router_trainer.architecture,
+                *(t.architecture for t in self.student_trainers.values()),
+            )
+        ) as jobs:
+            for job, identity in jobs:
                 if self.stopping.is_set():
                     return
                 if job.trainer_architecture != self._trainer(job.specification).architecture:
@@ -286,7 +286,9 @@ class TrainingOrchestrator:
                 raise GatewayError(422, "operator_actor_required")
             student_architecture: str | None = None
             student_parameter_count: int | None = None
-            limitations = ["Local MAC, not asymmetric signing."]
+            limitations = [
+                "Local synthetic training; production quality requires separate acceptance."
+            ]
             if spec.job_type == "distillation":
                 # This report was produced from the same verified snapshot used for training.
                 report = json.loads((working / "training_report.json").read_bytes())
@@ -346,9 +348,16 @@ class TrainingOrchestrator:
                 known_limitations=limitations,
                 distillation=dataset.distillation if spec.job_type == "distillation" else None,
             )
-            model = model.model_copy(
-                update={"artifact_mac": self.keyring.artifact_mac(signed_metadata(model))}
-            )
+            self.keyring.require_signer()
+            if self.keyring.signer is not None:
+                model = model.model_copy(update={"artifact_mac": ""})
+                model = sign_record(
+                    model, self.keyring.signer, "model-manifest", signed_metadata(model)
+                )
+            else:
+                model = model.model_copy(
+                    update={"artifact_mac": self.keyring.artifact_mac(signed_metadata(model))}
+                )
             verify_artifact(model, working, self.keyring)
             working.rename(destination)
             published = True

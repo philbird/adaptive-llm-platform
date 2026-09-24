@@ -214,11 +214,13 @@ def test_tampered_artifacts_fail_closed(evaluation_seed: "EvaluationSeed", artif
             f"/v1/evaluations/{seed.request.evaluation_id}", headers=OPERATOR
         )
         assert response.status_code == 503
-        assert response.json() == {"error": {"code": "evaluation_integrity_failed"}}
+        assert response.json() == {"error": {"code": "report_integrity_failed"}}
         return
     if artifact == "manifest":
         path = directory / "manifest.json"
-        path.write_text(path.read_text() + " ")
+        raw = json.loads(path.read_text())
+        raw["signature"] = "synthetic-forgery"
+        path.write_text(json.dumps(raw))
     else:
         path = directory / "synthetic-a.test.jsonl.enc"
         envelope = json.loads(path.read_text())

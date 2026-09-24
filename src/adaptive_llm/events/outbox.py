@@ -4,6 +4,7 @@ import asyncio
 import math
 import random
 from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from threading import Lock
@@ -44,6 +45,8 @@ class OutboxStats:
 class OutboxStore(Protocol):
     # Must share the metadata transaction. Returns the count dropped in that transaction.
     def enqueue(self, events: Sequence[Event], pending_limit: int) -> int: ...
+
+    def claim(self, at: datetime) -> AbstractContextManager[OutboxRow | None]: ...
 
     def next_due(self, at: datetime) -> OutboxRow | None: ...
 
@@ -88,10 +91,11 @@ class OutboxBackoff:
 
 
 class Dispatcher:
-    """One dispatcher per local database; sinks must deduplicate event_id after a crash.
+    """At-least-once dispatch; sinks must deduplicate event_id after acknowledgement loss.
 
-    Sink calls run outside the database lock and off the serving event loop. Concurrent
-    dispatch_once calls on this dispatcher serialize; multiple serving processes are deferred.
+    SQLite uses one local dispatcher. PostgreSQL claims independent rows until delivery
+    bookkeeping commits. Sink calls run off the serving event loop; calls on each instance
+    serialize, while PostgreSQL supports multiple dispatcher processes.
     """
 
     def __init__(
@@ -118,50 +122,54 @@ class Dispatcher:
         processed = 0
         with self._lock:
             for _ in range(limit):
-                row = self.store.next_due(self.clock())
-                if row is None:
-                    break
-                attempts = row.attempts + 1
-                try:
-                    event = Event.model_validate_json(row.envelope)
-                    if (
-                        event.event_id != row.event_id
-                        or event.tenant_id != row.tenant_id
-                        or event.trace_id != row.trace_id
-                        or event.event_type != row.event_type
-                        or interaction_key(event) != row.interaction_id
-                    ):
-                        raise ValueError("invalid_event")
-                except Exception:
-                    self.store.finish(row.event_id, "dead", attempts, self.clock(), "invalid_event")
-                    self.metrics.increment("dead_letter")
-                else:
+                with self.store.claim(self.clock()) as row:
+                    if row is None:
+                        break
+                    attempts = row.attempts + 1
                     try:
-                        with self.tracer.start_as_current_span(
-                            "event_emission",
-                            attributes={"trace_id": event.trace_id, "schema_version": "1.0"},
-                            record_exception=False,
-                            set_status_on_exception=False,
+                        event = Event.model_validate_json(row.envelope)
+                        if (
+                            event.event_id != row.event_id
+                            or event.tenant_id != row.tenant_id
+                            or event.trace_id != row.trace_id
+                            or event.event_type != row.event_type
+                            or interaction_key(event) != row.interaction_id
                         ):
-                            self.sink.emit(event)
+                            raise ValueError("invalid_event")
                     except Exception:
-                        if attempts >= self.backoff.max_attempts:
-                            self.store.finish(
-                                row.event_id, "dead", attempts, self.clock(), "sink_unavailable"
-                            )
-                            self.metrics.increment("dead_letter")
-                        else:
-                            retry_at = self.clock() + timedelta(
-                                seconds=self.backoff.delay(attempts, self.jitter)
-                            )
-                            self.store.finish(
-                                row.event_id, "pending", attempts, retry_at, "sink_unavailable"
-                            )
-                            self.metrics.increment("outbox_retried")
+                        self.store.finish(
+                            row.event_id, "dead", attempts, self.clock(), "invalid_event"
+                        )
+                        self.metrics.increment("dead_letter")
                     else:
-                        self.store.finish(row.event_id, "delivered", attempts, self.clock(), None)
-                        self.metrics.increment("outbox_delivered")
-                processed += 1
+                        try:
+                            with self.tracer.start_as_current_span(
+                                "event_emission",
+                                attributes={"trace_id": event.trace_id, "schema_version": "1.0"},
+                                record_exception=False,
+                                set_status_on_exception=False,
+                            ):
+                                self.sink.emit(event)
+                        except Exception:
+                            if attempts >= self.backoff.max_attempts:
+                                self.store.finish(
+                                    row.event_id, "dead", attempts, self.clock(), "sink_unavailable"
+                                )
+                                self.metrics.increment("dead_letter")
+                            else:
+                                retry_at = self.clock() + timedelta(
+                                    seconds=self.backoff.delay(attempts, self.jitter)
+                                )
+                                self.store.finish(
+                                    row.event_id, "pending", attempts, retry_at, "sink_unavailable"
+                                )
+                                self.metrics.increment("outbox_retried")
+                        else:
+                            self.store.finish(
+                                row.event_id, "delivered", attempts, self.clock(), None
+                            )
+                            self.metrics.increment("outbox_delivered")
+                    processed += 1
             self.refresh_metrics()
         return processed
 

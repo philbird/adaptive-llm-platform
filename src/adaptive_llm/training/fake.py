@@ -79,9 +79,19 @@ class FakeTrainer:
             write_once(directory / name / "adapter_weights.bin", checkpoint_weights)
             write_once(directory / name / "training_report.json", report)
             signed = hashlib.sha256(checkpoint_weights + report).hexdigest()
-            write_once(
-                directory / name / "checkpoint.mac", self.keyring.artifact_mac(signed).encode()
-            )
+            seal_path = directory / name / "checkpoint.mac"
+            if seal_path.exists():
+                try:
+                    raw = seal_path.read_text()
+                    seal = json.loads(raw) if raw.startswith("{") else {"mac": raw}
+                    self.keyring.verify_checkpoint(seal, signed)
+                except Exception:
+                    raise GatewayError(409, "checkpoint_integrity_failed") from None
+            else:
+                write_once(
+                    seal_path,
+                    json.dumps(self.keyring.checkpoint_seal(signed), sort_keys=True).encode(),
+                )
             if name not in checkpoint_refs:
                 self.executed_steps.append(step)
                 checkpoint(name)

@@ -358,7 +358,7 @@ class LocalEvaluator:
                 "No streaming TTFT, cold-start or process-memory attribution; local latency only.",
                 "Costs cover fake provider tokens; retrieval and infrastructure costs unavailable.",
                 "Specialist cost reduction targets do not apply to synthetic foundation tests.",
-                "Local MAC; asymmetric signing and external artifact lifecycle remain future work.",
+                "External artifact lifecycle remains future work.",
                 "Retrieval uses immutable source snapshots and ACL decoys; no live index.",
                 "Latency includes private in-memory persistence; no tenant writes or case events.",
             ],
@@ -376,7 +376,7 @@ class LocalEvaluator:
             expected_baseline=locked.specification.evaluation_id if locked else None,
             note=request.operator_note,
         )
-        return report
+        return self.store.get(spec.evaluation_id, identity) or report
 
     def _evaluate_router(
         self,
@@ -461,7 +461,7 @@ class LocalEvaluator:
             expected_baseline=None,
             note=None,
         )
-        return report
+        return self.store.get(spec.evaluation_id, identity) or report
 
     @staticmethod
     def _scores(results: list[SuiteResult]) -> list[ItemScore]:

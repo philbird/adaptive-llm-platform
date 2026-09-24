@@ -658,7 +658,16 @@ class DatasetQualitySummary(Record):
     languages: dict[str, int]
 
 
-class DatasetApproval(Record):
+class SignedRecord(Record):
+    # Omitted on historical records to preserve their exact v1/v2 MAC encoding.
+    signature: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    signature_key_id: Identifier | None = Field(default=None, exclude_if=lambda v: v is None)
+    signature_version: Literal["ed25519-v1"] | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
+
+
+class DatasetApproval(SignedRecord):
     status: Literal["pending", "approved", "rejected"] = "pending"
     actor: str | None = None
     reason: str | None = None
@@ -694,7 +703,7 @@ class OperatorNote(Record):
         return value
 
 
-class DatasetManifest(Record):
+class DatasetManifest(SignedRecord):
     dataset_id: Identifier
     version: Identifier
     purpose: DatasetPurpose
@@ -865,7 +874,7 @@ class PruningLineage(Record):
     baseline_evaluation_id: Identifier
 
 
-class ModelManifest(Record):
+class ModelManifest(SignedRecord):
     registry_id: Identifier
     version: Identifier
     created_at: AwareDatetime = Field(default_factory=now)
@@ -1019,7 +1028,7 @@ class GateDecision(Record):
     reason: Identifier
 
 
-class EvaluationReport(Record):
+class EvaluationReport(SignedRecord):
     specification: EvaluationSpecification
     candidate_manifest_version: Identifier
     candidate_model_version: str | None = None
@@ -1074,7 +1083,7 @@ class BenchmarkMeasurement(Record):
     parameter_count: int | None = Field(default=None, gt=0, exclude_if=lambda v: v is None)
 
 
-class BenchmarkReport(Record):
+class BenchmarkReport(SignedRecord):
     specification: BenchmarkSpecification
     tenant_ids: list[Identifier]
     candidate_artifact_digest: str

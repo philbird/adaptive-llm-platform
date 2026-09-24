@@ -28,6 +28,7 @@ from adaptive_llm.datasets.eligibility import Example, Selection, select
 from adaptive_llm.datasets.sources import SourceResolver
 from adaptive_llm.gateway.identity import GatewayError, Identity
 from adaptive_llm.policy import PolicyEngine
+from adaptive_llm.signing import FIELDS, sign_record
 from adaptive_llm.storage import EncryptedPayload, StorageError
 from adaptive_llm.storage.persistence import Persistence
 
@@ -405,9 +406,19 @@ class LocalDatasetBuilder:
             specification=specification,
             distillation=lineage,
         )
+        self.persistence.keyring.require_signer()
+        if self.persistence.keyring.signer is not None:
+            manifest = sign_record(
+                manifest,
+                self.persistence.keyring.signer,
+                "dataset-manifest",
+                manifest.model_dump_json(exclude=FIELDS | {"approval"}),
+            )
         encoded = manifest.model_dump_json(indent=2)
         (staging / "manifest.json").write_text(encoded)
-        (staging / "manifest.mac").write_text(self.persistence.keyring.manifest_mac(encoded))
+        (staging / "manifest.mac").write_text(
+            "" if manifest.signature else self.persistence.keyring.manifest_mac(encoded)
+        )
         (staging / "data-card.md").write_text(self._data_card(manifest))
         return manifest
 
@@ -420,8 +431,7 @@ class LocalDatasetBuilder:
             f"Split counts: {json.dumps(manifest.examples, sort_keys=True)}\n\n"
             f"Exclusions: {json.dumps(quality.exclusions, sort_keys=True)}\n\n"
             f"Target label mix: {json.dumps(quality.label_mix, sort_keys=True)}\n\n"
-            "Integrity: manifest.mac is a local HMAC. Production replaces it with an asymmetric "
-            "signature from a signing key the builder does not hold.\n\n"
+            "Integrity: versioned Ed25519 signature; legacy records retain their local MAC.\n\n"
             "Limitations: synthetic data; placeholder system/policy instructions; no tool results; "
             "lexical 5-gram decontamination only; local regex redaction; no human verification; "
             "difficulty unknown; no balancing; group sizes may skew 80/10/10 splits. "

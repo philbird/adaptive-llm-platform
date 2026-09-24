@@ -11,28 +11,29 @@ from pathlib import Path
 from adaptive_llm.contracts import now, uid
 from adaptive_llm.storage import StorageError
 from adaptive_llm.storage.crypto import PayloadCipher
+from adaptive_llm.storage.database import Database
 from adaptive_llm.storage.migrations import CONTROL_MIGRATIONS, MIGRATIONS, migrate
 from adaptive_llm.storage.sqlite import SQLiteDatabase, SQLitePayloadStore, timestamp
 
 
 def rotate_key(
-    database: SQLiteDatabase, tenant_id: str, cipher: PayloadCipher, *, batch_size: int = 100
+    database: Database, tenant_id: str, cipher: PayloadCipher, *, batch_size: int = 100
 ) -> int:
     if batch_size < 1:
         raise ValueError("invalid_rotation_batch_size")
     payloads = SQLitePayloadStore(database)
     with database.lock:
         ceiling = database.connection.execute(
-            "SELECT coalesce(max(rowid), 0) FROM payloads WHERE tenant_id = ?", (tenant_id,)
+            "SELECT coalesce(max(reference), '') FROM payloads WHERE tenant_id = ?", (tenant_id,)
         ).fetchone()[0]
-    cursor, changed = 0, 0
+    cursor, changed = "", 0
     while True:
         with database.transaction():
             at = now()
             rows = database.connection.execute(
-                "SELECT rowid, reference FROM payloads WHERE tenant_id = ? "
-                "AND rowid > ? AND rowid <= ? AND expires_at > ? AND key_version != ? "
-                "ORDER BY rowid LIMIT ?",
+                "SELECT reference FROM payloads WHERE tenant_id = ? "
+                "AND reference > ? AND reference <= ? AND expires_at > ? AND key_version != ? "
+                "ORDER BY reference LIMIT ?",
                 (tenant_id, cursor, ceiling, timestamp(at), cipher.key_version, batch_size),
             ).fetchall()
             if not rows:
@@ -55,7 +56,7 @@ def rotate_key(
                         blob.reference,
                     ),
                 )
-            cursor = rows[-1]["rowid"]
+            cursor = rows[-1]["reference"]
         changed += len(rows)
 
 

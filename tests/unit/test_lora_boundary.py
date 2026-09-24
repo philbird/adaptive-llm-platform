@@ -90,7 +90,9 @@ raise SystemExit(pytest.main(['tests/integration/test_training.py', '-m', 'smoke
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "1 passed" in result.stdout
+    assert "passed" in result.stdout
+    assert "failed" not in result.stdout.lower()
+    assert "error" not in result.stdout.lower()
 
 
 def test_forgetting_and_refusal_items_use_deterministic_judge():

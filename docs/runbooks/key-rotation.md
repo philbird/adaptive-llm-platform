@@ -39,3 +39,8 @@ Measured locally on 2026-09-23: **100 old blobs rotated in batches of 7 during 1
 requests; all 200 blobs used the current key; old request replay matched before and after
 rotation, elapsed 0.453 s**. Unit tests also prove tenant isolation, failed-batch rollback,
 missing-key failure and replay after restart with only the new key.
+
+Artifact signatures use an independent Ed25519 keyring. `make sign-rotate` provisions a new
+signing key and retains prior public keys for verification; see
+[signing key rotation](signing-key-rotation.md). Payload rotation also works with PostgreSQL
+through the same storage CLI and tenant-scoped batches.

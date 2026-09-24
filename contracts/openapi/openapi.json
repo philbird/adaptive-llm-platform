@@ -260,6 +260,43 @@
             "title": "Schema Version",
             "type": "string"
           },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
+          },
+          "signature_key_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Key Id"
+          },
+          "signature_version": {
+            "anyOf": [
+              {
+                "const": "ed25519-v1",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Version"
+          },
           "specification": {
             "$ref": "#/components/schemas/BenchmarkSpecification"
           },
@@ -713,6 +750,43 @@
             "title": "Schema Version",
             "type": "string"
           },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
+          },
+          "signature_key_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Key Id"
+          },
+          "signature_version": {
+            "anyOf": [
+              {
+                "const": "ed25519-v1",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Version"
+          },
           "status": {
             "default": "pending",
             "enum": [
@@ -850,6 +924,43 @@
             "default": "1.0",
             "title": "Schema Version",
             "type": "string"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
+          },
+          "signature_key_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Key Id"
+          },
+          "signature_version": {
+            "anyOf": [
+              {
+                "const": "ed25519-v1",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Version"
           },
           "source_window": {
             "$ref": "#/components/schemas/SourceWindow"
@@ -1659,6 +1770,43 @@
             },
             "title": "Segment Comparisons",
             "type": "object"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
+          },
+          "signature_key_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Key Id"
+          },
+          "signature_version": {
+            "anyOf": [
+              {
+                "const": "ed25519-v1",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Version"
           },
           "specification": {
             "$ref": "#/components/schemas/EvaluationSpecification"
@@ -2778,6 +2926,43 @@
           "seed": {
             "title": "Seed",
             "type": "integer"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
+          },
+          "signature_key_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Key Id"
+          },
+          "signature_version": {
+            "anyOf": [
+              {
+                "const": "ed25519-v1",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Version"
           },
           "state": {
             "default": "candidate",

@@ -1,13 +1,15 @@
 """SQLite outbox operations; enqueue participates in the caller's transaction."""
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Literal
 
 from adaptive_llm.contracts import Event
 from adaptive_llm.events.outbox import OutboxRow, OutboxStats, interaction_key
 from adaptive_llm.storage import StorageError
-from adaptive_llm.storage.sqlite import SQLiteDatabase, timestamp
+from adaptive_llm.storage.database import Database
+from adaptive_llm.storage.sqlite import timestamp
 
 OPTIONAL_EVENTS = frozenset(
     {
@@ -19,7 +21,7 @@ OPTIONAL_EVENTS = frozenset(
 
 
 class SQLiteOutboxStore:
-    def __init__(self, database: SQLiteDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self.database = database
 
     def enqueue(self, events: Sequence[Event], pending_limit: int) -> int:
@@ -54,6 +56,10 @@ class SQLiteOutboxStore:
                 )
                 pending += 1
             return dropped
+
+    @contextmanager
+    def claim(self, at: datetime) -> Iterator[OutboxRow | None]:
+        yield self.next_due(at)
 
     def next_due(self, at: datetime) -> OutboxRow | None:
         with self.database.lock:

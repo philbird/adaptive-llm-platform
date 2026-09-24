@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -109,14 +110,18 @@ def test_training_rejects_tampered_dataset(
     spec = prepare(seed)
     directory = seed.directory / "datasets" / seed.manifest.dataset_id / seed.manifest.version
     if artifact == "manifest":
-        (directory / "manifest.mac").write_text("synthetic-forgery")
+        path = directory / "manifest.json"
+        data = json.loads(path.read_text())
+        data["signature"] = "synthetic-forgery"
+        path.write_text(json.dumps(data))
     elif artifact == "shard":
         (directory / "synthetic-a.train.jsonl.enc").write_text("synthetic-forgery")
     else:
         db = seed.app.state.database.connection
-        db.execute(
-            "UPDATE dataset_manifests SET data=json_set(data,'$.approval.mac','synthetic-forgery')"
-        )
+        row = db.execute("SELECT data FROM dataset_manifests").fetchone()
+        data = json.loads(row[0])
+        data["approval"]["signature"] = "synthetic-forgery"
+        db.execute("UPDATE dataset_manifests SET data=?", (json.dumps(data),))
     result = seed.client.post(
         "/v1/training/jobs", headers=OPERATOR, json=spec.model_dump(mode="json")
     )

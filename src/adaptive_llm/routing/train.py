@@ -22,7 +22,7 @@ from adaptive_llm.evaluation.storage import EvaluationStore
 from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
 from adaptive_llm.routing.model import train_model
 from adaptive_llm.storage.crypto import PayloadCipher
-from adaptive_llm.storage.sqlite import SQLiteDatabase
+from adaptive_llm.storage.database import Database
 from adaptive_llm.training.fake import write_once
 
 
@@ -30,7 +30,7 @@ class CounterfactualRows:
     def __init__(
         self,
         builder: DatasetBuilder,
-        control: SQLiteDatabase,
+        control: Database,
         evaluations: EvaluationStore,
         data_dir: Path,
         cipher: PayloadCipher,

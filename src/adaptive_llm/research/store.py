@@ -1,4 +1,4 @@
-"""MAC-authenticated study inventories; aggregate tensors are AES-GCM ciphertext only."""
+"""Signed study inventories; aggregate tensors are AES-GCM ciphertext only."""
 
 import hashlib
 import hmac
@@ -8,10 +8,11 @@ from tempfile import TemporaryDirectory
 from typing import Any, Protocol
 from uuid import UUID
 
-from adaptive_llm.contracts import now
+from adaptive_llm.contracts import SignedRecord, now
 from adaptive_llm.datasets.builder import LocalDatasetBuilder
 from adaptive_llm.gateway.identity import GatewayError, Identity, Keyring
 from adaptive_llm.research.models import StudySummary
+from adaptive_llm.signing import FIELDS, sign_record, signed, verify_record
 from adaptive_llm.storage import EncryptedPayload
 from adaptive_llm.storage.crypto import PayloadCipher
 from adaptive_llm.training.lora import encoded
@@ -58,6 +59,7 @@ class LocalStudyStore:
     def save(self, summary: StudySummary, tensors: bytes, identity: Identity) -> None:
         authorize(identity)
         LocalDatasetBuilder._authorize(identity, summary.tenant_ids)
+        self.keyring.require_signer()
         path = self.path(summary.specification.study_id)
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -75,14 +77,19 @@ class LocalStudyStore:
             "key_version": payload.key_version,
             "digest": hashlib.sha256(payload.ciphertext).hexdigest(),
         }
+        seal = (
+            sign_record(
+                SignedRecord(), self.keyring.signer, "research-study", encoded(envelope).decode()
+            ).model_dump(include=FIELDS)
+            if self.keyring.signer is not None
+            else {"mac": self._mac(envelope)}
+        )
         with TemporaryDirectory(prefix=".study-", dir=self.root) as temporary:
             staging = Path(temporary) / "complete"
             staging.mkdir(mode=0o700)
             (staging / "aggregates.safetensors.enc").write_bytes(payload.ciphertext)
             (staging / "report.md").write_text(markdown(summary))
-            (staging / "summary.json").write_bytes(
-                encoded({**envelope, "mac": self._mac(envelope)})
-            )
+            (staging / "summary.json").write_bytes(encoded({**envelope, **seal}))
             if path.exists():
                 raise GatewayError(409, "study_id_conflict")
             staging.rename(path)
@@ -96,8 +103,16 @@ class LocalStudyStore:
             if any(p.is_symlink() for p in path.rglob("*")):
                 raise ValueError
             envelope = json.loads((path / "summary.json").read_bytes())
-            mac = envelope.pop("mac")
-            if not hmac.compare_digest(mac, self._mac(envelope)):
+            record = SignedRecord.model_validate(envelope)
+            mac = envelope.pop("mac", "")
+            envelope = {k: v for k, v in envelope.items() if k not in FIELDS}
+            if signed(record):
+                verify_record(
+                    record, self.keyring.verifier, "research-study", encoded(envelope).decode()
+                )
+            elif not self.keyring.accepts_legacy_mac or not hmac.compare_digest(
+                mac, self._mac(envelope)
+            ):
                 raise ValueError
             summary = StudySummary.model_validate(envelope["summary"])
             LocalDatasetBuilder._authorize(identity, summary.tenant_ids)

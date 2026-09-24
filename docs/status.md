@@ -22,9 +22,9 @@ Python project uses uv/FastAPI; it provides tooling precedent, not shared infras
 | Gateway | Authenticated foundation inference, deadlines, replay, truthful health | Production identity/quotas, SSE |
 | Privacy | Purpose policy, two redaction passes, encrypted replay/content, retention and deletion | External deletion propagation and backup reconciliation |
 | RAG | Tenant/ACL/residency filtering and exact-version synthetic evidence | Real retrieval service |
-| Telemetry | SQLite outbox, retry/quarantine, idempotent sink, in-process metrics and traces | Real transport, exporter, multi-process dispatch |
-| Evaluation (milestone 2, slice 2b, delivered 2026-09-23 on branch `slice-2b`) | Five in-process suites; blinded deterministic judge; paired bootstrap and segmented hard gates; local MACs and transactional foundation baseline lock | Real-provider baseline, human review, asymmetric signing and production promotion approvals |
-| Datasets (milestone 2, slices 2a–2b) | Authenticated feedback/corrections; current-policy eligibility; exact source provenance; indexed exact/5-gram deduplication and golden decontamination; joint family/subject splits; encrypted shards, pending manifests with local MACs and data cards; operator API/CLI; deletion/reproducibility/concurrency tests; evaluation interactions excluded | Asymmetric signing, external artifact lifecycle |
+| Telemetry | SQLite/PostgreSQL outbox, retry/quarantine, idempotent sink, OTLP export, bounded Prometheus metrics and PostgreSQL concurrent dispatch | Real transport, deployed dashboards and alert routing |
+| Evaluation (milestone 2, slice 2b, delivered 2026-09-23 on branch `slice-2b`) | Five in-process suites; blinded deterministic judge; paired bootstrap and segmented hard gates; Ed25519 signatures with legacy MAC verification and transactional foundation baseline lock | Real-provider baseline, human review, signing-key custody and production promotion approvals |
+| Datasets (milestone 2, slices 2a–2b) | Authenticated feedback/corrections; current-policy eligibility; exact source provenance; indexed exact/5-gram deduplication and golden decontamination; joint family/subject splits; encrypted shards, pending manifests with Ed25519 signatures with legacy MAC verification and data cards; operator API/CLI; deletion/reproducibility/concurrency tests; evaluation interactions excluded | Production signing-key custody, external artifact lifecycle |
 | Training/registry (milestone 3, slices 3a–3b; router jobs added in 4b) | Signed approval; durable asynchronous queue/cancellation/restart; optional offline CPU LoRA; deterministic exports; verified specialist generation; plain-Python calibrated router jobs; exact-artifact evaluation and audited promotion/rollback | GPU/distributed training, external artifact lifecycle, production approvals |
 | Distillation (milestone 5, slice 5a, delivered 2026-09-24 on branch `slice-5a`) | Isolated teacher curation, encrypted approved datasets, preserved evidence/folds, general/safety mix, full/LoRA tiny students, optional safetensors KL, teacher non-inferiority and signed deployment benchmarks | Real workload quality and hardware/cost acceptance; production approvals |
 | Routing/deployment (milestone 4, slices 4a–4b, delivered 2026-09-24 on branch `slice-4b`) | Immutable policies; shadow comparisons; numeric encrypted router datasets; calibrated logistic/OOD admission; opt-in canary/production responses; segmented outcome costs; persistent automatic rollback and kill controls | Real workload calibration, production approvals, external transport, later bandits |
@@ -486,3 +486,86 @@ exit criteria remain distinct. The slice 6a hardware benchmark deliberately rema
 admission result when the measured improvement is insufficient; parameter counts do not replace
 that requirement. No production deployment, GPU, downloads, real open-weight model experiment
 or bandit work is included.
+
+## P1 production-readiness coverage
+
+P1 adds Ed25519 signing/public verification (including rotation and legacy MAC compatibility),
+OTLP/HTTP export, Prometheus exposition, and a selectable PostgreSQL tenant/control backend.
+SQLite remains the default. The table separates implemented local capabilities from production
+acceptance. **Met with PostgreSQL** means implemented with backend/concurrency/restore tests;
+those tests skip in the sandbox and must execute on the reviewer's Docker host before merge.
+No owner decision in `docs/decisions.md` has been resolved by this implementation.
+
+| Spec requirement | Status | Evidence or owner decision still required |
+| --- | --- | --- |
+| 6.3 Operational database | Met with PostgreSQL | Tenant metadata, payload references, replay and tombstones; shared behavioral suites |
+| 6.3 Event/analytics store | Still open | Local durable outbox exists; Platform selects transport and warehouse |
+| 6.3 Encrypted object artifacts | Still open | Local payload/shard encryption and filesystem signatures exist; Platform selects object storage, encryption at rest, lifecycle and immutability for all artifact classes |
+| 6.3 Tenant-separated vector store | Still open | Synthetic ACL-filtered retrieval exists; Knowledge/security select real sources and indexes |
+| 6.3 Model registry | Met with PostgreSQL | Lineage, reports, approval/deployment state and artifact pointers in separate control schema |
+| 6.3 Secrets manager | Still open | PEM/public-ring and payload key injection exist; Platform/security select secret custody/KMS |
+| 10.2 Logging off for new tenants | Met locally | Existing purpose policy defaults and privacy tests |
+| 10.2 Separate operational/content/curation/training/approval/deployment grants | Still open | Local operator capabilities exist; Security/data owners define production identities and complete grant matrix |
+| 10.2 Transit/at-rest encryption and environment keys | Still open | Payload AES-GCM and independent key configuration exist; Platform selects TLS, disk encryption and key custody |
+| 10.2 Payload/metadata separation | Met with PostgreSQL | Separate tenant payload and metadata tables with typed stores and tenant predicates |
+| 10.2 Stable subject HMAC pseudonyms | Met locally | Purpose-separated subject keys, no raw subject analytics identifiers |
+| 10.2 Never log credentials/payment data/provider bodies | Met locally | Fixed error codes, redaction and content-safety tests; no content in exported spans |
+| 10.2 Persistence/build secret and PII detection | Met locally | Existing two-pass redaction and build-time recheck |
+| 10.2 Immutable audit for access/build/approval/deployment/deletion | Still open | Local lifecycle/outbox audit exists; Security/platform choose immutable access-audit retention and sink |
+| 10.2 Deletion propagation to derived artifacts/models | Still open | Tenant tombstones, erasure and future-build exclusion exist; Data/privacy define external artifact/checkpoint reconciliation |
+| 10.2 Trained-model removal response | Still open | Revoke/retrain/re-evaluate mechanics exist; Data/ML approve operational removal policy and authority |
+| 10.2 Retention by data class and derived-index expiry | Still open | Local payload/replay expiry and tenant deletion exist; Data/platform set production periods and real-index deletion SLA |
+| 10.2 Retrieval tenant/environment/region/ACL isolation | Met locally | Synthetic exact-version retrieval and isolation tests; real connector acceptance pending |
+| 10.2 Training licences and restrictions | Met locally | Synthetic approved lineage and optional local-model licence checks; ML/procurement approve real models/data |
+| 10.2 Threat modelling | Met locally | Existing threat model and synthetic injection/isolation/artifact tests; Security reviews production deployment |
+| 10.2 Scan artifacts/containers and verify deployment signatures | Still open | Ed25519 verification at artifact load and every promotion plus SBOM gate exist; Platform/security select container scanning and production attestations |
+| 10.2 Outbound network restrictions | Still open | Offline local training requires no downloads; Platform chooses workload egress enforcement |
+| 14.1 Content-free distributed traces for full serving chain | Still open | Existing stage spans now export via OTLP; Platform/provider decisions gate external spans, reranking and streaming |
+| 14.2 Traffic/success/errors/saturation/latency dashboards | Still open | Bounded request counters exported; Platform/product choose dashboard backend, dimensions and SLOs |
+| 14.2 Token/cost category dashboards | Still open | Local integer-micro usage records exist; Platform/ML choose real-provider accounting and dashboards |
+| 14.2 Routing/confidence/OOD/fallback/breaker dashboards | Still open | Routing/fallback/breaker metrics exported; Platform deploys dashboards and representative calibration |
+| 14.2 Retrieval latency/recall/empty/stale/index/citation dashboards | Still open | Synthetic retrieval evaluation exists; Knowledge/platform choose real indexes and dashboard acceptance |
+| 14.2 Validation/safety dashboards | Still open | Bounded advisory-failure metrics exported; Security/platform choose safety alert/dashboard integration |
+| 14.2 Event lag/schema/dead-letter/drop dashboards | Still open | Lag, dead-letter, retry and drop metrics exported; Platform deploys transport and dashboards |
+| 14.2 Dataset quality/drift/consent/split dashboards | Still open | Local manifests/quality reports exist; Data/platform select production data and dashboard integration |
+| 14.2 Training metrics/utilisation/artifact dashboards | Still open | Local job/checkpoint/resource records exist; ML/platform choose compute/experiment service |
+| 14.2 Evaluation/regression/promotion dashboards | Still open | Signed aggregate reports and lifecycle history exist; ML/platform choose presentation and authority |
+| 14.2 Production distribution/business drift dashboards | Still open | Product/data define real workloads, outcomes and tolerances |
+| 14.3 Immediate safety/privacy/tenant alerts | Still open | Security/platform assign on-call routing and incident policy |
+| 14.3 Error/timeout/validation/fallback spikes | Still open | Metrics exist; Platform/product choose thresholds and alert destination |
+| 14.3 Quality/business degradation | Still open | Local canary rollback exists; Product/ML select real outcome signal and acceptance |
+| 14.3 Latency/cost budget breaches | Still open | Local gate calculations exist; Platform/product select real SLO/budget and alert routing |
+| 14.3 Retrieval empty/freshness regressions | Still open | Knowledge/platform select real index/freshness targets |
+| 14.3 Pipeline lag/redaction failures | Still open | Failure/lag counters exported; Data/platform define operational thresholds and ownership |
+| 14.3 Distribution drift tolerance alerts | Still open | Product/ML define representative distributions and tolerances |
+| 14.3 Unsigned/unapproved/incomplete deployment alerts | Still open | Requests fail closed locally; Security/platform select external alert/audit sink |
+| 14.3 Alert version context | Still open | Versioned records exist; Platform selects alert delivery envelope including application/index/router/policy versions |
+| 17 Python/FastAPI/Pydantic services | Met locally | Typed service contracts and local API gates; optional Go is not required |
+| 17 HTTP/JSON plus SSE | Still open | HTTP/JSON implemented; Product/provider choice gates streaming; internal gRPC remains optional |
+| 17 Durable workflow orchestration | Met with PostgreSQL | Restartable claimed training queue and authenticated checkpoints; Platform selects any external scheduler |
+| 17 Event transport | Still open | Durable outbox and idempotent sink boundary exist; Platform chooses real bus |
+| 17 PostgreSQL operational storage | Met with PostgreSQL | psycopg, numbered migrations, privacy/replay parity and paired backup/restore |
+| 17 Analytics warehouse | Still open | Platform selects warehouse and data access/retention policy |
+| 17 Versioned immutable object storage | Still open | Local encrypted artifacts exist; Platform chooses external object lifecycle service |
+| 17 RAG pgvector/vector database | Still open | Knowledge/platform select real index scale/filter requirements |
+| 17 PyTorch/Transformers/PEFT training | Met locally | Existing optional offline CPU training; GPU/distributed acceptance pending ML/platform choice |
+| 17 Approved model-serving endpoint | Still open | Verified local specialist loading exists; ML/platform choose real provider/runtime and load targets |
+| 17 Experiment/model tracking | Met locally | Replaceable local registry, reports and training records; Platform selects any external tracking vendor |
+| 17 Versioned pytest evaluation harness | Met locally | Existing five-suite harness, signed reports and promotion gates |
+| 17 OpenTelemetry/Prometheus/Grafana/backend | Still open | OTLP exporter and bounded unauthenticated loopback metrics endpoint implemented; Platform selects dashboards/backend |
+| 17 Explicit data-quality tests | Met locally | Existing eligibility, deduplication, provenance and split-integrity gates |
+| 17 Containers/orchestration/IaC/release | Still open | Local `make ci` remains the owner-approved gate; Platform selects deployment infrastructure |
+| 17 KMS/secrets/identity/signing/SBOM/scanning | Still open | Ed25519, injected keys, SBOM and vulnerability gate exist; Platform/security select custody, workload identity and container scanning |
+
+See [ADR 0005](adr/0005-asymmetric-signing.md), [ADR 0006](adr/0006-storage-backends.md),
+[signing rotation](runbooks/signing-key-rotation.md), [PostgreSQL operation](runbooks/postgresql.md)
+and [observability configuration](../configs/observability/README.md). PostgreSQL dispatch is
+concurrent but remains at-least-once across external acknowledgement failures; real sinks must
+deduplicate event ids. Multi-host workers require shared artifact storage. Neither sandbox skips
+nor local synthetic measurements constitute production acceptance.
+
+The reviewer ran `make ci` on the host (Python 3.12.13,
+uv 0.12.17, Docker 29.4.0, cached postgres:17.6) and it passed, including the SBOM audit
+and the PostgreSQL cases, run with `REQUIRE_POSTGRES=1` on 2026-09-24: 265 unit/contract
+(1 GPU skip), 269 integration (no skips), 77 security/load, 8 drills, 5 smoke and 585 without
+the training group (35 expected skips).

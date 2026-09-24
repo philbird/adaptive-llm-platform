@@ -64,7 +64,16 @@ def test_all_suites_baseline_lock_mac_events_idempotency_and_replacement(
     ).json() == report.model_dump(mode="json")
     directory = seed.directory / "evaluations" / seed.request.evaluation_id
     encoded = (directory / "report.json").read_text()
-    assert (directory / "report.mac").read_text() == seed.app.state.keyring.report_mac(encoded)
+    from adaptive_llm.signing import FIELDS, verify_record
+
+    verify_record(
+        report,
+        seed.app.state.keyring.verifier,
+        "evaluation-report",
+        report.model_dump_json(exclude=FIELDS),
+    )
+    assert report.signature in encoded
+    assert (directory / "report.mac").read_text() == ""
     replacement = seed.request.model_copy(update={"evaluation_id": uid()})
     assert (
         seed.client.post(

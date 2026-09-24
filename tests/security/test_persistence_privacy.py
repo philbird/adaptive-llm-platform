@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from postgres_support import stored_bytes
 
 from adaptive_llm.app import Settings, create_app
 from adaptive_llm.contracts import (
@@ -107,7 +108,7 @@ def test_no_plaintext_in_database_and_only_redacted_encrypted_payloads(
         assert "response@example.test" not in replay.json()["content"]
         assert "[REDACTED]" in replay.json()["content"]
         assert app.state.persistence.failures == 0
-    database_bytes = b"".join(p.read_bytes() for p in tmp_path.glob("*.sqlite3*"))
+    database_bytes = stored_bytes(app.state.database)
     telemetry = caplog.text + " ".join(e.model_dump_json() for e in app.state.events.events)
     for sensitive in (
         prompt,
@@ -316,11 +317,16 @@ def test_subject_tombstone_without_existing_interactions_survives_restart(
 
 
 def test_subject_deletion_rolls_back_tombstones_and_payload_deletes(
-    tmp_path: Path, inference_request: InferenceRequest
+    tmp_path: Path, inference_request: InferenceRequest, request, storage_backend
 ) -> None:
     from adaptive_llm.storage.sqlite import SQLiteDatabase, SQLiteMetadataStore, SQLitePayloadStore
 
-    database = SQLiteDatabase(tmp_path)
+    if storage_backend == "postgres":
+        from adaptive_llm.storage.postgres import PostgresDatabase
+
+        database = PostgresDatabase(request.getfixturevalue("postgres_urls")(tmp_path))
+    else:
+        database = SQLiteDatabase(tmp_path)
     metadata = SQLiteMetadataStore(database)
 
     class BrokenDelete(SQLitePayloadStore):

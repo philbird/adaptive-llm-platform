@@ -241,6 +241,7 @@ def test_resume_and_reproducible_artifacts(evaluation_seed: "EvaluationSeed") ->
                     "training_job_id",
                     "storage_location",
                     "artifact_mac",
+                    "signature",
                     "lifecycle_history",
                 }
             )
