@@ -19,3 +19,11 @@ reversible** default recorded here; the owner may overturn it before any product
 | Events, warehouse, workflow, registry and secrets | Platform | Interfaces planned; vendors not selected | Not required for milestone 1 |
 | Canary, recovery targets and rollback authority | Platform / product | No deployed specialists | Not required for milestone 1 |
 
+
+## Recorded answers
+
+Answers from the owner replace the provisional defaults above from the date shown.
+
+| Date | Decision | Answer | How it is applied |
+| --- | --- | --- | --- |
+| 2026-09-25 | 2. Lawful basis, consent and training permission | Phil: proceed without a separate lawful-basis exercise for the first tenant. | The first tenant is Phil's own ManyFails editorial pipeline. Its inputs are public web pages and operator-authored candidates; there are no end users and no personal data beyond names already published in the press. All purposes (processing, retained logging, evaluation, human review, training) are enabled for that tenant in its policy file. Anything a member of the public types into ManyFails (the idea check) is excluded from the platform because ManyFails promises that nothing typed is stored. Revisit before any tenant with end users. |
