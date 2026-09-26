@@ -1,6 +1,14 @@
 {
   "additionalProperties": false,
   "properties": {
+    "application_id": {
+      "default": "evaluation",
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Application Id",
+      "type": "string"
+    },
     "baseline_deployment_id": {
       "anyOf": [
         {
@@ -77,6 +85,36 @@
     "evaluation_id": {
       "title": "Evaluation Id",
       "type": "string"
+    },
+    "fixture_set": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fixture Set"
+    },
+    "fixture_tenant_id": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fixture Tenant Id"
     },
     "judge_version": {
       "anyOf": [

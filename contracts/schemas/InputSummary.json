@@ -42,6 +42,20 @@
       "title": "Modality",
       "type": "array"
     },
+    "response_format_ref": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Response Format Ref"
+    },
     "schema_version": {
       "const": "1.0",
       "default": "1.0",

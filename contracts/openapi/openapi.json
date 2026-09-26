@@ -1083,6 +1083,14 @@
             "title": "Eligibility Policy Version",
             "type": "string"
           },
+          "fixture_set": {
+            "default": "synthetic",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Fixture Set",
+            "type": "string"
+          },
           "general_safety_fraction": {
             "default": 0.2,
             "maximum": 0.8,
@@ -1425,6 +1433,14 @@
       "EvaluationInput": {
         "additionalProperties": false,
         "properties": {
+          "application_id": {
+            "default": "evaluation",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Application Id",
+            "type": "string"
+          },
           "baseline_deployment_id": {
             "anyOf": [
               {
@@ -1501,6 +1517,34 @@
           "evaluation_id": {
             "title": "Evaluation Id",
             "type": "string"
+          },
+          "fixture_set": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fixture Set"
+          },
+          "fixture_tenant_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fixture Tenant Id"
           },
           "judge_version": {
             "anyOf": [
@@ -1853,6 +1897,14 @@
       },
       "EvaluationSpecification": {
         "properties": {
+          "application_id": {
+            "default": "evaluation",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Application Id",
+            "type": "string"
+          },
           "baseline_deployment_id": {
             "anyOf": [
               {
@@ -1929,6 +1981,34 @@
           "evaluation_id": {
             "title": "Evaluation Id",
             "type": "string"
+          },
+          "fixture_set": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fixture Set"
+          },
+          "fixture_tenant_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "pattern": "^[\\w.-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fixture Tenant Id"
           },
           "judge_version": {
             "anyOf": [
@@ -2570,6 +2650,38 @@
         "title": "ItemScore",
         "type": "object"
       },
+      "JsonSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[\\w.-]+$",
+            "title": "Name",
+            "type": "string"
+          },
+          "schema": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Schema",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "schema"
+        ],
+        "title": "JsonSchema",
+        "type": "object"
+      },
+      "JsonValue": {},
       "LifecycleTransition": {
         "properties": {
           "actor": {
@@ -2664,6 +2776,7 @@
           },
           "role": {
             "enum": [
+              "system",
               "user",
               "assistant"
             ],
@@ -3539,6 +3652,16 @@
       "ResponseFormat": {
         "additionalProperties": false,
         "properties": {
+          "json_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JsonSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "schema_version": {
             "const": "1.0",
             "default": "1.0",
@@ -3549,7 +3672,8 @@
             "default": "text",
             "enum": [
               "text",
-              "json_object"
+              "json_object",
+              "json_schema"
             ],
             "title": "Type",
             "type": "string"

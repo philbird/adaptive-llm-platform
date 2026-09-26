@@ -7,6 +7,7 @@ from collections import Counter
 from statistics import fmean
 
 from adaptive_llm.contracts import ItemScore
+from adaptive_llm.evaluation.judge import JudgeInput, structured_matches
 from adaptive_llm.evaluation.runner import Case, Outcome
 
 
@@ -49,6 +50,18 @@ def assertions(case: Case, outcome: Outcome) -> dict[str, bool]:
             result["invalid_json"] = isinstance(json.loads(text), dict)
         except ValueError:
             result["invalid_json"] = False
+    if case.expect_json_fields or case.expect_json_text_match:
+        matches = structured_matches(
+            JudgeInput(
+                text,
+                (),
+                (),
+                True,
+                tuple(case.expect_json_fields.items()),
+                tuple(case.expect_json_text_match.items()),
+            )
+        )
+        result["json_fields_mismatch"] = all(matches)
     return result
 
 

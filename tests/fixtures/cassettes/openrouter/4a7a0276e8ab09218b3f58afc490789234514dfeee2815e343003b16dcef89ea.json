@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": true, \"kind\": \"product_shutdown\", \"product\": \"Woebot\", \"company\": \"Woebot Health\", \"event_date\": \"2025-07-02\", \"size\": \"funded\", \"confidence\": 0.95, \"reason\": \"Woebot Health discontinued its pioneering therapy chatbot product Woebot; founder cited AI moving faster than regulators.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1361,
+    "output_tokens": 96,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 1865.2389999479055
+}

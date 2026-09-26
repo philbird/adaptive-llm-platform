@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "status": "hosted-foundation",
+  "foundation_provider": "openrouter",
+  "specialist_routing_enabled": false,
+  "shadow_enabled": false,
+  "canary_enabled": false,
+  "pruning_research_enabled": false,
+  "content_logging_enabled": true,
+  "training_enabled": true,
+  "max_attempts": 1,
+  "foundation": {
+    "model_deployment_id": "openrouter-haiku-4.5-manyfails-1",
+    "model_provider": "openrouter",
+    "model_id": "anthropic/claude-haiku-4.5",
+    "model_version": "anthropic/claude-haiku-4.5",
+    "processing_region": "us",
+    "price_list": {
+      "version": "openrouter-2026-09-26",
+      "input_micros_per_1000_tokens": 1000,
+      "output_micros_per_1000_tokens": 5000
+    }
+  }
+}

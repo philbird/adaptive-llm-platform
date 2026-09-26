@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": false, \"kind\": \"not_a_failure\", \"product\": null, \"company\": null, \"event_date\": null, \"size\": \"unknown\", \"confidence\": 0.95, \"reason\": \"Generic commentary site about AI risks; no specific named product, feature or company failure described.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1300,
+    "output_tokens": 74,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 1993.141165934503
+}

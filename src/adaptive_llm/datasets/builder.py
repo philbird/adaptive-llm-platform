@@ -210,7 +210,7 @@ class LocalDatasetBuilder:
                 exclusions,
             )
             examples = distilled.examples
-        golden = golden_texts(self.golden_dir)
+        golden = golden_texts(self.golden_dir, specification.fixture_set)
         candidates = selection.examples
         created = False
         published = False

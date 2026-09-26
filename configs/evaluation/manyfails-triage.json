@@ -1,0 +1,15 @@
+{
+  "candidate_deployment_id": "openrouter-haiku-4.5-manyfails-1",
+  "baseline_deployment_id": "openrouter-haiku-4.5-manyfails-1",
+  "dataset_id": "manyfails-triage",
+  "dataset_version": "manyfails-triage-1",
+  "fixture_set": "manyfails-triage",
+  "fixture_tenant_id": "manyfails",
+  "application_id": "research-sweep",
+  "suites": [
+    "golden",
+    "safety"
+  ],
+  "minimum_sample_size": 30,
+  "critical_segments": []
+}

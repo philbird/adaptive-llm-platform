@@ -130,7 +130,7 @@ def test_payload_expiration_and_key_settings(tmp_path: Path) -> None:
         with pytest.raises(ValueError):
             Settings(**kwargs)
     with pytest.raises(ValueError, match="^payload_key_required$"):
-        Settings(environment="production")
+        Settings(environment="production", secret=b"SYNTHETIC-custom-secret-32-bytes!!")
     assert "ssss" not in repr(Settings(payload_key=b"s" * 32))
     local = SQLiteDatabase(tmp_path)
     staging = SQLiteDatabase(tmp_path, "staging")

@@ -135,13 +135,11 @@ class TeacherExamples:
             dataset_version=source.version,
             suites=["held_out"],
         )
-        golden = golden_texts(builder.golden_dir)
+        golden = golden_texts(builder.golden_dir, spec.fixture_set)
         # Compare targets alone too: a copied golden answer cannot hide in a long input.
         golden_targets = [
             json.loads(line)["target"]
-            for path in builder.golden_dir.glob("*.jsonl")
-            if path.name != "distillation-training.jsonl"
-            for line in path.read_text().splitlines()
+            for line in (builder.golden_dir / f"{spec.fixture_set}.jsonl").read_text().splitlines()
         ]
         accepted: list[BuiltExample] = []
         soft: dict[str, bytes] = {}

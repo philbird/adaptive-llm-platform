@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": true, \"kind\": \"scaled_back\", \"product\": \"AI Overviews\", \"company\": \"Google\", \"event_date\": null, \"size\": \"titan\", \"confidence\": 0.85, \"reason\": \"Google reduced coverage and scope of AI Overviews in search results, scaling back the core AI feature's deployment even before public failures.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1347,
+    "output_tokens": 88,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 2087.638875003904
+}

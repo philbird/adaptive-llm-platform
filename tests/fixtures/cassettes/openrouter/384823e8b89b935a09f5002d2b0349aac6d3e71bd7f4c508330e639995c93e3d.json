@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": true, \"kind\": \"product_shutdown\", \"product\": \"Tay\", \"company\": \"Microsoft\", \"event_date\": \"2016-03-29\", \"size\": \"titan\", \"confidence\": 0.95, \"reason\": \"Microsoft's Tay chatbot was shut down after 16 hours due to learning offensive behavior from Twitter interactions; a major AI product discontinuation by a titan company.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1334,
+    "output_tokens": 99,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 2628.199541941285
+}

@@ -30,7 +30,7 @@ class RetrievalSuite:
             )
             if any(
                 c.tenant_id != case.tenant_id
-                or "evaluation" not in c.allowed_applications
+                or case.request.application_id not in c.allowed_applications
                 or c.environment != "local"
                 or c.index_id != case.request.rag.index_id
                 for c in supplied

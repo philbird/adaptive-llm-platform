@@ -9,6 +9,7 @@ from time import perf_counter
 from typing import Literal, Protocol
 
 from opentelemetry import trace
+from pydantic import JsonValue
 
 from adaptive_llm.contracts import (
     Event,
@@ -27,6 +28,7 @@ from adaptive_llm.policy import ProcessingRedactor
 from adaptive_llm.providers import Provider, ProviderRequest, ProviderResult
 from adaptive_llm.rag import IndexedChunk, LocalRetriever, RetrievalResult, Retriever
 from adaptive_llm.routing import PriceList, Router
+from adaptive_llm.routing.tasks import RulesClassifier, TaskClassifier
 from adaptive_llm.storage.persistence import Persistence
 from adaptive_llm.storage.sqlite import SQLiteDatabase, SQLiteMetadataStore, SQLitePayloadStore
 from adaptive_llm.validation import Validator
@@ -43,6 +45,8 @@ class Case:
     expected_citations: frozenset[tuple[str, str]] = frozenset()
     prohibited: tuple[str, ...] = field(default=(), repr=False)
     expect_json: bool = False
+    expect_json_fields: dict[str, JsonValue] = field(default_factory=dict, repr=False)
+    expect_json_text_match: dict[str, str | None] = field(default_factory=dict, repr=False)
     critical: bool = False
     category: str = "general"
     segments: tuple[str, ...] = ()
@@ -122,11 +126,15 @@ def isolated_persistence(source: Persistence) -> Iterator[Persistence]:
 
 
 class EvaluationPolicy:
+    def __init__(self, application_id: str = "evaluation", residency: Region = "local") -> None:
+        self.application_id, self.residency = application_id, residency
+
     def decide(self, identity: Identity, application_id: str) -> PolicyDecision:
         return PolicyDecision(
             policy_version="evaluation-policy-1",
-            processing_allowed=application_id == "evaluation"
-            and identity.application_ids == frozenset({"evaluation"}),
+            processing_allowed=application_id == self.application_id
+            and identity.application_ids == frozenset({self.application_id}),
+            residency=self.residency,
             retention_seconds=3600,
             evaluation_allowed=True,
             content_logging_allowed=False,
@@ -177,10 +185,14 @@ class PipelineRunner:
         router: Router,
         validator: Validator,
         prices: PriceList,
+        classifier: TaskClassifier | None = None,
+        residency: Region = "local",
     ) -> None:
         self.persistence, self.operator = persistence, operator
         self.provider, self.router, self.validator = provider, router, validator
         self.prices = prices
+        self.classifier = classifier or RulesClassifier()
+        self.residency = residency
 
     async def run(self, case: Case) -> Outcome:
         if (
@@ -188,9 +200,14 @@ class PipelineRunner:
             or case.tenant_id not in self.operator.dataset_tenants
         ):
             raise GatewayError(403, "evaluation_tenant_forbidden")
+        if (
+            case.request.application_id != "evaluation"
+            and case.request.application_id not in self.operator.application_ids
+        ):
+            raise GatewayError(403, "application_forbidden")
         identity = Identity(
             case.tenant_id,
-            frozenset({"evaluation"}),
+            frozenset({case.request.application_id}),
             self.operator.environment,
             self.persistence.keyring.pseudonym(case.tenant_id, "evaluation"),
         )
@@ -201,7 +218,7 @@ class PipelineRunner:
         service = InferenceService(
             keyring=self.persistence.keyring,
             replay_capacity=1,
-            policy=EvaluationPolicy(),
+            policy=EvaluationPolicy(case.request.application_id, self.residency),
             redactor=ProcessingRedactor(),
             retriever=retriever,
             router=self.router,
@@ -209,10 +226,9 @@ class PipelineRunner:
             validator=self.validator,
             tracer=trace.get_tracer("adaptive_llm.evaluation", "1.0"),
             persistence=self.persistence,
+            classifier=self.classifier,
         )
-        request = case.request.model_copy(
-            update={"request_id": uid(), "application_id": "evaluation"}
-        )
+        request = case.request.model_copy(update={"request_id": uid()})
         start = perf_counter()
         response: InferenceResponse | None = None
         try:

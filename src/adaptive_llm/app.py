@@ -1,6 +1,8 @@
 """Local serving with transactional metadata and encrypted payload persistence."""
 
 import asyncio
+import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -69,7 +71,8 @@ from adaptive_llm.metrics import InProcessMetrics, Metrics, RequestMetrics
 from adaptive_llm.metrics.export import otlp_provider
 from adaptive_llm.policy import LocalPolicyEngine, PolicyEngine, ProcessingRedactor
 from adaptive_llm.policy.persistence import LocalPersistenceRedactor, PersistenceRedactor
-from adaptive_llm.providers import FakeProvider, Provider
+from adaptive_llm.providers import FakeProvider, LoopScopedProvider, Provider
+from adaptive_llm.providers.openrouter import BASE_URL, OpenRouterProvider
 from adaptive_llm.rag import LocalRetriever, Retriever
 from adaptive_llm.registry import ModelRegistry
 from adaptive_llm.registry.sqlite import SQLiteModelRegistry
@@ -84,6 +87,7 @@ from adaptive_llm.routing.shadow import (
     ShadowWorker,
     SpecialistLoader,
 )
+from adaptive_llm.routing.tasks import RulesClassifier, TaskClassifier
 from adaptive_llm.routing.train import CounterfactualRows
 from adaptive_llm.signing import Ed25519Signer, Ed25519Verifier, Signer, Verifier, local_keys
 from adaptive_llm.storage import MetadataStore, PayloadStore, StorageError
@@ -121,8 +125,28 @@ def _default_data_dir() -> Path:
     return ROOT / ".local"
 
 
+def _environment_secret() -> bytes | None:
+    encoded = os.environ.get("ADAPTIVE_SECRET")
+    if encoded is None:
+        return None
+    try:
+        try:
+            secret = bytes.fromhex(encoded)
+        except ValueError:
+            secret = base64.b64decode(encoded, validate=True)
+        if len(secret) < 32:
+            raise ValueError
+    except (ValueError, binascii.Error):
+        raise ValueError("invalid_adaptive_secret") from None
+    return secret
+
+
 @dataclass(frozen=True)
 class Settings:
+    openrouter_api_key: str | None = field(
+        default_factory=lambda: os.environ.get("OPENROUTER_API_KEY"), repr=False
+    )
+    openrouter_base_url: str = BASE_URL
     storage_backend: Literal["sqlite", "postgres"] = field(
         default_factory=lambda: cast(
             Literal["sqlite", "postgres"], os.environ.get("STORAGE_BACKEND", "sqlite")
@@ -155,9 +179,29 @@ class Settings:
     inference_enabled: bool = True
     pruning_research_enabled: bool = False
     research_licences_path: Path = ROOT / "configs/research/licences.json"
-    identity_path: Path = ROOT / "configs/identity/local.json"
-    policy_path: Path = ROOT / "configs/policy/local.json"
-    routing_path: Path = ROOT / "configs/routing/local.json"
+    identity_path: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("ADAPTIVE_IDENTITY_CONFIG", str(ROOT / "configs/identity/local.json"))
+        )
+    )
+    policy_path: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("ADAPTIVE_POLICY_CONFIG", str(ROOT / "configs/policy/local.json"))
+        )
+    )
+    routing_path: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("ADAPTIVE_ROUTING_CONFIG", str(ROOT / "configs/routing/local.json"))
+        )
+    )
+    tasks_path: Path | None = field(
+        default_factory=lambda: (
+            Path(os.environ["ADAPTIVE_TASKS_CONFIG"])
+            if os.environ.get("ADAPTIVE_TASKS_CONFIG")
+            else None
+        )
+    )
+    classifier: TaskClassifier | None = None
     documents_path: Path = ROOT / "tests/fixtures/documents.json"
     golden_dir: Path = ROOT / "tests/fixtures/golden"
     dataset_builder: DatasetBuilder | None = None
@@ -261,8 +305,21 @@ class Settings:
         if (self.metadata_store is None) != (self.payload_store is None):
             raise ValueError("storage_pair_required")
         if self.secret is None:
-            config = IdentityConfig.model_validate_json(self.identity_path.read_text())
+            object.__setattr__(self, "secret", _environment_secret())
+        config = (
+            IdentityConfig.model_validate_json(self.identity_path.read_text())
+            if self.authenticator is None or self.identity_path.exists() or self.secret is None
+            else None
+        )
+        if self.secret is None:
+            if config is None or config.local_secret is None:
+                raise ValueError("adaptive_secret_required")
             object.__setattr__(self, "secret", config.local_secret.encode("utf-8"))
+        if self.secret == b"SYNTHETIC-LOCAL-ONLY-hmac-secret-v1" and (
+            self.environment != "local"
+            or (config is not None and any(key.key_sha256 for key in config.keys.values()))
+        ):
+            raise ValueError("insecure_adaptive_secret")
         if self.payload_keys is not None:
             PayloadCipher(self.payload_keys, self.payload_key_version)
             return
@@ -294,6 +351,22 @@ class Health(BaseModel):
 
 def _start_inference(application: FastAPI, settings: Settings) -> None:
     assert settings.secret is not None
+    foundation = FoundationRouter(settings.routing_path).deployment
+    foundation_provider: Provider
+    if settings.provider is not None:
+        foundation_provider = settings.provider
+    elif foundation.model_provider == "openrouter":
+        foundation_provider = OpenRouterProvider(
+            foundation.model_id,
+            settings.openrouter_api_key or "",
+            base_url=settings.openrouter_base_url,
+        )
+    elif foundation.model_provider == "deterministic_fake":
+        foundation_provider = FakeProvider()
+    else:
+        raise ValueError("unsupported_foundation_provider")
+    application.state.foundation_provider = foundation_provider
+    classifier = settings.classifier or RulesClassifier(settings.tasks_path)
     signer, verifier = settings.signer, settings.verifier
     if signer is None and verifier is None:
         if settings.environment != "local":
@@ -379,7 +452,8 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
         router=settings.router
         if settings.router is not None
         else FoundationRouter(settings.routing_path),
-        provider=settings.provider if settings.provider is not None else FakeProvider(),
+        provider=foundation_provider,
+        classifier=classifier,
         validator=settings.validator if settings.validator is not None else LocalValidator(),
         tracer=settings.tracer
         if settings.tracer is not None
@@ -507,7 +581,7 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
     )
     service.chain_planner = settings.chain_planner or LivePlanner(
         routes,
-        settings.provider if settings.provider is not None else FakeProvider(),
+        foundation_provider,
         metrics,
         registry,
         settings.specialist_loader
@@ -577,7 +651,7 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
     else:
         foundation = FoundationRouter(settings.routing_path).deployment
         deployments = settings.evaluation_deployments or {
-            foundation.model_deployment_id: EvaluationDeployment(foundation, FakeProvider())
+            foundation.model_deployment_id: EvaluationDeployment(foundation, foundation_provider)
         }
         application.state.evaluations = LocalEvaluator(
             persistence,
@@ -593,6 +667,8 @@ def _start_inference(application: FastAPI, settings: Settings) -> None:
             revision,
             registry=registry,
             data_dir=settings.data_dir,
+            classifier=classifier,
+            policy=policy,
         )
 
     evaluator = application.state.evaluations
@@ -698,6 +774,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         if evaluation_dispatcher_task is not None:
             application.state.evaluation_dispatcher.stop()
             await evaluation_dispatcher_task
+        foundation_provider = getattr(application.state, "foundation_provider", None)
+        if isinstance(foundation_provider, LoopScopedProvider):
+            await foundation_provider.aclose()
         if hasattr(application.state, "evaluation_database"):
             application.state.evaluation_database.close()
         if hasattr(application.state, "database"):

@@ -1,13 +1,15 @@
 """Synthetic local API keys; callers cannot choose their tenant or environment."""
 
+import argparse
 import hashlib
 import hmac
 import json
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from adaptive_llm.contracts import Environment, Identifier, SignedRecord
 from adaptive_llm.signing import Signer, Verifier, sign_record, signed, verify_record
@@ -123,6 +125,7 @@ class Authenticator(Protocol):
 
 class KeyIdentity(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+    key_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$", repr=False)
     tenant_id: Identifier
     application_ids: frozenset[Identifier]
     environment: Environment
@@ -133,7 +136,7 @@ class KeyIdentity(BaseModel):
 
 class IdentityConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    local_secret: str
+    local_secret: str | None = Field(default=None, repr=False)
     keys: dict[str, KeyIdentity]
 
 
@@ -141,11 +144,22 @@ class LocalAuthenticator:
     def __init__(self, path: Path, keyring: Keyring) -> None:
         config = IdentityConfig.model_validate_json(path.read_text())
         self._keyring = keyring
-        self._keys = config.keys
+        self._keys = [
+            (entry.key_sha256 or hashlib.sha256(key.encode()).hexdigest(), entry)
+            for key, entry in config.keys.items()
+        ]
+        if len({digest for digest, _ in self._keys}) != len(self._keys):
+            raise ValueError("duplicate_identity_key")
 
     def authenticate(self, authorization: str | None, subject: str | None) -> Identity:
         scheme, _, key = (authorization or "").partition(" ")
-        identity = self._keys.get(key) if scheme.lower() == "bearer" else None
+        presented = hashlib.sha256(key.encode()).hexdigest()
+        identity = None
+        # Always scan every fixed-length digest; neither key position nor a prefix affects lookup.
+        for digest, entry in self._keys:
+            matched = hmac.compare_digest(presented, digest)
+            if matched and scheme.lower() == "bearer":
+                identity = entry
         if identity is None:
             raise GatewayError(401, "unauthenticated")
         pseudonym = (
@@ -162,3 +176,28 @@ class LocalAuthenticator:
             dataset_tenants=identity.dataset_tenants,
             capabilities=identity.capabilities,
         )
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        description="Issue a bearer key and its hashed identity stanza"
+    )
+    parser.add_argument("--tenant", required=True)
+    parser.add_argument("--app", required=True)
+    args = parser.parse_args(argv)
+    key = secrets.token_urlsafe(32)
+    try:
+        entry = KeyIdentity(
+            tenant_id=args.tenant,
+            application_ids=frozenset({args.app}),
+            environment="local",
+            key_sha256=hashlib.sha256(key.encode()).hexdigest(),
+        )
+    except Exception:
+        parser.exit(1, "invalid_key_identity\n")
+    print(key)
+    print(json.dumps({f"{entry.tenant_id}-{args.app}": entry.model_dump(mode="json")}, indent=2))
+
+
+if __name__ == "__main__":
+    main()

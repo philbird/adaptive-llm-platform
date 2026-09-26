@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": false, \"kind\": \"not_a_failure\", \"product\": null, \"company\": null, \"event_date\": null, \"size\": \"unknown\", \"confidence\": 0.9, \"reason\": \"Reddit discussion post, not original reporting; no page content to verify the claim about Humane AI Pin shutdown\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1337,
+    "output_tokens": 78,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 1921.1795418523252
+}

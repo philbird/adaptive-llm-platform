@@ -187,6 +187,7 @@ def test_artifacts_reports_approval_rotation_and_public_only_promotion(evaluatio
 
 
 @pytest.mark.parametrize("allow_legacy", [False, True])
+@pytest.mark.parametrize("evaluation_seed", ["private_secret"], indirect=True)
 def test_nonlocal_public_only_app_requires_explicit_legacy_opt_in(evaluation_seed, allow_legacy):
     from adaptive_llm.contracts import DatasetManifest
     from adaptive_llm.datasets.artifacts import approval_mac
@@ -235,6 +236,7 @@ def test_nonlocal_public_only_app_requires_explicit_legacy_opt_in(evaluation_see
         Settings(
             data_dir=seed.directory,
             environment="production",
+            secret=seed.app.state.settings.secret,
             payload_key=b"x" * 32,
             signing_public_keys_path=public,
             outbox_dispatch_enabled=False,

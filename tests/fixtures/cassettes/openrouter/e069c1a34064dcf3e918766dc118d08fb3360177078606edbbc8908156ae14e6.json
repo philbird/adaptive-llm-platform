@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": false, \"kind\": \"watch\", \"product\": \"Rabbit R1\", \"company\": \"Rabbit\", \"event_date\": null, \"size\": \"funded\", \"confidence\": 0.85, \"reason\": \"Company facing financial distress with unpaid staff, but product remains active and operational; financial crisis alone does not constitute failure without shutdown or feature removal.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1373,
+    "output_tokens": 88,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 2057.830417063087
+}

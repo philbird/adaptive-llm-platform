@@ -44,6 +44,7 @@ class PersistenceContent:
     """Request-local redacted text; each hash is fixed before its record is emitted."""
 
     messages_json: str | None = None
+    response_format_json: str | None = None
     query: str | None = None
     output: str | None = None
     input_hash: str | None = None
@@ -105,6 +106,13 @@ class Persistence:
             ]
             for value in request.metadata.values():
                 self._redact(value, policy, content)
+            if request.response_format.type != "text":
+                response_format = request.response_format.model_dump_json(by_alias=True)
+                # A redacted constraint would validate a different target. Fail closed for
+                # content persistence if the recorded format cannot be retained faithfully.
+                if self._redact(response_format, policy, content) != response_format:
+                    raise ValueError("response_format_redaction_changed")
+                content.response_format_json = response_format
             content.messages_json = json.dumps([m.model_dump(mode="json") for m in messages])
             content.query = messages[-1].content
             content.input_hash = self.keyring.content_hash(content.messages_json)
@@ -223,6 +231,11 @@ class Persistence:
                         update={
                             "messages_ref": encrypt(content.messages_json, "messages")
                             if logging
+                            else None,
+                            "response_format_ref": encrypt(
+                                content.response_format_json, "response_format"
+                            )
+                            if logging and content.response_format_json is not None
                             else None,
                         }
                     ),

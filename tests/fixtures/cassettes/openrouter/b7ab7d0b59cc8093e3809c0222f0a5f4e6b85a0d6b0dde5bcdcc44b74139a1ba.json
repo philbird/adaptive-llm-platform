@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": true, \"kind\": \"feature_pulled\", \"product\": \"Duplex on the Web\", \"company\": \"Google\", \"event_date\": null, \"size\": \"titan\", \"confidence\": 0.95, \"reason\": \"Google discontinued its Duplex on the Web automation feature, a named AI product that was shut down.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1331,
+    "output_tokens": 82,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 1823.7455412745476
+}

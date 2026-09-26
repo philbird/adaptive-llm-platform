@@ -1,0 +1,14 @@
+{
+  "policy_version": "manyfails-1",
+  "tenants": {
+    "manyfails": {
+      "processing_allowed": true,
+      "content_logging_allowed": true,
+      "evaluation_allowed": true,
+      "human_review_allowed": true,
+      "training_allowed": true,
+      "residency": "us",
+      "retention_seconds": 2592000
+    }
+  }
+}

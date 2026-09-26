@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from adaptive_llm.contracts import (
     DatasetManifest,
@@ -12,6 +12,7 @@ from adaptive_llm.contracts import (
     Message,
     RagOptions,
     ResponseFormat,
+    RoutingOptions,
     RoutingRow,
     uid,
 )
@@ -104,7 +105,7 @@ class LocalDatasetReader:
             chunks.append(
                 IndexedChunk(
                     tenant_id=row.tenant_id,
-                    allowed_applications=["evaluation"],
+                    allowed_applications=[spec.application_id],
                     index_id=source.index_id,
                     index_version=source.index_version,
                     document_id=source.document_id,
@@ -125,7 +126,7 @@ class LocalDatasetReader:
             tenant_id=row.tenant_id,
             request=InferenceRequest(
                 request_id=uid(),
-                application_id="evaluation",
+                application_id=spec.application_id,
                 messages=row.input.messages,
                 rag=RagOptions(
                     enabled=bool(chunks), index_id=chunks[0].index_id if chunks else None
@@ -143,11 +144,15 @@ class LocalDatasetReader:
 
 
 class SyntheticItem(BaseModel):
+    system: str | None = None
     input: str
     target: str = ""
     expect_contains: list[str] = Field(default_factory=list)
     expect_citation: bool = True
     expect_json: bool = False
+    expect_json_fields: dict[str, JsonValue] = Field(default_factory=dict)
+    expect_json_text_match: dict[str, str | None] = Field(default_factory=dict)
+    response_format: ResponseFormat | None = None
     prohibited: list[str] = Field(default_factory=list)
     category: str = "general"
     critical: bool = False
@@ -155,14 +160,39 @@ class SyntheticItem(BaseModel):
     k: int = 3
 
 
-def fixture_cases(path: Path, tenant: str) -> list[Case]:
+def prompt_path(path: Path, reference: str) -> Path:
+    root = path.parent.parent.resolve()
+    resolved = (root / reference).resolve()
+    if not resolved.is_relative_to(root / "prompts") or resolved.suffix != ".md":
+        raise ValueError("invalid_fixture_prompt_reference")
+    return resolved
+
+
+def fixture_digest(paths: list[Path]) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    for path in paths:
+        raw = path.read_bytes()
+        digest.update(len(raw).to_bytes(8, "big"))
+        digest.update(raw)
+        for line in raw.splitlines():
+            item = SyntheticItem.model_validate_json(line)
+            if item.system is not None:
+                prompt = prompt_path(path, item.system).read_bytes()
+                digest.update(len(prompt).to_bytes(8, "big"))
+                digest.update(prompt)
+    return digest.hexdigest()
+
+
+def fixture_cases(path: Path, tenant: str, application_id: str = "evaluation") -> list[Case]:
     cases: list[Case] = []
     for index, line in enumerate(path.read_text().splitlines()):
         item = SyntheticItem.model_validate_json(line)
         document = f"synthetic-evaluation-{index}"
         chunk = IndexedChunk(
             tenant_id=tenant,
-            allowed_applications=["evaluation"],
+            allowed_applications=[application_id],
             index_id="synthetic-evaluation",
             index_version="synthetic-evaluation-1",
             document_id=document,
@@ -172,7 +202,10 @@ def fixture_cases(path: Path, tenant: str) -> list[Case]:
             content=item.retrieved_content or item.target,
             licence_class="synthetic",
         )
-        corpus: tuple[IndexedChunk, ...] = (chunk,) if chunk.content else ()
+        # Structured labels are scoring targets, never evidence fed back to the model.
+        corpus: tuple[IndexedChunk, ...] = (
+            (chunk,) if chunk.content and item.response_format is None else ()
+        )
         if item.category in {"cross_tenant", "acl", "stale"}:
             # Higher-overlap decoys must be filtered before scoring/ranking.
             decoys = (
@@ -212,14 +245,27 @@ def fixture_cases(path: Path, tenant: str) -> list[Case]:
                 tenant_id=tenant,
                 request=InferenceRequest(
                     request_id=uid(),
-                    application_id="evaluation",
-                    messages=[Message(role="user", content=item.input)],
+                    application_id=application_id,
+                    messages=[
+                        *(
+                            [
+                                Message(
+                                    role="system",
+                                    content=prompt_path(path, item.system).read_text(),
+                                )
+                            ]
+                            if item.system
+                            else []
+                        ),
+                        Message(role="user", content=item.input),
+                    ],
                     rag=RagOptions(
                         enabled=bool(corpus), index_id="synthetic-evaluation" if corpus else None
                     ),
-                    response_format=ResponseFormat(
-                        type="json_object" if item.expect_json else "text"
-                    ),
+                    response_format=item.response_format
+                    or ResponseFormat(type="json_object" if item.expect_json else "text"),
+                    max_output_tokens=400 if item.response_format else 512,
+                    routing=RoutingOptions(deadline_ms=30000 if item.response_format else 5000),
                 ),
                 corpus=corpus,
                 target=item.target,
@@ -229,6 +275,8 @@ def fixture_cases(path: Path, tenant: str) -> list[Case]:
                 else frozenset(),
                 prohibited=tuple(item.prohibited),
                 expect_json=item.expect_json,
+                expect_json_fields=item.expect_json_fields,
+                expect_json_text_match=item.expect_json_text_match,
                 critical=item.critical,
                 category=item.category,
                 k=item.k,

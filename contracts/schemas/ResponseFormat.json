@@ -1,6 +1,51 @@
 {
+  "$defs": {
+    "JsonSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "schema": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Schema",
+          "type": "object"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "schema"
+      ],
+      "title": "JsonSchema",
+      "type": "object"
+    },
+    "JsonValue": {}
+  },
   "additionalProperties": false,
   "properties": {
+    "json_schema": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/JsonSchema"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "schema_version": {
       "const": "1.0",
       "default": "1.0",
@@ -11,7 +56,8 @@
       "default": "text",
       "enum": [
         "text",
-        "json_object"
+        "json_object",
+        "json_schema"
       ],
       "title": "Type",
       "type": "string"

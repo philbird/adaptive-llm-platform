@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from adaptive_llm.contracts import Identifier, Validation, ValidationCheck
 from adaptive_llm.providers import CITATION_PATTERN, ProviderRequest, ProviderResult
+from adaptive_llm.structured import matches_schema
 
 
 class Validator(Protocol):
@@ -47,6 +48,7 @@ DEFAULT_SEVERITIES: dict[str, Severity] = {
     "non_empty": "hard",
     "citation_ids": "hard",
     "json_object": "hard",
+    "json_schema": "hard",
     "tool_allowlist": "hard",
     "citation_required": "advisory",
     "groundedness": "advisory",
@@ -152,6 +154,8 @@ class LocalValidator:
             critical_safety: bool = False,
         ) -> None:
             severity = config.severity.get(name, DEFAULT_SEVERITIES.get(name, default_severity))
+            if name == "json_schema":
+                severity = "hard"
             checks.append(
                 ValidationCheck(
                     name=name,
@@ -167,12 +171,17 @@ class LocalValidator:
         check("citation_required", not supplied or bool(cited))
         text = result.content
         obj: object = None
-        if request.response_format.type == "json_object":
+        if request.response_format.type in {"json_object", "json_schema"}:
             try:
                 obj = json.loads(result.content, parse_constant=_reject_constant)
             except (ValueError, RecursionError):
                 pass
-            check("json_object", isinstance(obj, dict))
+            if request.response_format.type == "json_schema":
+                schema = request.response_format.json_schema
+                assert schema is not None
+                check("json_schema", matches_schema(result.content, schema.schema_))
+            else:
+                check("json_object", isinstance(obj, dict))
             text = "\n".join(text_values(obj))
         check(
             "groundedness",

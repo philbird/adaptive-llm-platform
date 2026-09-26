@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": false, \"kind\": \"incident\", \"product\": \"AI Overviews\", \"company\": \"Google\", \"event_date\": null, \"size\": \"titan\", \"confidence\": 0.95, \"reason\": \"Temporary incident with harmful outputs; product survived with restrictions applied, not a shutdown or feature removal.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1371,
+    "output_tokens": 78,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 2473.6458328552544
+}

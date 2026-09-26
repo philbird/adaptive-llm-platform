@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": true, \"kind\": \"feature_pulled\", \"product\": \"Cortana\", \"company\": \"Microsoft\", \"event_date\": \"2023-08-01\", \"size\": \"titan\", \"confidence\": 0.95, \"reason\": \"Microsoft discontinued Cortana voice assistant feature from Windows, shifting focus to other AI initiatives like Copilot.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1369,
+    "output_tokens": 87,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 1853.7199166603386
+}

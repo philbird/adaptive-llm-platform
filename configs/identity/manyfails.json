@@ -1,0 +1,23 @@
+{
+  "keys": {
+    "manyfails-research-sweep": {
+      "key_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "tenant_id": "manyfails",
+      "application_ids": [
+        "research-sweep"
+      ],
+      "environment": "local"
+    },
+    "synthetic-operator-key": {
+      "tenant_id": "manyfails",
+      "application_ids": [
+        "research-sweep"
+      ],
+      "environment": "local",
+      "key_class": "operator",
+      "dataset_tenants": [
+        "manyfails"
+      ]
+    }
+  }
+}

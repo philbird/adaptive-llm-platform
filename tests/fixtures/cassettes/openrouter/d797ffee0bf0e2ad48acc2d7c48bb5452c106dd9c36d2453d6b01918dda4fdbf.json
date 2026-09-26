@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": true, \"kind\": \"feature_pulled\", \"product\": \"Tessa\", \"company\": \"NEDA\", \"event_date\": null, \"size\": \"indie\", \"confidence\": 0.85, \"reason\": \"NEDA disabled its Tessa chatbot after reports of harmful advice; feature removal from a nonprofit helpline service.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1335,
+    "output_tokens": 85,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 1885.5841252952814
+}
