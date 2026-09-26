@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": true, \"kind\": \"product_shutdown\", \"product\": \"Kite\", \"company\": null, \"event_date\": null, \"size\": \"funded\", \"confidence\": 0.95, \"reason\": \"Kite, a generative AI code completion tool, was discontinued according to TechCrunch reporting.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1356,
+    "output_tokens": 80,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 2198.140542022884
+}

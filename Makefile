@@ -10,8 +10,13 @@ TRAINING_ARGS = --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)"
 BACKEND ?= fake
 # Pass notes via environment to avoid expanding user text as shell code.
 export NOTE
+export TENANT APP
+.PHONY: issue-key record-openrouter
 .PHONY: train promote rollback models
 .PHONY: check-without-training
+
+# The default verification gate must not resolve or download packages from the network.
+check integration check-without-training contracts: export UV_OFFLINE = 1
 
 train:
 	$(TRAINING) train $(TRAINING_ARGS) --backend "$(BACKEND)" --spec "$(SPEC)" $(if $(POLICY),--policy "$(POLICY)",)
@@ -43,6 +48,12 @@ dataset-build:
 
 evaluate:
 	uv run --locked python -m adaptive_llm.evaluation --spec "$(SPEC)" --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)"
+
+issue-key:
+	uv run --locked python -m adaptive_llm.gateway.identity --tenant "$$TENANT" --app "$$APP"
+
+record-openrouter:
+	uv run --locked python -m adaptive_llm.providers.cassette
 
 migrate:
 	uv run --locked python -m adaptive_llm.storage migrate --data-dir "$(DATA_DIR)" --environment "$(ENVIRONMENT)"

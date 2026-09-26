@@ -30,6 +30,8 @@ class ProviderRequest:
     response_format: ResponseFormat
     max_output_tokens: int
     application_id: str = ""
+    deadline_ms: float = 5000
+    temperature: float = 0
 
     @property
     def input_tokens(self) -> int:
@@ -53,6 +55,28 @@ class Provider(Protocol):
 
 
 @runtime_checkable
+class LoopScopedProvider(Protocol):
+    async def aclose(self) -> None:
+        """Close resources owned by the calling event loop, after its requests finish."""
+        ...
+
+
+ProviderErrorCode = Literal[
+    "provider_timeout", "provider_rate_limited", "provider_unavailable", "provider_invalid_response"
+]
+
+
+class ProviderError(Exception):
+    def __init__(self, code: ProviderErrorCode) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def render_context(context: tuple[Chunk, ...]) -> str:
+    return " ".join(f"{c.content} [{c.document_id}/{c.chunk_id}]" for c in context)
+
+
+@runtime_checkable
 class SoftTargetProvider(Protocol):
     async def soft_targets(self, row: bytes) -> bytes | None:
         """Optional target-token log distributions, serialized exclusively as safetensors."""
@@ -69,9 +93,7 @@ class FakeProvider:
 
     async def generate(self, request: ProviderRequest) -> ProviderResult:
         content = "SYNTHETIC ANSWER: " + (
-            " ".join(f"{c.content} [{c.document_id}/{c.chunk_id}]" for c in request.context)
-            if request.context
-            else "No context supplied."
+            render_context(request.context) if request.context else "No context supplied."
         )
         if request.response_format.type == "json_object":
             content = json.dumps({"answer": content}, ensure_ascii=False)

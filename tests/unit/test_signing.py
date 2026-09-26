@@ -111,7 +111,7 @@ def test_retired_or_mismatched_signing_key_is_rejected(tmp_path):
 @pytest.mark.parametrize("environment", ["local", "development", "staging", "production"])
 def test_legacy_mac_defaults_and_environment_override(environment, monkeypatch):
     monkeypatch.delenv("LEGACY_MAC_RECORDS", raising=False)
-    options = dict(environment=environment, payload_key=b"x" * 32)
+    options = dict(environment=environment, payload_key=b"x" * 32, secret=b"s" * 32)
     assert Settings(**options).legacy_mac_records is (environment == "local")
     for value, expected in (("true", True), ("1", True), ("false", False), ("0", False)):
         monkeypatch.setenv("LEGACY_MAC_RECORDS", value)

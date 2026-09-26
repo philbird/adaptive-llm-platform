@@ -896,6 +896,20 @@
           "title": "Modality",
           "type": "array"
         },
+        "response_format_ref": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Format Ref"
+        },
         "schema_version": {
           "const": "1.0",
           "default": "1.0",
@@ -1391,6 +1405,33 @@
           },
           "title": "Policy Constraints",
           "type": "array"
+        },
+        "response_schema_name": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[\\w.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Schema Name"
+        },
+        "response_schema_sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Schema Sha256"
         },
         "route_decision_id": {
           "title": "Route Decision Id",

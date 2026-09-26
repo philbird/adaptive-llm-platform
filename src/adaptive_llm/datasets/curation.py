@@ -26,14 +26,14 @@ def similar(
     return (len(left & right) / len(union) if union else 1.0) > threshold
 
 
-def golden_texts(directory: Path) -> list[str]:
+def golden_texts(directory: Path, fixture_set: str = "synthetic") -> list[str]:
+    """Decontaminate against the build's named golden set only."""
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", fixture_set) or fixture_set in {".", ".."}:
+        raise ValueError("invalid_fixture_set")
     texts: list[str] = []
-    for path in sorted(directory.glob("*.jsonl")):
-        if path.name == "distillation-training.jsonl":
-            continue  # Explicit training partition; never used by the evaluation suites.
-        for line in path.read_text().splitlines():
-            row = json.loads(line)
-            texts.append(row["input"] + "\n" + row["target"])
+    for line in (directory / f"{fixture_set}.jsonl").read_text().splitlines():
+        row = json.loads(line)
+        texts.append(row["input"])
     if not texts:
         raise ValueError("golden_set_required")
     return texts
@@ -49,6 +49,7 @@ def curate(
     postings: dict[tuple[str, ...], set[int]] = {}
     for example in sorted(examples, key=lambda e: (e.started_at, e.interaction_id)):
         current = shingles(example.text)
+        benchmark_input = shingles(example.benchmark_text or example.text)
         overlapping: set[int] = set()
         for shingle in current:
             overlapping.update(postings.get(shingle, ()))
@@ -56,7 +57,7 @@ def curate(
             exclusions["exact_duplicate"] += 1
         elif any(similar(current, grams[index], threshold) for index in sorted(overlapping)):
             exclusions["near_duplicate"] += 1
-        elif any(similar(current, item, threshold) for item in benchmarks):
+        elif any(similar(benchmark_input, item, threshold) for item in benchmarks):
             exclusions["benchmark_contamination"] += 1
         else:
             seen.add(example.exact_hash)

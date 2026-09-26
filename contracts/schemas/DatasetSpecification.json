@@ -68,6 +68,14 @@
       "title": "Eligibility Policy Version",
       "type": "string"
     },
+    "fixture_set": {
+      "default": "synthetic",
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Fixture Set",
+      "type": "string"
+    },
     "general_safety_fraction": {
       "default": 0.2,
       "maximum": 0.8,

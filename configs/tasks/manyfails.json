@@ -1,0 +1,12 @@
+{
+  "version": "rules-1",
+  "rules": [
+    {
+      "application_id": "research-sweep",
+      "schema_name": "triage",
+      "label": "candidate_triage",
+      "language": "en",
+      "risk_tier": "low"
+    }
+  ]
+}

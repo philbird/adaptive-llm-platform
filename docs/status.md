@@ -1,5 +1,85 @@
 # Status and gap analysis
 
+## First real workload
+
+Slice R1 adds ManyFails candidate triage for tenant `manyfails`, application
+`research-sweep`, task `candidate_triage` (`en`, low risk). The foundation is
+`anthropic/claude-haiku-4.5` via OpenRouter, using the recorded US region and
+`openrouter-2026-09-26` prices. See [ADR 0007](adr/0007-hosted-foundation-openrouter.md),
+the [integration contract](integrations/manyfails.md), and the
+[host runbook](runbooks/real-workload-manyfails.md).
+
+| Capability | Verified locally, without hosted network | Reviewer host / live evidence |
+| --- | --- | --- |
+| System role and structured output | Ingress bounds, Draft 2020-12 validation, hard fallback, redaction, encrypted messages/response format, schema-checked corrections, dataset role and specialist chat template | All 38 recorded responses pass schema validation |
+| Hosted provider | Fake HTTP transport checks messages/context, strict schema, deadline, usage/cost, fences, finish reasons, fixed errors and private logs | Reviewer recorded 38 OpenRouter calls: 51,094 input and 3,065 output tokens, costing 6.6 US cents |
+| Cassette replay/recording | Synthetic record/replay, canonical-only contents, request hashes, append behavior, misses and authorization tested; real async HTTP transport blocked in pytest | `OPENROUTER_LIVE=1 make record-openrouter` recorded 30 golden + 8 safety entries on the host; all 38 retained |
+| Real-fixture replay gate | Missing cassettes skip with `openrouter cassette missing: <hash>`; present cassettes replay offline | ManyFails, cassette, adapter and structured-evaluation tests: 86 passed, no skips |
+| Tenant identity and task | Hashed-key lookup/issuance, five-purpose 30-day policy, authenticated application map and correction path tested | Replace placeholder caller hash and local operator credentials before deployment |
+| Golden/safety evaluation | Fixed-verdict provider scores all 30 golden cases at 1.0; 8 injected-page cases pass; deliberately following instructions produces 8 critical failures and blocks the lock | Golden 30: `rubric_score` 0.9444, `assertion_pass_rate` 0.8667, four `json_fields_mismatch`; safety 8/8 clean, zero injection success, leakage, cross-tenant incidents or critical failures |
+| Foundation baseline | Fixture-only signed lock and replacement/idempotency path exercised in isolated temporary control storage | `make evaluate` locked evaluation `01a0dc6d-61e4-7955-9978-28b8d74ff98c`, digest `d8c78bcaf62c260780f48a98a218f39784f0dd8f07f80dfc624c71f5e7169453`; paired CI [0, 0] |
+| Full host gate | Default checks remain offline | The reviewer ran `REQUIRE_POSTGRES=1 make ci` on the host (Python 3.12.13, uv 0.12.17) and it passed, including the SBOM audit. Unit stage: 318 passed, 1 GPU skip |
+| ManyFails caller | Exact body, correction target, request-id rules, errors and own-provider 5xx fallback documented | ManyFails repository changes and rollout are outside this slice |
+
+The local 1.0 golden score verifies the rubric with fixed expected outputs; it is not a model
+quality claim. Golden field disagreements are measured on a 0..1 scale, while invalid output
+and critical safety failures block the foundation fixture lock. This two-suite measurement
+does not replace the existing five-suite specialist promotion gate. Unmapped applications
+retain the old RAG-only classification metadata; mapped tasks record `rules-1`.
+
+No new dependency, agent live provider call, commit or push was made. The supplied public golden
+fixture and prompt are unchanged. `docs/spec/`, `pyproject.toml` and `uv.lock` are unchanged.
+The host evidence above is supplied by the reviewer; local replay does not measure live latency.
+
+Initial R1 local verification before host recording on 2026-09-26 used
+`UV_CACHE_DIR=/private/tmp/adaptive-llm-uv-cache UV_OFFLINE=1` before each `make`/`uv` command:
+
+| Exact command after that prefix | Result |
+| --- | --- |
+| `make contracts` | Generated schemas and OpenAPI synchronized |
+| `uv run --locked ruff format src tests` | Formatting applied |
+| `uv run --locked ruff check src tests --fix` | Passed after formatting corrections |
+| `uv run --locked mypy src/adaptive_llm` | Passed, 90 source files |
+| `make check integration` | Formatting/Ruff/mypy passed; 290 unit/contract passed, 29 skipped; 181 integration passed, 136 skipped |
+| `make check integration check-without-training` | Same required gates passed; the complete suite with training imports blocked passed 489 tests, with 232 expected skips |
+| `uv run --locked python scripts/check_without_training.py tests/integration/test_manyfails.py tests/integration/test_evaluations.py tests/security/test_evaluation_privacy.py -q` | After application-grant hardening: 34 passed, 64 expected skips |
+
+Those initial skips included 39 unrecorded-cassette checks, existing PostgreSQL host checks, and (in
+the last command) tests requiring the optional training stack. All existing tests were kept
+unchanged apart from shared test isolation/network protection in `tests/conftest.py`.
+Initial gate failures exposed the legacy synthetic golden count and unmapped classifier
+version expectations; both were corrected without changing those tests. The existing
+Starlette/httpx deprecation warning remains; no package was added to address it.
+`git diff --check` and
+`git diff --exit-code -- docs/spec pyproject.toml uv.lock tests/fixtures/golden/manyfails-triage.jsonl tests/fixtures/prompts/manyfails-triage.md`
+passed. The subsequent reviewer host gate, recording and baseline lock are recorded in the
+First real workload table above.
+
+Review pass 1 local verification used the same offline/cache prefix above:
+
+| Exact command after that prefix | Result |
+| --- | --- |
+| `make contracts` | Regenerated schemas and OpenAPI for the dataset fixture selector and encrypted response-format reference |
+| `uv run --locked ruff format src tests` | Formatting applied |
+| `uv run --locked ruff check src tests --fix` | Imports corrected; subsequent full gate clean |
+| `uv run --locked mypy src/adaptive_llm` | Passed, 90 source files |
+| `uv run --locked pytest tests/unit/test_hashed_identity.py tests/unit/test_openrouter.py tests/unit/test_structured_evaluation.py tests/integration/test_manyfails.py tests/integration/test_evaluations.py::test_cli_and_api_share_report tests/integration/test_signatures.py tests/integration/test_training.py::test_training_cli_uses_same_jobs_and_limits_listing -q` | 120 passed, 5 PostgreSQL skips |
+| `make check integration` | Formatting/Ruff/mypy passed; 315 unit/contract passed, 29 skipped; 230 integration passed, 97 skipped |
+| `make check-without-training` | 563 passed, 193 expected skips with optional training imports blocked |
+
+Initial review-pass runs caught test setup errors (schema-payload deletion, correction body,
+privacy route and synthetic response format), import formatting, and three CLI/restart tests
+whose shared seed secret had changed. These were fixed; the alternate seed secret is now
+limited to the non-local signing test. PostgreSQL/GPU and optional-training skips remain;
+all present cassette tests execute. No new package was installed for the existing
+Starlette/httpx deprecation warning.
+
+SHA-256 comparison against the pre-edit manifest confirmed all 38 cassette files unchanged.
+The canonical outbound request is unchanged, including message rendering, schema, temperature,
+token limit and provider block. Only the non-canonical `HTTP-Referer` header changed to
+`https://github.com/philbird/adaptive-llm-platform`; these fixes require no re-recording.
+`git diff --check` and the protected-file diff check above passed again. No commit was made.
+
 The engineering specification v1.0 was supplied on 2026-09-23. Milestone 1 slices 1a–1c
 and milestone 2 slices 2a–2b plus milestone 3 slices 3a–3b, milestone 4 slices 4a–4b and
 milestone 5 slice 5a and optional milestone 6 slice 6a are implemented

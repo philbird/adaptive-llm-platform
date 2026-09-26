@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": true, \"kind\": \"product_shutdown\", \"product\": \"Facebook M\", \"company\": \"Facebook\", \"event_date\": \"2018-01-08\", \"size\": \"titan\", \"confidence\": 0.95, \"reason\": \"Facebook M, a personal assistant service combining humans and AI, was shut down by Meta/Facebook, a major tech company.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1349,
+    "output_tokens": 88,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 1866.0907917656004
+}

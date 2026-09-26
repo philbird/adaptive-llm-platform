@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": false, \"kind\": \"not_a_failure\", \"product\": \"Cedar Notes\", \"company\": \"Cedar Labs\", \"event_date\": null, \"size\": \"unknown\", \"confidence\": 0.95, \"reason\": \"Product launch or feature addition; no shutdown, discontinuation, or removal of core functionality.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1376,
+    "output_tokens": 78,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 1961.8195840157568
+}

@@ -8,13 +8,24 @@ backward-compatibility rule. Both reject an unknown schema_version.
 
 from __future__ import annotations
 
+import hashlib
 import time
 from datetime import UTC, datetime
 from secrets import randbits
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    field_validator,
+    model_validator,
+)
+
+from adaptive_llm.structured import canonical, check_schema
 
 
 def uid() -> str:
@@ -81,8 +92,14 @@ LifecycleState = Literal[
 
 
 class Message(Contract):
-    role: Literal["user", "assistant"]
+    role: Literal["system", "user", "assistant"]
     content: Content
+
+    @model_validator(mode="after")
+    def bounded_system(self) -> Message:
+        if self.role == "system" and len(self.content) > 8000:
+            raise ValueError("system_message_too_long")
+        return self
 
 
 class RagOptions(Contract):
@@ -96,8 +113,30 @@ class RagOptions(Contract):
         return self
 
 
+class JsonSchema(Contract):
+    model_config = ConfigDict(serialize_by_alias=True)
+    name: Identifier
+    schema_: dict[str, JsonValue] = Field(alias="schema", repr=False)
+
+    @model_validator(mode="after")
+    def valid_schema(self) -> JsonSchema:
+        check_schema(self.schema_)
+        return self
+
+    @property
+    def sha256(self) -> str:
+        return hashlib.sha256(canonical(self.schema_).encode("utf-8")).hexdigest()
+
+
 class ResponseFormat(Contract):
-    type: Literal["text", "json_object"] = "text"
+    type: Literal["text", "json_object", "json_schema"] = "text"
+    json_schema: JsonSchema | None = None
+
+    @model_validator(mode="after")
+    def schema_required(self) -> ResponseFormat:
+        if (self.type == "json_schema") != (self.json_schema is not None):
+            raise ValueError("response_format_schema_mismatch")
+        return self
 
 
 class RoutingOptions(Contract):
@@ -126,6 +165,8 @@ class InferenceRequest(Contract):
 
     @model_validator(mode="after")
     def bounded_messages(self) -> InferenceRequest:
+        if any(m.role == "system" for m in self.messages[1:]):
+            raise ValueError("system_message_must_be_first_and_unique")
         if sum(len(m.content) for m in self.messages) > 32_000:
             raise ValueError("total message length exceeds limit")
         if self.messages[-1].role != "user":
@@ -416,6 +457,8 @@ class RouteDecision(Record):
     fallback_deployment_ids: list[str] = Field(default_factory=list)
     decision_latency_ms: float
     policy_constraints: list[str]
+    response_schema_name: Identifier | None = None
+    response_schema_sha256: str | None = None
 
 
 class ValidationCheck(Record):
@@ -475,6 +518,7 @@ class GenerationAttempt(Record):
 
 class InputSummary(Record):
     messages_ref: Reference | None = None
+    response_format_ref: Reference | None = None
     content_hash: str | None
     hash_scheme: HashScheme = "hmac-sha256"
     token_count: int = Field(ge=0)
@@ -603,6 +647,7 @@ class TimeSplit(Record):
 
 class DatasetSpecification(Record):
     dataset_id: Identifier
+    fixture_set: Identifier = Field(default="synthetic", exclude_if=lambda v: v == "synthetic")
     purpose: DatasetPurpose = "adapter_training"
     tenant_ids: list[Identifier] = Field(min_length=1, max_length=100)
     source_window: SourceWindow
@@ -628,6 +673,8 @@ class DatasetSpecification(Record):
 
     @model_validator(mode="after")
     def valid_specification(self) -> DatasetSpecification:
+        if self.fixture_set in {".", ".."}:
+            raise ValueError("invalid_fixture_set")
         if self.purpose == "distillation" and (
             self.source_dataset_id is None
             or self.source_dataset_version is None
@@ -950,6 +997,9 @@ class EvaluationSpecification(Record):
     baseline_deployment_id: Identifier | None
     dataset_id: Identifier
     dataset_version: Identifier
+    application_id: Identifier = "evaluation"
+    fixture_set: Identifier | None = None
+    fixture_tenant_id: Identifier | None = None
     suites: list[SuiteName] = Field(min_length=1, max_length=6)
     rubric_version: Identifier | None = "synthetic-rubric-1"
     judge_version: Identifier | None = "deterministic-judge-1"
@@ -966,6 +1016,18 @@ class EvaluationSpecification(Record):
 
     @model_validator(mode="after")
     def valid_evaluation(self) -> EvaluationSpecification:
+        if self.fixture_set in {".", ".."}:
+            raise ValueError("invalid_fixture_evaluation")
+        if self.fixture_tenant_id is not None and (
+            self.fixture_set is None or set(self.suites) != {"golden", "safety"}
+        ):
+            raise ValueError("invalid_fixture_evaluation")
+        if (
+            self.fixture_set is not None
+            and self.fixture_tenant_id is None
+            and set(self.suites) != {"golden", "safety", "held_out", "retrieval", "performance"}
+        ):
+            raise ValueError("invalid_fixture_evaluation")
         try:
             identifier = UUID(self.evaluation_id)
         except ValueError:

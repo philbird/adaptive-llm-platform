@@ -7,6 +7,7 @@ from pathlib import Path
 from time import monotonic, sleep
 from unittest.mock import Mock
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -28,6 +29,23 @@ from adaptive_llm.contracts import (
 )
 from adaptive_llm.gateway.identity import Identity, Keyring, LocalAuthenticator
 from adaptive_llm.providers import ProviderRequest
+
+
+@pytest.fixture(autouse=True)
+def no_hosted_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "ADAPTIVE_IDENTITY_CONFIG",
+        "ADAPTIVE_POLICY_CONFIG",
+        "ADAPTIVE_ROUTING_CONFIG",
+        "ADAPTIVE_TASKS_CONFIG",
+        "ADAPTIVE_SECRET",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    async def denied(self: httpx.AsyncHTTPTransport, request: httpx.Request) -> httpx.Response:
+        raise AssertionError("hosted_network_forbidden_in_tests")
+
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", denied)
 
 
 @pytest.fixture(autouse=True)
@@ -452,7 +470,14 @@ def router_seed(shadow_seed: tuple[EvaluationSeed, str]) -> RouterSeed:
 def evaluation_seed(tmp_path: Path, request: pytest.FixtureRequest) -> Iterator[EvaluationSeed]:
     no_context = getattr(request, "param", None) == "no_context"
     app = create_app(
-        Settings(data_dir=tmp_path, policy=DatasetPolicy(), outbox_dispatch_enabled=False)
+        Settings(
+            data_dir=tmp_path,
+            policy=DatasetPolicy(),
+            outbox_dispatch_enabled=False,
+            secret=b"SYNTHETIC-evaluation-secret-32-bytes"
+            if getattr(request, "param", None) == "private_secret"
+            else None,
+        )
     )
     start = now() - timedelta(seconds=1)
     with TestClient(app) as client:

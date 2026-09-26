@@ -1,0 +1,34 @@
+{
+  "$defs": {
+    "JsonValue": {}
+  },
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[\\w.-]+$",
+      "title": "Name",
+      "type": "string"
+    },
+    "schema": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
+      "title": "Schema",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "schema"
+  ],
+  "title": "JsonSchema",
+  "type": "object"
+}

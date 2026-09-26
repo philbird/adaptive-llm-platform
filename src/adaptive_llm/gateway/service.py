@@ -26,7 +26,6 @@ from adaptive_llm.contracts import (
     RouteSummary,
     RoutingFeatures,
     Started,
-    Task,
     now,
     uid,
 )
@@ -45,6 +44,7 @@ from adaptive_llm.routing.chain import (
     run_chain,
 )
 from adaptive_llm.routing.shadow import ShadowWork, quality_proxy
+from adaptive_llm.routing.tasks import RulesClassifier, TaskClassifier
 from adaptive_llm.storage import ReplayRecord
 from adaptive_llm.storage.persistence import InteractionGraph, Persistence, PersistenceContent
 from adaptive_llm.validation import TracedValidator, Validator
@@ -66,6 +66,7 @@ class InferenceService:
         persistence: Persistence,
         chain_planner: ChainPlanner | None = None,
         breakers: CircuitBreakers | None = None,
+        classifier: TaskClassifier | None = None,
     ) -> None:
         if replay_capacity < 1:
             raise ValueError("invalid_replay_capacity")
@@ -77,6 +78,7 @@ class InferenceService:
         self._router = router
         self._provider = provider
         self._validator = validator
+        self.classifier = classifier or RulesClassifier()
         self._tracer = tracer
         self.persistence = persistence
         self.chain_planner = chain_planner
@@ -173,6 +175,7 @@ class InferenceService:
             policy_version=policy.policy_version,
         )
         content = self.persistence.prepare_input(request, policy)
+        task = self.classifier.classify(request)
         retrieval_id: str | None = None
         route_id: str | None = None
         attempts: list[GenerationAttempt] = []
@@ -209,9 +212,10 @@ class InferenceService:
                 response_format=request.response_format,
                 max_output_tokens=request.max_output_tokens,
                 application_id=request.application_id,
+                deadline_ms=request.routing.deadline_ms,
             )
             features = RoutingFeatures(
-                task="question_answering" if request.rag.enabled else "general",
+                task=task.label,
                 input_tokens=provider_request.input_tokens,
                 chunk_count=len(supplied_chunks),
                 context_supplied=bool(supplied_chunks),
@@ -235,9 +239,19 @@ class InferenceService:
                 )
                 span.set_attribute("router_version", selection.decision.router_version)
             route_id = selection.decision.route_decision_id
-            route = selection.decision
+            schema = request.response_format.json_schema
+            route = selection.decision.model_copy(
+                update={
+                    "response_schema_name": schema.name if schema else None,
+                    "response_schema_sha256": schema.sha256 if schema else None,
+                }
+            )
             selection = replace(
-                selection, features=features, request=provider_request, policy=policy
+                selection,
+                decision=route,
+                features=features,
+                request=provider_request,
+                policy=policy,
             )
             plan = (
                 await asyncio.to_thread(
@@ -245,7 +259,7 @@ class InferenceService:
                     selection,
                     request.routing,
                     identity,
-                    "question_answering" if request.rag.enabled else "general",
+                    task.label,
                 )
                 if self.chain_planner
                 else ChainPlan(
@@ -370,12 +384,7 @@ class InferenceService:
                 environment=identity.environment,
                 started_at=started_at,
                 completed_at=now(),
-                task=Task(
-                    label="question_answering" if request.rag.enabled else "general",
-                    classifier_version="placeholder-rag-flag-1",
-                    confidence=0.5,
-                    reason_codes=["rag_flag_only"],
-                ),
+                task=task,
                 policy=policy,
                 input=self._input_summary(request, content),
                 retrieval_run_id=retrieval_id,

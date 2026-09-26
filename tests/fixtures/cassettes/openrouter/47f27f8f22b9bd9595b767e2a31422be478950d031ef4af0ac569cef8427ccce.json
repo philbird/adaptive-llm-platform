@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": true, \"kind\": \"acquihire_killed\", \"product\": \"AI Pin\", \"company\": \"Humane\", \"event_date\": null, \"size\": \"funded\", \"confidence\": 0.95, \"reason\": \"Humane's AI Pin product shut down after HP acquired the team; cloud service discontinued, product killed post-acquisition.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1346,
+    "output_tokens": 86,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 2149.174415972084
+}

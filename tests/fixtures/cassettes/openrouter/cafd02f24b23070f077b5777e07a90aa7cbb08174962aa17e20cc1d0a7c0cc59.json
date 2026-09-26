@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": true, \"kind\": \"product_shutdown\", \"product\": \"Amazon Halo\", \"company\": \"Amazon\", \"event_date\": \"2024-07-31\", \"size\": \"titan\", \"confidence\": 0.95, \"reason\": \"Amazon discontinued its Halo health and wellness product line effective July 31, 2024.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1333,
+    "output_tokens": 85,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 1875.2988339401782
+}

@@ -44,6 +44,7 @@ class BuiltExample:
     exact_hash: str
     text: str = field(repr=False)
     row: dict[str, object] = field(repr=False)
+    benchmark_text: str | None = field(default=None, repr=False)
 
 
 class Constructor:
@@ -264,4 +265,5 @@ class Constructor:
             exact,
             text,
             row,
+            "\n".join(m["content"] for m in conversation if m["role"] == "user"),
         )

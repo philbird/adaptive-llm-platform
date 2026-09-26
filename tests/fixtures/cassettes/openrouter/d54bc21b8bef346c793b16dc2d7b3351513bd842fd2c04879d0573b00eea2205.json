@@ -1,0 +1,14 @@
+{
+  "content": "{\"is_failure\": false, \"kind\": \"not_a_failure\", \"product\": null, \"company\": null, \"event_date\": null, \"size\": \"unknown\", \"confidence\": 0.95, \"reason\": \"Funding news about OpenAI raising capital; no product shutdown, feature removal, or other failure event reported.\"}",
+  "usage": {
+    "schema_version": "1.0",
+    "input_tokens": 1323,
+    "output_tokens": 79,
+    "cached_input_tokens": 0,
+    "reasoning_tokens": 0,
+    "source": "provider_reported",
+    "tokenizer": "anthropic/claude-haiku-4.5"
+  },
+  "finish_reason": "stop",
+  "latency_ms": 2179.6717080287635
+}

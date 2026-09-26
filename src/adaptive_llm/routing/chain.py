@@ -1,7 +1,7 @@
 """Bounded attempts on one canonical request. Live enablement is injection-only."""
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import perf_counter
 from typing import Protocol
 
@@ -14,7 +14,7 @@ from adaptive_llm.contracts import (
 )
 from adaptive_llm.gateway.identity import GatewayError, Identity
 from adaptive_llm.metrics import Metrics
-from adaptive_llm.providers import Provider, ProviderRequest, ProviderResult
+from adaptive_llm.providers import Provider, ProviderError, ProviderRequest, ProviderResult
 from adaptive_llm.routing import Deployment, RouteSelection
 from adaptive_llm.routing.breakers import CircuitBreakers
 from adaptive_llm.routing.control import RoutePolicyStore, RouteSnapshot
@@ -177,6 +177,10 @@ async def run_chain(
                 "provider_failed",
                 "provider_deadline_exceeded",
                 "request_cancelled",
+                "provider_timeout",
+                "provider_rate_limited",
+                "provider_unavailable",
+                "provider_invalid_response",
             },
             validation_failure=bool(attempt.validation and not attempt.validation.passed),
             latency_ms=attempt.total_latency_ms,
@@ -190,7 +194,11 @@ async def run_chain(
         if attempt.error_code == "request_cancelled":
             raise asyncio.CancelledError
         error = GatewayError(
-            504 if attempt.error_code == "provider_deadline_exceeded" else 502,
+            504
+            if attempt.error_code in {"provider_deadline_exceeded", "provider_timeout"}
+            else 503
+            if attempt.error_code in {"provider_rate_limited", "provider_unavailable"}
+            else 502,
             attempt.error_code or "provider_failed",
         )
         reason = (
@@ -200,7 +208,7 @@ async def run_chain(
             else "validation_failure"
             if attempt.error_code == "validation_failed"
             else "deadline_risk"
-            if attempt.error_code == "provider_deadline_exceeded"
+            if attempt.error_code in {"provider_deadline_exceeded", "provider_timeout"}
             else "endpoint_error"
         )
         metrics.increment("fallback_reasons", reason=reason)
@@ -231,7 +239,9 @@ async def execute_attempt(
         model_version=deployment.model_version,
         deployment_id=deployment.model_deployment_id,
         adapter_id=deployment.model_deployment_id if candidate.specialist else None,
-        request_parameters=RequestParameters(max_output_tokens=request.max_output_tokens),
+        request_parameters=RequestParameters(
+            max_output_tokens=request.max_output_tokens, temperature=request.temperature
+        ),
         total_latency_ms=0,
         price_list_version=deployment.price_list.version,
         finish_reason="error",
@@ -242,7 +252,9 @@ async def execute_attempt(
     code: str | None = None
     try:
         async with asyncio.timeout(remaining_seconds):
-            result = await candidate.provider.generate(request)
+            result = await candidate.provider.generate(
+                replace(request, deadline_ms=min(request.deadline_ms, remaining_seconds * 1000))
+            )
         attempt = attempt.model_copy(
             update={
                 "usage": result.usage,
@@ -269,6 +281,10 @@ async def execute_attempt(
             if perf_counter() - started >= remaining_seconds:
                 code = "provider_deadline_exceeded"
                 attempt = attempt.model_copy(update={"finish_reason": "deadline_exceeded"})
+    except ProviderError as error:
+        code = error.code
+        if code == "provider_timeout":
+            attempt = attempt.model_copy(update={"finish_reason": "deadline_exceeded"})
     except TimeoutError:
         code = "provider_deadline_exceeded"
         attempt = attempt.model_copy(update={"finish_reason": "deadline_exceeded"})
